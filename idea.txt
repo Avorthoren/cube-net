@@ -1,0 +1,184 @@
+I want to develop desktop application. It should work at least on my own machine and OS (Ubuntu 24),
+but it would be great for be able to launch it on Mac OS and/or Windows 10/11. But bare minimum
+is to launch it from IDE.
+It would be ideal to implement it in Python. I already created cube_net_3.15.0 virtualenv (python 3.15.0).
+If after initial analysis you conclude that it's too difficult to do it in python, and would be better to use
+another programming language (or another version of python) - tell me.
+
+This app should visualize and let user work with cube networks: 2D polygons (with no self-intersections) that can be
+folded and wrap a cube without overlapping. For example, for a cube with a side of 1 unit any cube network, obviously,
+will have an area of 6 square units. Everywhere after we consider edge of the cube to be equal to 1 unit (unless
+we talk about pixels), so that we can describe relative sizes of other elements compared to cube size.
+Simplest example of cube network would be 4 squares connected
+"in a line" (1-2-6-5) and two more squares attached on both sides (4 and 3), kinda like a cross. Like this:
+```
+ 1
+423
+ 6
+ 5
+```
+
+Application should be able to work with "projects". Each project should be saved in a file (or directory with many
+files) - kinda standard approach. Project should hold the whole state of users work and all settings specific to the
+project, together with several last edits to the project (because application should support "undo" option - even
+after reloading the project).
+
+When user starts the application, it should attempt to load last project user worked on. If that fails - notify user
+about that and suggest creating a new project. If there are no saved projects user worked on - immediately start a new
+project (so that's what we'll get the first time we launch the application).
+
+New project should start with default cube net which is described above (the "cross").
+Which means, every cube net user will create in the application will be achieved from this default cube net by applying
+some transformations to it.
+
+Each of the 6 faces of the cube (each of the 6 squares of the default cube net) should have some distinct color
+assigned to it, so that all 6 faces differ a lot - pick colors yourself. And that assignment should be stable:
+i.e. each time new project it started, we have the same assignment. So, every time we start a new project, face
+denoted as `1` above should have the same color assigned to it and so on. Maybe later we'll add feature for user to
+edit those colors, but it will be not the property of the project, but the property of the whole application, so that
+after the change is applied we will se it in every opened project. So we just should create an array of 6 colors,
+and apply them to faces using numbers I used for default cube net.
+Color assigned to a face should be used in 3 ways:
+1. A face should be colored using its color and a white color. How? Each face should be divided into 50 equal rectangles,
+   with width of 1/10 unit and height 1/5 unit. Each rectangle should be divided diagonally into two triangles,
+   one of which should have face's color, and another should be white. When we look at default cube net, each of 6 faces
+   (6 big squares) should have their small rectangles divided by the diagonal that goes from the bottom left
+   to the upper right corner. And upper triangle should have face's color, while the bottom one should be white.
+2. The edge between two faces should have some small width, and it should be a "dashed line", that alternates colors
+   assigned two faces it touches. More specifically, it should have 10 dashes of each of 2 colors. This includes outer
+   perimeter of the cube net. For example, edge A_2 - E_2 of the outer perimeter of the default cube net corresponds
+   to the edge between two faces of the cube (5-th and 4-th faces), hence, it has to consist of dashes of two colors
+   (colors assigned to 5-th and 4-th faces of the cube). Later user will be able to make other "cuts", so the outer
+   perimeter of the cube net may have not only segments that represents edges of the cube, but other segments, that
+   don't separate two faces of the cube. Those kinds of segments have to be colored using dashes of color of the cube's
+   face they lay inside and white color. To sum up: segments that separate faces of the cube, have to always be
+   "present", "visible" no matter if they are part of outer perimeter (for example, A_2 - E2) of the cube net or not
+   (for example, C_1 - D_1), while additional cuts made by user have to be "visible" only when they are on the outer
+   perimeter of the cube net.
+3. Vertices of cube's faces should be circles of some small radius. They should be divided into 3 equal sectors,
+   each one of the color of respective face (since in each vertex of the cube 3 faces meet). Cube have 8 vertices,
+   but when it's "unfolded" into cube net some vertices will be represented more than once. For example, default
+   cube net has 14 "images" of 8 cube vertices (example below). Later user will be able to make other "cuts", so
+   the outer perimeter of the cube net may have not only vertices that represent vertices of the cube, but other
+   vertices. Some of them may lay inside the edge between two cube's faces - they have to be divided into 2 equal
+   sectors with colors of respective cube's faces this edge separates. Some of them may lay inside the cube's face -
+   they will be colored using 1 color of respective cube's face. "Visible" vertices can only be on the outer perimeter
+   of the cube net.
+   If you aren't able to infer proper coloring for vertices - ask me.
+So if we have the cube with face ABCD, and another face (with other 4 vertices) is EFGH, where E is adjacent to A,
+F adjacent to B, G adjacent to C and H to D, then we can describe default net of that cube this way:
+```
+                  A_1 ------------- B_1
+                   |                 |
+                   |                 |
+                   |        1        |
+                   |                 |
+                   |                 |
+A_2 ------------- C_1 ------------- D_1 ------------- B_2
+ |                 |                 |                 |
+ |                 |                 |                 |
+ |        4        |        2        |        3        |
+ |                 |                 |                 |
+ |                 |                 |                 |
+E_2 ------------- H_1 ------------- G_1 ------------- F_2
+                   |                 |
+                   |                 |
+                   |        6        |
+                   |                 |
+                   |                 |
+                  E_1 ------------- F_1
+                   |                 |
+                   |                 |
+                   |        5        |
+                   |                 |
+                   |                 |
+                  A_3 ------------- B_3
+```
+We can see, that vertex A of the cube is represented 3 times in this specific cube net (as A_1, A_2 and A_3), and so on.
+
+Application should allow user to zoom in and out. When user starts new project, default cube net should take 50%
+of the screen height. Not the viewport, but the whole screen.
+
+Cube net should be on a rectangular "sheet" of dynamic size: it's left edge should be 5 units to the left of the
+leftmost point of the cube net, top edge should be 5 units higher than the highest point of the cube net and so on.
+It's so that we can look "around" the net. This sheet should have thin light-gray vertical and horizontal lines on it,
+which should form square grid aligned with the default cube net (squares of the same size: 1 unit by 1 unit).
+It should be visible only on those places where there are no colors of the cube net: i.e. cube net paints "over" the
+grid, making grid not visible.
+The sheet also should have embedded rectangular Cartesian coordinate system tied to the default cube net:
+H_1 should have coordinates (11, 12)
+G_1 should have coordinates (12, 12)
+C_1 should have coordinates (11, 13)
+I.e X-axis goes to the right, Y-axis goes up.
+At each moment coordinates of the mouse pointer should be shown somewhere. For example in the footer of the application.
+
+Application should have "ruler" instrument: when you activate it on the panel of the instrument you can click anywhere
+on the sheet - visible point is created. After that application shows:
+1. Coordinates of that initial point near it on the sheet.
+2. The line between initial point and current mouse location.
+3. Coordinates of current mouse location near the mouse pointer (in addition to what's shown in the footer of the app).
+4. Distance between initial point and current location somewhere between those two points.
+When we click in another location - next point is created, and now we see:
+1. Coordinates of that initial point near it on the sheet.
+2. The line between initial point and second point.
+3. Coordinates of the second point.
+4. Distance between initial point and second point somewhere between those two points.
+5. The line between second point and current mouse location.
+6. Coordinates of current mouse location near the mouse pointer (in addition to what's shown in the footer of the app).
+7. Distance between second point and current location somewhere between those two points.
+And so on. Until we disable "ruler" instrument on the panel.
+
+Now to the main feature: cube net transformations.
+Obviously, to "flatten" a cube (make a cube net) one must do some cuts in the cube's surface. For default cube net
+we have cuts along edges: AC, BD, EH, FG, AE, BF, AB (7 out of 12 edges are cut). In any cube net by "cut" we consider
+a segment of the outer perimeter of the cube net (and each cut will be represented as two segments of the
+outer perimeter of the cube net: A_1 - C_1 and A_2 - C_1, A_1 - B_1 and A_3 - B_3, etc).
+Imagine that each point of the cut has its own 1D coordinate system (each cut's point can be represented
+with number from [0, 1] segment). I.e. basically, we consider cuts being directed. And those coordinate systems "match"
+for cuts that denoted with same letters, because such cuts will be "glued" point-to-point when cube net is folded
+into the cube. For example, if for AB edge of the cube we may assign coordinate 0 to vertex A and coordinate 1
+to point B, then its default cube net will have coordinate 0 for A_1, A_2 and A_3, while B_1, B_2 and B_3 will have
+coordinate 1. Keep in mind, that vertex of the cube is part of multiple cuts, hence multiple different coordinates
+may be assigned to it (one for each cut it's part of).
+Now, the statement is, that if we cut cube net into 2 pieces (each piece will have outer perimeter, part of
+which was present before we cut it off, because it was the outer perimeter of the cube net, and part of which is a new
+cut), rearrange them and glue in another way (so that we glue by matching cuts, matching coordinates of all glued
+points) - we get another cube net. Of course, we additionally have to make sure that there is no overlapping, and
+resulting shape is a connected domain.
+For example, if we cut corner of 1st face of the cube, we might get something like:
+```
+                  A_1 ----- x_1
+                   |         |
+                   |        y_1 --- z_1
+                   |        1        |
+                   |                 |
+                   |                 |
+A_2 ------------- C_1 ------------- D_1 ------- z_3 - B_2
+ |                 |                 |                 |
+ |                 |                 |                 |
+ |        4        |        2        |        3        |
+ |                 |                 |                 |
+ |                 |                 |                 |
+E_2 ------------- H_1 ------------- G_1 ------------- F_2
+                   |                 |
+                   |                 |
+                   |        6        |
+                   |                 |
+                   |                 |
+                  E_1 ------------- F_1
+                   |                 |
+                   |                 |
+                   |        5        |
+                   |                 |
+                   |                 |
+                  A_3 ----- x_2 --- B_3
+                             |       |
+                            y_2 --- z_2
+```
+Here we made two new cuts: xy, yz.
+We glued part xB of the existing cut AB, so another part Ax of this cut still exist, which we can treat as new cut.
+Cut BD was divided into Bz and zD - we can treat them as new cuts.
+And this one is tricky, because when we were making the cut (xyz) it's not obvious from the first glance that we have
+to "divide" D_1 - B_2 with a new point (in this case z_3), but we have to carefully analyze each cut to not miss
+anything.
+By the way, in this case point x will have colors 1 and 5, point y will have color 1 and point z will have colors 1 and 3.
