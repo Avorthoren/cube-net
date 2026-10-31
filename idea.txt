@@ -1,5 +1,5 @@
 I want to develop desktop application. It should work at least on my own machine and OS (Ubuntu 24),
-but it would be great for be able to launch it on Mac OS and/or Windows 10/11. But bare minimum
+but it would be great for be able to launch it on macOS and/or Windows 10/11. But bare minimum
 is to launch it from IDE.
 It would be ideal to implement it in Python. I already created cube_net_3.15.0 virtualenv (python 3.15.0).
 If after initial analysis you conclude that it's too difficult to do it in python, and would be better to use
@@ -199,13 +199,13 @@ Now from the UI perspective. First step from picking some point on some of the e
 net perimeter). It should be followed by picking 1 to N other points (let's limit N to 50), and as soon as we pick
 point on the outer perimeter - the cut line ends "logically" (i.e. we can't add points past the last point).
 I see it like this (we forget for measuring tool for now):
-Initially we are in the state, in which:
+Initially we are in the DEFAULT state, in which:
 1. If we hover the mouse over any cut - it "highlights".
 2. If we click on any cut (remember, cuts have some width, so that user can clearly see their coloring
    and click on them) - the starting point of the cut line is created. All vertices and segments of the new cut line
    that we are creating should follow the same coloring rules described earlier with one exception: they have to be
    slightly different, kinda "highlighted", so that user can see which one are the old ones.
-As soon as first point of a new cut line created, we are in a slightly different state.
+As soon as first point of a new cut line created, we are in a slightly different state (CUTTING):
 1. Application should show segments that connect i-th and (i+1)-th point of the new cut line, and segment that connects
    the last point with current mouse location.
 2. As soon as user clicks inside the cube net application should check if segment from the last point to current mouse
@@ -215,7 +215,7 @@ As soon as first point of a new cut line created, we are in a slightly different
    the first point is - potential new segment of the new cut line would intersect the outer perimeter (because all its
    points are there), so that's a rejection case.
 As it was said earlier, as soon as we create another point on the outer perimeter of the cube net (in addition to the
-very first one, from which this new cut started) - we transition to the next state.
+very first one, from which this new cut started) - we transition to the next state (CUT_EDITING).
 1. Here in the middle of every segment of the new cut line should be a small hollow circle, click on which should create
    new point of the new cut line.
 2. SHIFT+click on any point of the new cut line (except for first and last one) should delete that point. But there is
@@ -236,29 +236,29 @@ very first one, from which this new cut started) - we transition to the next sta
    one more segment Xk - Ym, where at least one of these inequalities holds: i != k, j != m. I.e. for any cut between
    points X and Y on the cube surface there should be exactly two segments of the cube net perimeter with those two
    letters X and Y, and we call those segments counterparts of each other.
-   So, as soon as user clicks on the segment of the outer perimeter we should do that rearrangement, and transition
-   to the next state.
-In this new state:
+So, as soon as user clicks on the segment of the outer perimeter we should do that rearrangement (moving half
+of the cube net that has clicked segment counterpart, but not moving half that has clicked segment), and transition
+to the next state (CUT_APPROVING):
 1. Application should still show the segment we are about to glue.
 2. It should check if new outer perimeter has any self-intersections, and if so - it should color intersecting segments
    of new perimeter in black.
 3. If there are no intersections - a button on the panel of the instruments should highlight (let it look like a green
-   checkmark), shortcut: CTRL+ENTER. It should end the process of cutting the cube net, getting us in the default state.
+   checkmark), shortcut: CTRL+ENTER. It should end the process of cutting the cube net, getting us in the DEFAULT state.
 
 Now let's describe actions that should be saved and be reversible (and redoable):
 1. Creating new point of new cut line.
 2. Deleting point of new cut line.
 3. Moving point of the new line cut (as soon as user releases the click - that's a new position to save).
-4. Moving into the last state.
-5. Accepting new cut line (moving into default state).
-1000 last actions should be saved into the project (so they should be available even after we restart the app).
-When we already have 1000 actions saved and do the next one - the oldest one should be forgotten.
+4. Moving from CUT_EDITING to CUT_APPROVING state.
+5. Accepting new cut line (moving from CUT_APPROVING to DEFAULT state).
+N last actions should be saved into the project (so they should be available even after we restart the app).
+Let N be 1000. When we already have N actions saved and do the next one - the oldest one should be forgotten.
 CTRL+z should reverse the last one, CTRL+y should redo the last reversed. But if after reversing the action we make
-a new action regularly - we should forget all possible actions that could have been redone. I.e. something like circular
-buffer would be good here.
+a new action regularly - we should forget all possible actions that could have been redone. I.e. something like
+circular buffer would be good here.
 Few exceptions:
 1. If the last added/redone actions had type #5 - reverting should try to revert not one but two last actions.
-   Why try? - Because if we add more than 1000 actions, then the oldest one can happen to be type #5. And if user
+   Why try? - Because if we add more than N actions, then the oldest one can happen to be type #5. And if user
    then reverts 999 actions, and presses CTRL+Z again we will not be able to revert to more, so just 1 in this case.
 2. Consider action of type #4 that made an invalid cube net (i.e., user wasn't allowed to approve this cut line and
    move further, so the only possible option from there was to revert the action). If user reverts such action - we
