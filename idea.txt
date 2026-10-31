@@ -97,7 +97,12 @@ E_2 ------------- H_1 ------------- G_1 ------------- F_2
 We can see, that vertex A of the cube is represented 3 times in this specific cube net (as A_1, A_2 and A_3), and so on.
 
 Application should allow user to zoom in and out. When user starts new project, default cube net should take 50%
-of the screen height. Not the viewport, but the whole screen.
+of the screen height. Not the viewport, but the whole screen. Zooming should work while mouse is inside the "sheet",
+not inside the "instruments panel", and not in the "main area" outside the "sheet".
+And the zoom center should be where the mouse is.
+Zoom should be limited to:
+1. The smallest between sheet width/height should be at least 10% of the screen height.
+2. Screen height should be ta least 5% of the biggest between sheet width/height.
 
 Cube net should be on a rectangular "sheet" of dynamic size: it's left edge should be 5 units to the left of the
 leftmost point of the cube net, top edge should be 5 units higher than the highest point of the cube net and so on.
@@ -181,4 +186,91 @@ Cut BD was divided into Bz and zD - we can treat them as new cuts.
 And this one is tricky, because when we were making the cut (xyz) it's not obvious from the first glance that we have
 to "divide" D_1 - B_2 with a new point (in this case z_3), but we have to carefully analyze each cut to not miss
 anything.
-By the way, in this case point x will have colors 1 and 5, point y will have color 1 and point z will have colors 1 and 3.
+By the way, in this case point x will have colors 1 and 5 (because it's on the edge between faces 1 and 5),
+point y will have color 1 (because it's inside edge 1) and point z will have colors 1 and 3.
+
+Now the question is: how to allow user to make new cuts.
+First let's describe it logically. I see two steps in the cutting process:
+1. Describe the "line" (in the example above it consists of two segments) that divides cube net in two parts.
+   It should start on the outer perimeter and end on the outer perimeter. And nowhere in the middle should it touch
+   the outer perimeter. I.e. it should be strictly inside the cube net except for the starting and ending points.
+2. Gluing those two part in another way.
+Now from the UI perspective. First step from picking some point on some of the existing cuts (outer edges of the cube
+net perimeter). It should be followed by picking 1 to N other points (let's limit N to 50), and as soon as we pick
+point on the outer perimeter - the cut line ends "logically" (i.e. we can't add points past the last point).
+I see it like this (we forget for measuring tool for now):
+Initially we are in the state, in which:
+1. If we hover the mouse over any cut - it "highlights".
+2. If we click on any cut (remember, cuts have some width, so that user can clearly see their coloring
+   and click on them) - the starting point of the cut line is created. All vertices and segments of the new cut line
+   that we are creating should follow the same coloring rules described earlier with one exception: they have to be
+   slightly different, kinda "highlighted", so that user can see which one are the old ones.
+As soon as first point of a new cut line created, we are in a slightly different state.
+1. Application should show segments that connect i-th and (i+1)-th point of the new cut line, and segment that connects
+   the last point with current mouse location.
+2. As soon as user clicks inside the cube net application should check if segment from the last point to current mouse
+   location has intersection with other segments of the new cut line or the outer perimeter. If so - current segment
+   should just become black for 200 ms. If there is no intersection - new point of new cut line should be created.
+   Keep in mind, that if only have 1 point (the first one) and we click on the same segment of the outer perimeter
+   the first point is - potential new segment of the new cut line would intersect the outer perimeter (because all its
+   points are there), so that's a rejection case.
+As it was said earlier, as soon as we create another point on the outer perimeter of the cube net (in addition to the
+very first one, from which this new cut started) - we transition to the next state.
+1. Here in the middle of every segment of the new cut line should be a small hollow circle, click on which should create
+   new point of the new cut line.
+2. SHIFT+click on any point of the new cut line (except for first and last one) should delete that point. But there is
+   a catch: consider 2 consecutive segments P1 - P2 and P2 - P3 of the new cut line, and user tries to delete P2.
+   If segment P1-P3 intersects any other segment of the new cut line or the outer perimeter (i.e. violates the rule
+   "new cut line should be strictly inside the cube net"), then for 200 ms we hide segments P1 - P2, P2 - P3 and show
+   segment P1 - P3 in black. And, obviously, we don't delete the P2.
+3. User should be able to click-and-drag any point of the new cut line. The first and the last point should move only
+   inside respective outer perimeter segment they were created in, and its position should be defined by the point
+   the segment that is closest to the current mouse location). As soon as user releases the mouse click application
+   should check if any segment of the new cut line that has moved point (two segments if that's an inner point of the
+   cut line, or one if that's the first/last point) has intersection with any other segment of the new cut line or
+   the outer perimeter. If so - moved segment that breaks the rules should become black for 200 ms and moved point
+   should reverse its position back.
+4. If user clicks on any segment of the outer perimeter (not including its vertices) that should indicate the intent
+   of rearranging two parts cube net was divided in such a way, that this chosen segment is glued with its counterpart.
+   Because of the way we defined the cut if there is segment of outer perimeter Xi - Yj, then there always is exactly
+   one more segment Xk - Ym, where at least one of these inequalities holds: i != k, j != m. I.e. for any cut between
+   points X and Y on the cube surface there should be exactly two segments of the cube net perimeter with those two
+   letters X and Y, and we call those segments counterparts of each other.
+   So, as soon as user clicks on the segment of the outer perimeter we should do that rearrangement, and transition
+   to the next state.
+In this new state:
+1. Application should still show the segment we are about to glue.
+2. It should check if new outer perimeter has any self-intersections, and if so - it should color intersecting segments
+   of new perimeter in black.
+3. If there are no intersections - a button on the panel of the instruments should highlight (let it look like a green
+   checkmark), shortcut: CTRL+ENTER. It should end the process of cutting the cube net, getting us in the default state.
+
+Now let's describe actions that should be saved and be reversible (and redoable):
+1. Creating new point of new cut line.
+2. Deleting point of new cut line.
+3. Moving point of the new line cut (as soon as user releases the click - that's a new position to save).
+4. Moving into the last state.
+5. Accepting new cut line (moving into default state).
+1000 last actions should be saved into the project (so they should be available even after we restart the app).
+When we already have 1000 actions saved and do the next one - the oldest one should be forgotten.
+CTRL+z should reverse the last one, CTRL+y should redo the last reversed. But if after reversing the action we make
+a new action regularly - we should forget all possible actions that could have been redone. I.e. something like circular
+buffer would be good here.
+Few exceptions:
+1. If the last added/redone actions had type #5 - reverting should try to revert not one but two last actions.
+   Why try? - Because if we add more than 1000 actions, then the oldest one can happen to be type #5. And if user
+   then reverts 999 actions, and presses CTRL+Z again we will not be able to revert to more, so just 1 in this case.
+2. Consider action of type #4 that made an invalid cube net (i.e., user wasn't allowed to approve this cut line and
+   move further, so the only possible option from there was to revert the action). If user reverts such action - we
+   should "forget" about it, i.e. user shouldn't be able to redo it. Maybe, this feature would make single circular
+   buffer, and we would need to use something like deque for main history and stack for reversion history.
+We don't save anything related to ruler instrument. And if its activated - it doesn't interrupt main functions. With
+one exception: if we are in the middle of creating new cut line, then we don't show segments that connects last created
+point of the cut line with current mouse location when ruler instrument is active. As soon as we deactivate ruler
+instrument - we get back to main functions.
+
+Few more notes:
+1. We don't need vertices labels be visible to user.
+2. If we do cuts properly showing all cut vertices everywhere they can be visible (point z shown in 3 places
+   in the example above, including z_3), then we don't need to think about some coordinate system attached to every
+   segment, because gluing rule would just become "gluing same vertices together".
