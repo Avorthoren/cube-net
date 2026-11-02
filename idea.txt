@@ -133,6 +133,30 @@ When we click in another location - next point is created, and now we see:
 7. Distance between second point and current location somewhere between those two points.
 And so on. Until we disable "ruler" instrument on the panel.
 
+Application should have "bounding rectangle" feature:
+Bounding rectangle - is the rectangle of the smallest area that encompasses the whole cube net. This rectangle is NOT
+forced to be axis-aligned, i.e. can have any orientation. I think, there is effective algorithm to find it:
+1. Find convex hull for the cube net.
+2. For each edge of the convex hull try rectangle that is aligned with that edge. I assume, we can try temporary
+   coordinate system in which that edge is aligned with one of the axis. And then task becomes as simple as for
+   axis-aligned rectangles: just find min and max x and y coordinates among all vertices of the convex hull.
+So, somewhere on the UI there should always be the area of bounding rectangle up to 3 decimals. For example, area
+of the bounding rectangle for the default cube net is 12.000 square units, it happens to be axis-aligned 3-by-4
+rectangle in this specific case.
+Also, somewhere on the UI (maybe, close to the numeric value of its area) there should be a button. When user turns it
+on - application should permanently show bounding rectangle (thin black line). It should not "interrupt" any other
+features.
+Of course, both the area value and (if the button is ON) the rectangle itself should be immediately updated after
+entering CUT_APPROVING state or reverting to CUT_EDITING state. This means, feature should calculate bounding rectangle
+even for invalid rearrangements, that can't be approved.
+In addition to visual differences for the button when it's ON and OFF there should be additional feature:
+In the settings of the project there should be configurable variable with default value of 7.100 (positive number,
+max 3 decimals, max value is 12.000), and if current area of the bounding rectangle is less than that number, the
+button should blink, changing states of regular look and being fully green in equal durations, changing 6 times per
+second (so, 3 times being regular and 3 times being green). And the color of the displayed area value should be green,
+together with color of the bounding rectangle. Because that's actually the whole purpose of this application: find
+unit cube's net that can be cut from the square piece of paper with area less than 7.1 square units.
+
 Now to the main feature: cube net transformations.
 Obviously, to "flatten" a cube (make a cube net) one must do some cuts in the cube's surface. For default cube net
 we have cuts along edges: AC, BD, EH, FG, AE, BF, AB (7 out of 12 edges are cut). In any cube net by "cut" we consider
@@ -273,4 +297,26 @@ Few more notes:
 1. We don't need vertices labels be visible to user.
 2. If we do cuts properly showing all cut vertices everywhere they can be visible (point z shown in 3 places
    in the example above, including z_3), then we don't need to think about some coordinate system attached to every
-   segment, because gluing rule would just become "gluing same vertices together".
+   segment, because gluing rule would just become "gluing same vertices together". For that we'd have to
+   create additional vertex on the cube's edge if cut intersects the cube's edge.
+3. Each vertex of each cut and folding edge of the cube net should "know" original cube faces it's related to.
+   This way it's easy to know the colors of the vertex - colors of all those cube faces. Since we should always draw
+   initial cube edges (even if they are not cuts), and sice we should make cuts (segments of the cut line) not go
+   from one cube's face to another (i.e. if cut line intersects cube's edge, then that intersection point should be
+   the boundary between two consecutive cuts) - all vertices of the cube net face will always have exactly one common
+   cube's face, which should define the color of the cube net face. As for cuts: each cut should have colors of faces
+   that its ends are related to: there will be either two such faces or one (which means, it should be that color
+   and white)
+4. Cuts should be drawn in such a way, that they are inside the cube net. Same goes for their hitboxes. I.e. to click
+   on the cut user have to hold the mouse inside the cube net face it bounds (not anywhere inside the face obviously,
+   just close to the cut). So the center-line of the cut hitbox should not be the geometric cut itself (in which case
+   half of the hitbox would be outside cube net face it bounds), but it should be inside cube net face.
+5. As described above in CUT_EDITING state user can select specific cut to be glued back again. But after user approves
+   the cut (and its valid) application should check if there are any cuts adjacent and collinear to that cut. If there
+   are such cuts, and they can be glued as well - they should be glued automatically. For example, there were two
+   collinear adjacent cuts P1 - Q1 and Q1 - R2. And "on the other side" of the cube net perimeter there was another
+   pair of collinear adjacent cuts P2 - Q3 and Q3 - R1 (i.e. both pairs represent the same pair of adjacent cuts on the
+   surface of the cube, so that can be glued). If after creating new cut line in CUT_EDITING state user clicks on,
+   let's say, P1 - Q1, and halves of the cube net get rearranged, and there now overlapping (i.e. self-intersections),
+   and user approves the cut line - application should glue not only P1 - Q1 with P2 - Q3, but also Q1 - R2 with
+   Q3 - R1.
