@@ -1,0 +1,14 @@
+# Core GUI framework
+PyQt6>=6.7.0
+
+# Numerical computing
+numpy>=1.26.0
+
+# Geometry operations
+shapely>=2.0.0
+
+# Optional: structured logging
+python-json-logger>=2.0.0
+
+# Optional: config files
+pyyaml>=6.0.0
