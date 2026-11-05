@@ -71,7 +71,9 @@ cube_net/
 │   │   │   ├── rigid90.py       # Rigid90: rotation k*90° + translation, compose/invert
 │   │   │   ├── predicates.py    # orient, segment classification
 │   │   │   └── quantize.py      # quantize(): UI floats -> Fraction (1/1000 for now)
-│   │   ├── cube.py              # cube surface: faces, frames, SurfacePoint, edges
+│   │   ├── cube/
+│   │   │   ├── topology.py      # CubeTopology: faces, vertices, edges, frame transitions
+│   │   │   └── surface_point.py # SurfacePoint: canonical point on the cube surface
 │   │   ├── net.py               # net model (DCEL), default net, queries
 │   │   ├── invariants.py        # validate_net()
 │   │   ├── cutline.py           # cut line in progress + validation rules
@@ -102,19 +104,23 @@ cube_net/
 ### 3.1 Numbers and geometry (`geometry/` package)
 - `Vec(x: Fraction, y: Fraction)`, immutable and hashable.
 - `orient(a, b, c) -> -1 | 0 | 1`, computed exactly.
-- `classify(seg1, seg2)` returns one of: `DISJOINT`, `PROPER_CROSSING`, `TOUCH_AT_ENDPOINT` (with which endpoints),
-  `T_TOUCH` (an endpoint lying inside the other segment), `COLLINEAR_OVERLAP` (with the overlap interval).
-  Every validity rule is built on this one function, so it gets the most thorough tests.
+- `classify_segments(p1, p2, q1, q2)` returns a `SegmentIntersection`: `DISJOINT`, `CROSSING` (one point strictly
+  inside both), `TOUCH` (one common point that is an endpoint of at least one segment: shared endpoint, T-shape,
+  collinear end-to-end) or `OVERLAP` (a common sub-segment of positive length). Every validity rule is built on this
+  one function, so it gets the most thorough tests. `orient` doesn't tell 0° from 180°; `classify_segments` does.
+- `quantize(x, y)`: UI floats → exact `Vec` rounded to 1/1000 unit (`QUANTUM`).
 - `Rigid90(k, t)`: maps `p ↦ R^k·p + t`. It can compose, invert, act on points and segments, and be serialized.
   `Rigid90.from_segments(src, dst)` finds the transform that sends segment `src` onto `dst` with matching endpoints. It
   asserts that the rotation is a multiple of 90°; that assertion doubles as an invariant check.
 
-### 3.2 Cube surface (`cube.py`)
+### 3.2 Cube surface (`cube/` package)
 - Six faces, numbered 1–6 as in `idea.txt`. Each face has a local frame `(u, v) ∈ [0,1]²`, chosen so that in the
   default net every face's placement is a pure translation. Example: face 2 local (0,0) ↦ sheet (11,12).
-- **The cube's topology is derived, not hard-coded:** build the default net, then glue its 7 counterpart pairs of
-  perimeter segments. That yields every edge identification (which face-frame point equals which) and the 8 vertices.
-  The labels A..H are used only in tests.
+- **`CubeTopology`** (`cube/topology.py`, instance `CUBE`): the only hand-written data is the default net itself:
+  the vertex labels at each face's 4 corners, plus each face's sheet origin in the default net. Everything else is
+  derived and self-checked: vertex → 3 faces, 12 edges → 2 faces each, adjacency, opposite faces, and
+  `transition(f, g)`, the `Rigid90` that unfolds face `f` across the shared edge into `g`'s frame. Labels A..H are
+  internal ids; they're never shown to the user.
 - `SurfacePoint`: a point on the cube surface in **canonical form**:
   - a point inside a face: `(face, u, v)`;
   - a point on an edge: the representation on the lower-numbered of its two faces, plus the set `{f1, f2}`;
