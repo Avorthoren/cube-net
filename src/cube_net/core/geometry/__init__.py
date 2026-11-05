@@ -7,10 +7,12 @@ from cube_net.core.geometry.predicates import (
     on_segment,
     orient,
 )
+from cube_net.core.geometry.quantize import QUANTUM, quantize, quantize_scalar
 from cube_net.core.geometry.rigid90 import Rigid90
 from cube_net.core.geometry.vec import Scalar, Vec, to_fraction
 
 __all__ = [
+    "QUANTUM",
     "IntersectionKind",
     "Rigid90",
     "Scalar",
@@ -19,5 +21,7 @@ __all__ = [
     "classify_segments",
     "on_segment",
     "orient",
+    "quantize",
+    "quantize_scalar",
     "to_fraction",
 ]

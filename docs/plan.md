@@ -373,7 +373,7 @@ UI milestones can run in parallel once M2 exists.
 | #   | Milestone                       | Content                                                                 | Done when |
 |-----|---------------------------------|-------------------------------------------------------------------------|-----------|
 | M0  | Project setup                   | `pyproject.toml` (deps + tool config), package layout, ruff, mypy, pytest/pytest-qt/hypothesis, thin `main.py` | **Done.**  `pytest` runs; `python main.py` opens an empty window |
-| M1  | Geometry kernel                 | `Vec`, `orient`, `classify`, `Rigid90`, `quantize`                      | Every `classify` case is covered, including degenerate ones |
+| M1  | Geometry kernel                 | `Vec`, `orient`, `classify`, `Rigid90`, `quantize`                      | **Done.** Every `classify` case is covered, including degenerate ones |
 | M2  | Cube and default net            | `cube.py`, DCEL `net.py`, `default_net()`, `validate_net()`, serialization of the net | Default net validates; 14 vertex images, 7 counterpart pairs; round-trip to JSON |
 | M3  | Static rendering                | Main window, sheet view, grid, coordinates in the status bar, zoom, pan, scrollbars, net painting (hatch, dashes, vertex circles) | The cross looks as specified; zoom and pan behave as specified |
 | M4  | Bounding rectangle              | `bounding.py`, toggle button, area label, threshold colouring and blinking | 12.000 for the cross; unit tests for rotated nets |
