@@ -4,6 +4,5 @@ import sys
 
 from cube_net.app import main
 
-
 if __name__ == "__main__":
     sys.exit(main())
