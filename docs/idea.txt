@@ -1,7 +1,7 @@
 I want to develop desktop application. It should work at least on my own machine and OS (Ubuntu 24),
 but it would be great for be able to launch it on macOS and/or Windows 10/11. But bare minimum
 is to launch it from IDE.
-It would be ideal to implement it in Python. I already created cube_net_3.15.0 virtualenv (python 3.15.0).
+It would be ideal to implement it in Python. I already created cube_net_3.14.10 virtualenv (python 3.14.10).
 If after initial analysis you conclude that it's too difficult to do it in python, and would be better to use
 another programming language (or another version of python) - tell me.
 
@@ -22,6 +22,11 @@ Application should be able to work with "projects". Each project should be saved
 files) - kinda standard approach. Project should hold the whole state of users work and all settings specific to the
 project, together with several last edits to the project (because application should support "undo" option - even
 after reloading the project).
+There are no autosaves: project is saved only explicitly - through the standard menu (File -> Save / Save As...)
+or with CTRL+S. The saved project contains the full snapshot of the current state (including a cut line in progress,
+if any), project settings, the history of actions and the redo stack (see the undo/redo section below).
+Standard behaviour for unsaved changes: on New, Open and Quit, if the current project has unsaved changes, the
+application asks "Save changes?" (Save / Don't save / Cancel).
 
 When user starts the application, it should attempt to load last project user worked on. If that fails - notify user
 about that and suggest creating a new project. If there are no saved projects user worked on - immediately start a new
@@ -32,7 +37,18 @@ Which means, every cube net user will create in the application will be achieved
 some transformations to it.
 
 Each of the 6 faces of the cube (each of the 6 squares of the default cube net) should have some distinct color
-assigned to it, so that all 6 faces differ a lot - pick colors yourself. And that assignment should be stable:
+assigned to it, so that all 6 faces differ a lot. Let's try these first (I'm using numbering of faces that I will use
+below for the default cube net):
+1. #0057B8 (Deep Blue)
+2. #F28E00 (Orange)
+3. #008A4B (Green)
+4. #8B45B5 (Purple)
+5. #E50055 (Magenta)
+6. #00A6D6 (Cyan)
+Colors that look somewhat alike are deliberately assigned to opposite faces (1-6, 2-5, 3-4): opposite faces never
+share an edge or a vertex, so those colors never appear together in one dashed edge or one vertex circle, while
+colors of faces that meet in the same cube vertex are very different.
+And that assignment should be stable:
 i.e. each time new project it started, we have the same assignment. So, every time we start a new project, face
 denoted as `1` above should have the same color assigned to it and so on. Maybe later we'll add feature for user to
 edit those colors, but it will be not the property of the project, but the property of the whole application, so that
@@ -44,8 +60,14 @@ Color assigned to a face should be used in 3 ways:
    one of which should have face's color, and another should be white. When we look at default cube net, each of 6 faces
    (6 big squares) should have their small rectangles divided by the diagonal that goes from the bottom left
    to the upper right corner. And upper triangle should have face's color, while the bottom one should be white.
+   The pattern belongs to the face (it's defined in the face's own coordinates): whenever the face or any of its parts
+   is moved/rotated, the pattern moves/rotates together with it. That's the whole purpose of the pattern: so that user
+   can easily see where each part of the cube net "came from" and how it's oriented.
 2. The edge between two faces should have some small width, and it should be a "dashed line", that alternates colors
-   assigned two faces it touches. More specifically, it should have 10 dashes of each of 2 colors. This includes outer
+   assigned two faces it touches. More specifically, dashes have constant length measured in units (1/20 unit), so that
+   a whole edge of the cube has 10 dashes of each of 2 colors, and a shorter segment (part of an edge, or a cut made
+   by user) just has proportionally fewer dashes. The dash pattern is "anchored" to the position along the cube's
+   segment, so that both images (counterparts) of the same cut show exactly the same pattern. This includes outer
    perimeter of the cube net. For example, edge A_2 - E_2 of the outer perimeter of the default cube net corresponds
    to the edge between two faces of the cube (5-th and 4-th faces), hence, it has to consist of dashes of two colors
    (colors assigned to 5-th and 4-th faces of the cube). Later user will be able to make other "cuts", so the outer
@@ -64,6 +86,9 @@ Color assigned to a face should be used in 3 ways:
    sectors with colors of respective cube's faces this edge separates. Some of them may lay inside the cube's face -
    they will be colored using 1 color of respective cube's face. "Visible" vertices can only be on the outer perimeter
    of the cube net.
+   Vertex circles are centered at the "real" location of the vertex (unlike cuts, which are drawn inside the face).
+   Ideally sectors should somehow "point" towards respective cube net faces (and maybe even be of different sizes),
+   but how exactly - is to be decided later. For now: equal sectors.
    If you aren't able to infer proper coloring for vertices - ask me.
 So if we have the cube with face ABCD, and another face (with other 4 vertices) is EFGH, where E is adjacent to A,
 F adjacent to B, G adjacent to C and H to D, then we can describe default net of that cube this way:
@@ -103,6 +128,11 @@ And the zoom center should be where the mouse is.
 Zoom should be limited to:
 1. The smallest between sheet width/height should be at least 10% of the screen height.
 2. Screen height should be ta least 5% of the biggest between sheet width/height.
+These limits are provisional (just to prevent the image from "blowing up"), we'll revisit them later.
+Panning:
+1. The main area should have scroll bars.
+2. Click-and-hold mouse1 (no additional keys) and drag pans the view. It works only when the click is outside the cube
+   net, and only when such click doesn't mean anything else. For example, it doesn't work when ruler is active.
 
 Cube net should be on a rectangular "sheet" of dynamic size: it's left edge should be 5 units to the left of the
 leftmost point of the cube net, top edge should be 5 units higher than the highest point of the cube net and so on.
@@ -116,6 +146,12 @@ G_1 should have coordinates (12, 12)
 C_1 should have coordinates (11, 13)
 I.e X-axis goes to the right, Y-axis goes up.
 At each moment coordinates of the mouse pointer should be shown somewhere. For example in the footer of the application.
+Coordinates are shown with 3 decimals (here and in the ruler instrument).
+Until we design proper "snapping", every point the user creates with the mouse (cut line points, ruler points) is
+rounded to 1/1000 unit.
+Widths of lines (edges, cuts, their hitboxes) and radii of vertex circles are constant in pixels, regardless of
+zoom: they have width only so that user can clearly see them and click on them. If user zooms out too much, lines
+may become wider than faces - that's acceptable.
 
 Application should have "ruler" instrument: when you activate it on the panel of the instrument you can click anywhere
 on the sheet - visible point is created. After that application shows:
@@ -154,8 +190,9 @@ In the settings of the project there should be configurable variable with defaul
 max 3 decimals, max value is 12.000), and if current area of the bounding rectangle is less than that number, the
 button should blink, changing states of regular look and being fully green in equal durations, changing 6 times per
 second (so, 3 times being regular and 3 times being green). And the color of the displayed area value should be green,
-together with color of the bounding rectangle. Because that's actually the whole purpose of this application: find
-unit cube's net that can be cut from the square piece of paper with area less than 7.1 square units.
+together with color of the bounding rectangle. This "success" green must be clearly different from the green of
+face 3 (#008A4B). Because that's actually the whole purpose of this application: find
+unit cube's net that can be cut from the rectangular piece of paper with area less than 7.1 square units.
 
 Now to the main feature: cube net transformations.
 Obviously, to "flatten" a cube (make a cube net) one must do some cuts in the cube's surface. For default cube net
@@ -229,6 +266,12 @@ Initially we are in the DEFAULT state, in which:
    and click on them) - the starting point of the cut line is created. All vertices and segments of the new cut line
    that we are creating should follow the same coloring rules described earlier with one exception: they have to be
    slightly different, kinda "highlighted", so that user can see which one are the old ones.
+   Important: as soon as an endpoint of the new cut line (the first one or the last one) is created on some segment
+   Xi - Yj of the outer perimeter, its counterpart Xk - Ym has to be divided by the image of the same cube's point
+   immediately (that's the z_3 case from the example above), not later when we glue. Otherwise in CUT_EDITING state
+   user would not be able to click the segment they actually want to glue, because it would not exist yet.
+   These counterpart images are shown as regular perimeter vertices (and follow the "highlighted" coloring, since they
+   are part of the new cut line process). Undoing creation of the endpoint removes its counterpart image as well.
 As soon as first point of a new cut line created, we are in a slightly different state (CUTTING):
 1. Application should show segments that connect i-th and (i+1)-th point of the new cut line, and segment that connects
    the last point with current mouse location.
@@ -238,6 +281,13 @@ As soon as first point of a new cut line created, we are in a slightly different
    Keep in mind, that if only have 1 point (the first one) and we click on the same segment of the outer perimeter
    the first point is - potential new segment of the new cut line would intersect the outer perimeter (because all its
    points are there), so that's a rejection case.
+   More rules about endpoints of the cut line:
+   - Endpoints may be located on existing vertices of the outer perimeter (including vertices of the cube).
+   - Cut line may start and end on the same segment of the outer perimeter (if it has intermediate points).
+   - Cut line can't start and end at the same point of the cube net.
+   - Cut line MAY start and end at two different images of the same point of the cube's surface (for example, A_1 and
+     A_3). Such cut makes it impossible to glue anything (every candidate segment has its counterpart in the same half),
+     but we don't forbid it: user will see why it doesn't work and will revert it.
 As it was said earlier, as soon as we create another point on the outer perimeter of the cube net (in addition to the
 very first one, from which this new cut started) - we transition to the next state (CUT_EDITING).
 1. Here in the middle of every segment of the new cut line should be a small hollow circle, click on which should create
@@ -254,18 +304,34 @@ very first one, from which this new cut started) - we transition to the next sta
    cut line, or one if that's the first/last point) has intersection with any other segment of the new cut line or
    the outer perimeter. If so - moved segment that breaks the rules should become black for 200 ms and moved point
    should reverse its position back.
+   When the first/last point is dragged, its counterpart image (see z_3 case) moves accordingly along the counterpart
+   segment, so that both images always represent the same point of the cube's surface.
+   Dragged first/last point can reach the ends of the segment it moves along.
 4. If user clicks on any segment of the outer perimeter (not including its vertices) that should indicate the intent
    of rearranging two parts cube net was divided in such a way, that this chosen segment is glued with its counterpart.
    Because of the way we defined the cut if there is segment of outer perimeter Xi - Yj, then there always is exactly
    one more segment Xk - Ym, where at least one of these inequalities holds: i != k, j != m. I.e. for any cut between
    points X and Y on the cube surface there should be exactly two segments of the cube net perimeter with those two
    letters X and Y, and we call those segments counterparts of each other.
+   If the counterpart of the clicked segment belongs to the same half of the cube net as the clicked segment - such
+   rearrangement is impossible: clicked segment becomes black for 200 ms, and nothing else happens.
+   Clicks on segments of the new cut line itself are ignored (both of its "sides" coincide at this moment, so gluing
+   them would mean nothing).
 So, as soon as user clicks on the segment of the outer perimeter we should do that rearrangement (moving half
 of the cube net that has clicked segment counterpart, but not moving half that has clicked segment), and transition
 to the next state (CUT_APPROVING):
 1. Application should still show the segment we are about to glue.
 2. It should check if new outer perimeter has any self-intersections, and if so - it should color intersecting segments
    of new perimeter in black.
+   What exactly counts as "self-intersection" must be defined very carefully. The real criterion is: interiors of
+   cube net faces must not overlap. Touching is NOT a self-intersection and doesn't forbid the cut:
+   - two parts of the cube net may touch in a point;
+   - two segments of the perimeter may lie on each other (fully or partially), if the cube net is on opposite sides
+     of them (that's the reason cuts and their hitboxes are drawn inside faces: so that user can still click on cuts
+     of either of two touching cube net faces);
+   - a vertex may touch a segment of the perimeter from outside.
+   Self-intersection examples: two segments cross each other; two segments lie on each other with the cube net on
+   the same side of them; a vertex "pokes" through a segment into the cube net.
 3. If there are no intersections - a button on the panel of the instruments should highlight (let it look like a green
    checkmark), shortcut: CTRL+ENTER. It should end the process of cutting the cube net, getting us in the DEFAULT state.
 
@@ -288,10 +354,16 @@ Few exceptions:
    move further, so the only possible option from there was to revert the action). If user reverts such action - we
    should "forget" about it, i.e. user shouldn't be able to redo it. Maybe, this feature would make single circular
    buffer, and we would need to use something like deque for main history and stack for reversion history.
-We don't save anything related to ruler instrument. And if its activated - it doesn't interrupt main functions. With
-one exception: if we are in the middle of creating new cut line, then we don't show segments that connects last created
-point of the cut line with current mouse location when ruler instrument is active. As soon as we deactivate ruler
-instrument - we get back to main functions.
+CTRL+y always redoes exactly one action (even if CTRL+z reverted two of them: after reverting #5 and #4 together,
+first CTRL+y redoes #4 and we get to CUT_APPROVING, the second one redoes #5).
+The redo stack is saved into the project too.
+There is no separate "cancel cut line" feature: user just reverts actions with CTRL+z.
+We don't save anything related to ruler instrument. And if its activated - it doesn't interrupt main functions:
+we still draw existing cuts and the new cut line we are creating right now, bounding rectangle, etc. But while ruler
+is active, clicks on the sheet create ruler points (and only them), not points of the cut line. Also: if we are in the
+middle of creating new cut line, then we don't show segments that connects last created point of the cut line with
+current mouse location when ruler instrument is active. As soon as we deactivate ruler instrument - we get back to
+main functions.
 
 Few more notes:
 1. We don't need vertices labels be visible to user.
@@ -312,11 +384,28 @@ Few more notes:
    just close to the cut). So the center-line of the cut hitbox should not be the geometric cut itself (in which case
    half of the hitbox would be outside cube net face it bounds), but it should be inside cube net face.
 5. As described above in CUT_EDITING state user can select specific cut to be glued back again. But after user approves
-   the cut (and its valid) application should check if there are any cuts adjacent and collinear to that cut. If there
-   are such cuts, and they can be glued as well - they should be glued automatically. For example, there were two
-   collinear adjacent cuts P1 - Q1 and Q1 - R2. And "on the other side" of the cube net perimeter there was another
-   pair of collinear adjacent cuts P2 - Q3 and Q3 - R1 (i.e. both pairs represent the same pair of adjacent cuts on the
-   surface of the cube, so that can be glued). If after creating new cut line in CUT_EDITING state user clicks on,
-   let's say, P1 - Q1, and halves of the cube net get rearranged, and there now overlapping (i.e. self-intersections),
-   and user approves the cut line - application should glue not only P1 - Q1 with P2 - Q3, but also Q1 - R2 with
-   Q3 - R1.
+   the cut (and its valid) application should check if adjacent cuts from two glued parts "match" (i.e. they are defined
+   by same vertices on the surface of the cube, and they overlap point-by-point. If there are such cuts - they should be
+   glued automatically.
+   For example, there is cut line on the cube's surface that consists of consecutive points P, Q, R, S, T.
+   Now consider that related cube net has consecutive cuts P1 - Q2, Q2 - R1, R1 - S1, S1 - T3 and "somewhere else"
+   consecutive cuts P3 - Q1, Q1 - R2, R2 - S2, S2 - T1. If after creating new cut line in CUT_EDITING state user clicks
+   on, let's say, Q2 - R1, and halves of the cube net get rearranged, and there no overlapping
+   (i.e. self-intersections), and user approves the cut line - application should glue Q2 - R1 with Q1 - R2. Then it
+   should search in both "directions" starting from cut Q - R. If now (after rearranging) P1 matches P3 - it should
+   glue P1 - Q2 to P3 - Q1. If S1 matches S2 - it should glue R1 - S1 to R2 - S2. When searching in specific direction
+   it should stop as soon as it finds "next" cut that can't be glued. I.e. if T3 doesn't match T1 - we should NOT
+   look past point T.
+6. Redundant points should disappear. After the cut is approved (and auto-glued), some points on the surface of the
+   cube may become meaningless: a point that is not a vertex of the cube and is not a branching point of cuts, i.e.
+   at all its images the outer perimeter just goes "straight through" it, and both adjacent cuts have the same colors
+   (e.g. point x, if later parts Ax and xB of edge AB become one cut again). Or a point that became internal (not on
+   the outer perimeter at all). Such points are removed (from all their images), and adjacent cuts are merged.
+7. Some facts we agreed on:
+   - Vertices of the cube are always on the outer perimeter of the cube net (only 270 degrees of "paper" meet there,
+     so it can never be an internal point of a flat net). Hence a cut line never passes through a vertex of the cube.
+   - Every rearrangement is a rotation by a multiple of 90 degrees plus a translation.
+   - Application stores models of both the cube's surface (points on it, cuts) and of the cube net (images of those
+     points and cuts on the plane). Labels (A_1, x_2, ...) are only for explanation, they are not shown to the user.
+     Several user-made vertices on the same cube's face may be hard to distinguish - we'll solve that later.
+   - "Snapping" of points (to vertices, edges, grid) is needed for precise work, but will be discussed later.
