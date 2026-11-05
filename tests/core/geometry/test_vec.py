@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from cube_net.core.geometry import Vec, to_fraction
+from cube_net.core.geometry.vec import Vec, to_fraction
 
 fractions = st.fractions(max_denominator=1000, min_value=-100, max_value=100)
 vecs = st.builds(Vec, fractions, fractions)

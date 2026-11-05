@@ -1,4 +1,4 @@
-"""Exact 2D geometry primitives (docs/plan.md, section 3.1).
+"""Exact 2D point/vector `Vec` and the exact-number guard `to_fraction` (docs/plan.md, section 3.1).
 
 All coordinates are `fractions.Fraction`. Floats are deliberately rejected: a float coming from the UI must go through
 `quantize()` first, so that every computation in the core stays exact.

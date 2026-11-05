@@ -25,6 +25,9 @@ gets fixed.
    call it after every operation, and debug builds call it after every action.
 6. **Test-first for the core.** pytest for unit and scenario tests, hypothesis for property tests (random valid cuts
    must keep every invariant), pytest-qt with `QT_QPA_PLATFORM=offscreen` for UI smoke tests.
+7. **Small modules.** Only very close relatives share a source file: a class and its tiny helpers. Anything else gets
+   its own module. When an area grows to several modules, it becomes a package, like `core/geometry/`. Tests mirror
+   the source layout (`tests/core/geometry/test_vec.py` tests `core/geometry/vec.py`).
 
 ---
 
@@ -63,9 +66,11 @@ cube_net/
 ├── src/cube_net/
 │   ├── app.py                   # QApplication bootstrap, startup logic
 │   ├── core/
-│   │   ├── numbers.py           # Fraction helpers, quantize()
-│   │   ├── geometry.py          # Vec, orientation, segment predicates/classification
-│   │   ├── transform.py         # Rigid90: rotation k*90° + translation, compose/invert
+│   │   ├── geometry/            # one module per closely related group of definitions
+│   │   │   ├── vec.py           # Vec, to_fraction
+│   │   │   ├── rigid90.py       # Rigid90: rotation k*90° + translation, compose/invert
+│   │   │   ├── predicates.py    # orient, segment classification
+│   │   │   └── quantize.py      # quantize(): UI floats -> Fraction (1/1000 for now)
 │   │   ├── cube.py              # cube surface: faces, frames, SurfacePoint, edges
 │   │   ├── net.py               # net model (DCEL), default net, queries
 │   │   ├── invariants.py        # validate_net()
@@ -94,7 +99,7 @@ cube_net/
 
 ## 3. Core data model
 
-### 3.1 Numbers and geometry (`numbers.py`, `geometry.py`, `transform.py`)
+### 3.1 Numbers and geometry (`geometry/` package)
 - `Vec(x: Fraction, y: Fraction)`, immutable and hashable.
 - `orient(a, b, c) -> -1 | 0 | 1`, computed exactly.
 - `classify(seg1, seg2)` returns one of: `DISJOINT`, `PROPER_CROSSING`, `TOUCH_AT_ENDPOINT` (with which endpoints),
