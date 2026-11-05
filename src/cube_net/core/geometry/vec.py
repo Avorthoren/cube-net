@@ -14,7 +14,14 @@ type Scalar = int | Fraction
 
 
 def to_fraction(value: object) -> Fraction:
-    """Convert an exact rational number to `Fraction`. Rejects floats and bools (they are almost always a bug here)."""
+    """
+    Convert an exact rational number to `Fraction`.
+    Rejects floats and bools (they are almost always a bug here).
+
+    TODO: This will be used a lot. Later, when application is tested well
+          these checks can be dropped (together with this function).
+          We can just call `Fraction(value)` directly whenever needed.
+    """
     if isinstance(value, bool) or not isinstance(value, Rational):
         raise TypeError(f"expected int or Fraction, got {type(value).__name__}: {value!r}")
     return Fraction(value)

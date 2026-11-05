@@ -1,9 +1,19 @@
+from collections.abc import Callable
 from fractions import Fraction as F
 from itertools import permutations
 
 import pytest
 
-from cube_net.core.cube import CUBE, FACE_CORNERS, FACES, LOCAL_CORNERS, VERTICES, CubeTopology
+from cube_net.core.cube import (
+    CUBE,
+    DEFAULT_FACE_ORIGINS,
+    FACE_CORNERS,
+    FACES,
+    LOCAL_CORNERS,
+    VERTICES,
+    CubeTableError,
+    CubeTopology,
+)
 from cube_net.core.geometry import Rigid90, Vec
 
 # Vertex images of the default net, exactly as labelled in docs/idea.txt.
@@ -135,27 +145,96 @@ class TestTransitions:
         p = CUBE.corner_local(f, vertex)
         assert loop.apply(p) == p
 
-    def test_not_adjacent_rejected(self) -> None:
-        with pytest.raises(ValueError, match="not adjacent"):
-            CUBE.transition(2, 5)
+
+def corners_with(**changes: str) -> dict[int, tuple[str, ...]]:
+    """FACE_CORNERS with some faces replaced, e.g. corners_with(f5="HBFE")."""
+    table: dict[int, tuple[str, ...]] = dict(FACE_CORNERS)
+    for key, labels in changes.items():
+        table[int(key[1:])] = tuple(labels)
+    return table
+
+
+def origins_with(**changes: Vec) -> dict[int, Vec]:
+    table = dict(DEFAULT_FACE_ORIGINS)
+    for key, origin in changes.items():
+        table[int(key[1:])] = origin
+    return table
 
 
 class TestValidation:
-    def test_default_table_is_valid(self) -> None:
-        CubeTopology(FACE_CORNERS)
+    """Every malformed table fails once, at construction, with a CubeTableError and a readable message."""
 
-    def test_missing_face_rejected(self) -> None:
-        table = dict(FACE_CORNERS)
-        del table[6]
-        with pytest.raises(ValueError):
-            CubeTopology(table)
+    def test_default_tables_are_valid(self) -> None:
+        CubeTopology(FACE_CORNERS, DEFAULT_FACE_ORIGINS)
 
-    def test_inconsistent_table_rejected(self) -> None:
-        table = dict(FACE_CORNERS)
-        table[6] = ("E", "F", "G", "A")  # A would belong to 4 faces
-        with pytest.raises(ValueError, match="faces, expected"):
-            CubeTopology(table)
+    def test_error_is_a_value_error(self) -> None:
+        assert issubclass(CubeTableError, ValueError)
+
+    @pytest.mark.parametrize(
+        ("table", "message"),
+        [
+            (
+                {f: c for f, c in FACE_CORNERS.items() if f != 6},
+                r"expected faces \(1, 2, 3, 4, 5, 6\), got \[1, 2, 3, 4, 5\]",
+            ),
+            (corners_with(f1="CDB"), r"face 1 must have 4 corners, got 3"),
+            (corners_with(f1="ADBA"), r"face 1 has repeated corner labels"),
+            (corners_with(f1="CDBX"), r"face 1 has unknown vertex labels \['X'\]"),
+            (corners_with(f5="HBFE"), r"vertex A belongs to 2 faces \[1, 4\], expected 3"),
+            (corners_with(f6="EFGA"), r"vertex A belongs to 4 faces \[1, 4, 5, 6\], expected 3"),
+            (corners_with(f5="FBAE", f6="FEGH"), r"edge FG belongs to faces \[3\], expected 2"),
+            (corners_with(f3="BFGD"), r"faces \d and \d have inconsistent orientation"),
+            (
+                corners_with(f6="EHGF"),
+                r"inconsistent orientation: corners of every face must be listed counter-clockwise",
+            ),
+        ],
+    )
+    def test_bad_face_corners(self, table: dict[int, tuple[str, ...]], message: str) -> None:
+        with pytest.raises(CubeTableError, match=message):
+            CubeTopology(table)  # type: ignore[arg-type]
+
+    def test_corners_disagreeing_with_default_net(self) -> None:
+        """A valid cube, but face 3 is rotated in its frame, so along its fold with face 2 the labels don't match."""
+        table = corners_with(f3="BDGF")
+        with pytest.raises(CubeTableError, match=r"faces 2 and 3 touch along a whole side .* differ"):
+            CubeTopology(table)  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize(
+        ("origins", "message"),
+        [
+            ({f: o for f, o in DEFAULT_FACE_ORIGINS.items() if f != 5}, r"default net must place faces"),
+            (origins_with(f6=Vec(11, 12)), r"faces 2 and 6 overlap in the default net"),
+            (origins_with(f6=Vec(F(23, 2), F(23, 2))), r"faces 2 and 6 overlap in the default net"),
+            (origins_with(f3=Vec(10, 12), f4=Vec(12, 12)), r"touch along a whole side .* differ"),
+            (origins_with(f5=Vec(20, 20)), r"6 faces connected by exactly 5 folds, got 4 folds"),
+        ],
+    )
+    def test_bad_default_origins(self, origins: dict[int, Vec], message: str) -> None:
+        with pytest.raises(CubeTableError, match=message):
+            CubeTopology(FACE_CORNERS, origins)
 
     def test_local_corners_counter_clockwise(self) -> None:
         a, b, c, _ = LOCAL_CORNERS
         assert (b - a).cross(c - a) > 0
+
+
+class TestLookupErrors:
+    """Bad arguments to the query methods give readable ValueErrors (no extra cost on the success path)."""
+
+    @pytest.mark.parametrize(
+        ("call", "message"),
+        [
+            (lambda: CUBE.face_corners(7), "no such face: 7"),
+            (lambda: CUBE.opposite(0), "no such face: 0"),
+            (lambda: CUBE.default_placement(9), "no such face: 9"),
+            (lambda: CUBE.vertex_faces("X"), "no such vertex: 'X'"),
+            (lambda: CUBE.edge_faces(frozenset("AG")), "no such edge: AG"),
+            (lambda: CUBE.corner_local(1, "E"), "vertex E is not a corner of face 1"),
+            (lambda: CUBE.shared_edge(1, 6), "faces 1 and 6 are not adjacent"),
+            (lambda: CUBE.transition(2, 5), "faces 2 and 5 are not adjacent"),
+        ],
+    )
+    def test_messages(self, call: Callable[[], object], message: str) -> None:
+        with pytest.raises(ValueError, match=message):
+            call()

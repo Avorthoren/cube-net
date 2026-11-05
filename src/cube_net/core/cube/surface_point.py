@@ -95,9 +95,10 @@ class SurfacePoint:
 
 
 def _corner_label(face: Face, local: Vec) -> VertexLabel | None:
-    for corner, label in zip(LOCAL_CORNERS, CUBE.face_corners(face), strict=True):
+    # FACE_CORNERS is validated once in CubeTopology.__init__ (4 labels per face), so no length check here.
+    for i, corner in enumerate(LOCAL_CORNERS):
         if local == corner:
-            return label
+            return CUBE.face_corners(face)[i]
     return None
 
 
