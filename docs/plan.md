@@ -121,10 +121,10 @@ cube_net/
   derived and self-checked: vertex → 3 faces, 12 edges → 2 faces each, adjacency, opposite faces, and
   `transition(f, g)`, the `Rigid90` that unfolds face `f` across the shared edge into `g`'s frame. Labels A..H are
   internal ids; they're never shown to the user.
-- `SurfacePoint`: a point on the cube surface in **canonical form**:
-  - a point inside a face: `(face, u, v)`;
-  - a point on an edge: the representation on the lower-numbered of its two faces, plus the set `{f1, f2}`;
-  - a cube vertex: canonical vertex id, plus the set of its 3 faces.
+- **`SurfacePoint`** (`cube/surface_point.py`): a point on the cube surface in **canonical form**: `(face, local)`
+  in the frame of the lowest-numbered face that contains it. It can be created from any containing face, and it
+  also carries the derived `faces` (1, 2 or 3), `vertex` label (for cube vertices) and `edge` (for points inside an
+  edge). `local_in(face)` gives its coordinates in any other containing face.
 
   Two `SurfacePoint`s are equal exactly when they are the same point of the cube. This is what makes "counterparts"
   and "matching" in `idea.txt` well-defined: a perimeter segment is identified by its pair of `SurfacePoint`s.

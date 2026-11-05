@@ -1,5 +1,6 @@
 """The cube surface: topology of faces/edges/vertices and points on the surface (docs/plan.md, section 3.2)."""
 
+from cube_net.core.cube.surface_point import SurfacePoint, SurfacePointKind
 from cube_net.core.cube.topology import (
     CUBE,
     DEFAULT_FACE_ORIGINS,
@@ -23,5 +24,7 @@ __all__ = [
     "CubeTopology",
     "Edge",
     "Face",
+    "SurfacePoint",
+    "SurfacePointKind",
     "VertexLabel",
 ]
