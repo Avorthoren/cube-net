@@ -1,8 +1,8 @@
+"""Thin launcher, e.g. for running from the IDE. All logic lives in the `cube_net` package."""
+
 import sys
 
-
-def main():
-    ...
+from cube_net.app import main
 
 
 if __name__ == "__main__":

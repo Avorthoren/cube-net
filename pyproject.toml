@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cube-net"
+version = "0.1.0"
+description = "Desktop application to explore unit cube nets by cutting and re-gluing them."
+readme = "docs/idea.txt"
+requires-python = ">=3.14"
+dependencies = [
+    "PyQt6>=6.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-qt>=4.4",
+    "hypothesis>=6.100",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[project.scripts]
+cube-net = "cube_net.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+qt_api = "pyqt6"
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.14"
+files = ["src/cube_net/core"]
+warn_unused_ignores = true

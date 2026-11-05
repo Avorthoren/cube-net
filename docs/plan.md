@@ -40,7 +40,14 @@ gets fixed.
 | App settings  | `QSettings` (face colours, last project path, recent projects)                  |
 | Project file  | single file `*.cubenet`: gzip-compressed JSON with a `format_version` field     |
 
-**Dependencies to drop from `requirements.txt`:**
+**Dependencies** are declared only in `pyproject.toml`; there is no `requirements.txt`:
+- runtime dependencies go in `[project] dependencies` (PyQt6);
+- dev tools go in `[project.optional-dependencies] dev` (pytest, pytest-qt, hypothesis, ruff, mypy).
+
+Install or update everything in the venv with `pip install -e ".[dev]"`, run from the project root. The `-e`
+(editable) install also makes `cube_net` importable from `src/`, so `python main.py` works from the IDE.
+
+Dropped from the old `requirements.txt`:
 - numpy and shapely: they work in floats, and we need exact predicates.
 - pyyaml and python-json-logger: we use JSON and the standard `logging` module.
 
@@ -360,7 +367,7 @@ UI milestones can run in parallel once M2 exists.
 
 | #   | Milestone                       | Content                                                                 | Done when |
 |-----|---------------------------------|-------------------------------------------------------------------------|-----------|
-| M0  | Project setup                   | `pyproject.toml`, package layout, ruff, pytest/pytest-qt/hypothesis, clean `requirements`, run config for the IDE | `pytest` runs; `python main.py` opens an empty window |
+| M0  | Project setup                   | `pyproject.toml` (deps + tool config), package layout, ruff, mypy, pytest/pytest-qt/hypothesis, thin `main.py` | **Done.**  `pytest` runs; `python main.py` opens an empty window |
 | M1  | Geometry kernel                 | `Vec`, `orient`, `classify`, `Rigid90`, `quantize`                      | Every `classify` case is covered, including degenerate ones |
 | M2  | Cube and default net            | `cube.py`, DCEL `net.py`, `default_net()`, `validate_net()`, serialization of the net | Default net validates; 14 vertex images, 7 counterpart pairs; round-trip to JSON |
 | M3  | Static rendering                | Main window, sheet view, grid, coordinates in the status bar, zoom, pan, scrollbars, net painting (hatch, dashes, vertex circles) | The cross looks as specified; zoom and pan behave as specified |

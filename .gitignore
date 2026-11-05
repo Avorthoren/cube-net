@@ -10,3 +10,10 @@ venv
 
 data/
 .openrouter
+# Python tooling
+*.egg-info/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
