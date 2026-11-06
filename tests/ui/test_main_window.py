@@ -80,3 +80,50 @@ def test_labels_off_at_start_when_disabled_in_settings(qtbot: QtBot, tmp_path: P
     item = window.sheet_view.net_item()
     assert item is not None and item.labels() is None
     assert not window.show_labels_action.isChecked()
+
+
+def settings_in(tmp_path: Path, record: bool) -> AppSettings:
+    settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    settings.record_session = record
+    return settings
+
+
+def session_lines(path: Path) -> list[str]:
+    """Lines of a session file without the times."""
+    return [line if line.startswith("#") else line.split(" ", 1)[1] for line in path.read_text().splitlines()]
+
+
+def test_recording_started_at_launch(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(settings=settings_in(tmp_path, record=True), session_dir=tmp_path)
+    qtbot.addWidget(window)
+    assert window.recorder is not None
+    lines = session_lines(window.recorder.log.path)
+    assert "# recording started: at app launch" in lines
+    assert lines[-3:] == ["state net default", "state labels on", f"state window {window.width()}x{window.height()}"]
+    window.stop_recording("test over")
+
+
+def test_no_recording_when_off(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+    qtbot.addWidget(window)
+    assert window.recorder is None
+    assert list(tmp_path.glob("session-*.log")) == []
+
+
+def test_turning_recording_off_and_on(qtbot: QtBot, tmp_path: Path) -> None:
+    settings = settings_in(tmp_path, record=False)
+    window = MainWindow(settings=settings, session_dir=tmp_path)
+    qtbot.addWidget(window)
+    window.record_session_action.setChecked(True)  # starts a file describing the current state
+    first = window.recorder
+    assert first is not None and settings.record_session
+    assert "# recording started: turned on by the user" in session_lines(first.log.path)
+    window.show_labels_action.setChecked(False)
+    window.record_session_action.setChecked(False)  # ends it
+    assert window.recorder is None and not settings.record_session
+    assert session_lines(first.log.path)[-2:] == ["labels off", "stop turned off by the user"]
+    window.record_session_action.setChecked(True)  # a new file, with the new state
+    second = window.recorder
+    assert second is not None and second.log.path != first.log.path
+    assert "state labels off" in session_lines(second.log.path)
+    window.stop_recording("test over")

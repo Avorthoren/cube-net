@@ -310,6 +310,7 @@ Undo and redo are available in every state. Each public method either performs o
   - Ruler toggle;
   - bounding-rectangle toggle with the area label (3 decimals);
   - approve ✓ button (Ctrl+Enter), enabled only for a valid candidate.
+- **View menu:** "Record sessions (development, from next launch)": see §6.7.
 - **View menu:** "Show vertex labels (development)", an app setting (`AppSettings`, stored with `QSettings`).
   `DEFAULT_SHOW_VERTEX_LABELS` is True while developing and becomes False for releases.
 - **Status bar:** mouse coordinates in sheet units with 3 decimals, plus the current state name. The state name helps while
@@ -380,6 +381,25 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
 
 ---
 
+### 6.7 Session recording (`ui/session/`)
+- Purpose: reproduce exactly what the user did when they report a problem. One file per launch,
+  `session-<date>-<time>-<pid>.log` in the app data folder (on Linux `~/.local/share/cube_net/Cube Net/sessions/`).
+  The path is printed to stderr and shown in the status bar at start.
+- `SessionRecorder` is an application-wide event filter. It never consumes events, and the line format is described
+  in its module docstring: positions over the sheet in sheet coordinates (3 decimals = the input rounding), other
+  widgets by class and text.
+- **Rule for new features:** when a feature changes the model (adds a cut point, glues, undoes, saves, ...), it also
+  records one compact `note()` line, so a log shows both the input and its effect.
+- App setting `record_session` (`DEFAULT_RECORD_SESSION` is True while developing, False for releases).
+- **Start and stop.** If recording is on at launch, the file's header says `recording started: at app launch`. If the
+  user turns it on later, a new file starts with `recording started: turned on by the user`. Either way it's followed
+  by `state …` lines describing the current state (`MainWindow._record_state`), so the file alone is enough to
+  reproduce what follows. Turning recording off writes `stop turned off by the user` and closes the file. Turning it
+  on again starts a new file.
+- **Keep the state snapshot complete.** Right now the state is just the default net, the labels setting, the window
+  size and the view. Every milestone that adds state must extend `_record_state`: the cut line in progress (M5), a
+  rearranged candidate (M6), the history (M8). In M9 the snapshot becomes the full serialized project.
+
 ## 7. Milestones
 
 **Vertical slices.** Every milestone delivers a feature end to end: core logic, its UI, and tests. Inside a
@@ -391,14 +411,14 @@ part is built right away**, before more logic is added. Every step marked 👁 e
 |-----|-----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|-----------|
 | M0  | Project setup                     | `pyproject.toml`, package layout, ruff, mypy, pytest/pytest-qt/hypothesis, thin `main.py`                                           | **Done.** |
 | M1  | Geometry kernel                   | `Vec`, `orient`, `classify_segments`, `Rigid90`, `quantize`                                                                         | **Done.** |
-| M2  | Sheet and the static default net  | 1. `CubeTopology`, `SurfacePoint` (**done**). 2. 👁 (**done**) Sheet view: white sheet with the 1×1 grid, Y-up coordinates (H_1 = (11,12)), mouse coordinates with 3 decimals in the status bar, initial zoom (net = 50% of screen height), mouse-wheel zoom around the cursor with the provisional limits, scrollbars, left-drag panning outside the net. The sheet bounds come from the 6 default face squares for now. 3. (**done**) Net model (DCEL) with `default_net()`: regions, fold edges, boundary segments, vertex images. 4. 👁 (**done**) Net painting: hatch per face, two-colour dashed fold edges and cuts (drawn inside the faces), vertex circles. 4a. 👁 (**done**) Development mode: debug labels (A_1, B_2, ..., then I, J, ..., Z, AA, ... for points created by cuts) next to all vertices; app setting, toggled in View → Show vertex labels, ON by default during development. 5. 👁 Hover highlight of cuts (needs hit-testing, §4.1). | The cross looks and behaves as specified |
+| M2  | Sheet and the static default net  | 1. `CubeTopology`, `SurfacePoint` (**done**). 2. 👁 (**done**) Sheet view: white sheet with the 1×1 grid, Y-up coordinates (H_1 = (11,12)), mouse coordinates with 3 decimals in the status bar, initial zoom (net = 50% of screen height), mouse-wheel zoom around the cursor with the provisional limits, scrollbars, left-drag panning outside the net. The sheet bounds come from the 6 default face squares for now. 3. (**done**) Net model (DCEL) with `default_net()`: regions, fold edges, boundary segments, vertex images. 4. 👁 (**done**) Net painting: hatch per face, two-colour dashed fold edges and cuts (drawn inside the faces), vertex circles. 4a. 👁 (**done**) Development mode: debug labels (A_1, B_2, ..., then I, J, ..., Z, AA, ... for points created by cuts) next to all vertices; app setting, toggled in View → Show vertex labels, ON by default during development. 4b. (**done**) Session recording: a compact log of user input (clicks and drags in sheet coordinates, wheel, keys, menu items, zoom/scroll state, window size), one file per launch in the app data folder; app setting toggled in View, ON by default during development. Turning it on starts a new file that first describes the current state; turning it off ends the file. 5. 👁 Hover highlight of cuts (needs hit-testing, §4.1). | The cross looks and behaves as specified |
 | M3  | Ruler                             | 1. Ruler model (points, segment lengths; no history). 2. 👁 Ruler toggle on the instrument panel, points, lines, coordinate and distance labels, panning disabled while active. | Behaviour as specified |
 | M4  | Bounding rectangle                | 1. `bounding.py` (exact hull + minimum-area rectangle). 2. 👁 Area label, toggle button, rectangle drawing, green colouring and blinking below the threshold (fixed 7.100 until M9). | 12.000 for the cross |
 | M5  | Cut line                          | 1. Cut-line model and validation rules (§4.2). 2. 👁 DEFAULT → CUTTING → CUT_EDITING in the app: start on a cut, add points, rubber band, black flashes on rejection. 3. Endpoint counterpart images (z_3). 4. 👁 Midpoint circles, Shift+click delete, dragging points (endpoints along their segment). | Every CUTTING/CUT_EDITING rule from `idea.txt` is covered by core tests and usable in the app |
 | M6  | Rearrange and the overlap check   | 1. Splitting the net along the cut line, the two halves (§4.3). 2. Rearrangement (§4.4). 3. 👁 Clicking a segment moves the other half (CUT_APPROVING), the glued segment is shown, a counterpart in the same half flashes black. 4. Overlap check (§4.5). 5. 👁 Overlapping segments in black, ✓ button enabled only when valid. Bounding rectangle follows the candidate. | The corner-cut example from `idea.txt` reproduces exactly in the app |
 | M7  | Approve                           | 1. Gluing, auto-glue walk, cleanup (§4.6), `validate_net()` (§3.4). 2. 👁 ✓ button and Ctrl+Enter accept the cut; you can keep cutting the new net. | All **11 hexomino nets** are reachable from the cross (core scenario test) and in the app |
 | M8  | Undo / redo                       | 1. `history.py` with every special rule (§5.2). 2. 👁 Ctrl+Z / Ctrl+Y and Edit menu items, in every state.                         | Table-driven history tests pass; works in the app |
-| M9  | Projects                          | 1. Serialization of the editor state and history, including the point names (`PointLabels`), so debug labels stay the same after reopening. 2. 👁 File menu: New/Open/Save/Save As (Ctrl+S), unsaved-changes prompt, startup flow (reopen last saved project). 3. 👁 Project settings dialog (area threshold). | Save → restart → identical state with full undo/redo |
+| M9  | Projects                          | 1. Serialization of the editor state and history, including the point names (`PointLabels`), so debug labels stay the same after reopening. The session-recording state snapshot (§6.7) becomes this serialized project. 2. 👁 File menu: New/Open/Save/Save As (Ctrl+S), unsaved-changes prompt, startup flow (reopen last saved project). 3. 👁 Project settings dialog (area threshold). | Save → restart → identical state with full undo/redo |
 | M10 | Polish                            | Colour variants for the new cut line, cursor shapes, performance check at about 50 cuts, anything found while trying the app      | Smooth interaction with a heavily cut net |
 | M11 | Packaging                         | PyInstaller one-folder build → `.deb` and/or AppImage for Ubuntu 24; later macOS (`.app`/`.dmg`) and Windows                       | Install on a clean Ubuntu VM and run |
 

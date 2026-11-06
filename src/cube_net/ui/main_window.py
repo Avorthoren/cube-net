@@ -1,13 +1,24 @@
 """Main application window."""
 
+from pathlib import Path
+
+from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QLabel, QMainWindow, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QWidget
 
 from cube_net.core.geometry import quantize
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import Net, default_net
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
+from cube_net.ui.session.session_recorder import SessionRecorder
+from cube_net.ui.session.start import (
+    STARTED_AT_LAUNCH,
+    STARTED_BY_USER,
+    STOPPED_BY_USER,
+    start_session_recording,
+    stop_session_recording,
+)
 from cube_net.ui.sheet.sheet_view import SheetView
 
 APP_TITLE = "Cube Net"
@@ -21,7 +32,13 @@ def format_coordinates(x: float, y: float) -> str:
 class MainWindow(QMainWindow):
     """Top-level window: the sheet view in the middle, mouse coordinates in the status bar."""
 
-    def __init__(self, parent: QWidget | None = None, settings: AppSettings | None = None) -> None:
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        settings: AppSettings | None = None,
+        session_dir: Path | None = None,
+    ) -> None:
+        """`session_dir`: where session recordings go (default: the app data folder)."""
         super().__init__(parent)
         self.setWindowTitle(APP_TITLE)
         self.settings = AppSettings() if settings is None else settings
@@ -48,6 +65,44 @@ class MainWindow(QMainWindow):
         self._update_vertex_labels()
         self._resize_to_screen()
 
+        self._session_dir = session_dir
+        self.recorder: SessionRecorder | None = None
+        if self.settings.record_session:
+            self.start_recording(STARTED_AT_LAUNCH)
+
+    # --- session recording ----------------------------------------------------------------------------------------
+
+    def start_recording(self, reason: str) -> None:
+        """Start a new session file and write the current state into it."""
+        app = QApplication.instance()
+        if self.recorder is not None or not isinstance(app, QApplication):
+            return
+        recorder = start_session_recording(app, reason, self._session_dir)
+        recorder.watch_sheet(self.sheet_view)
+        recorder.watch_main_window(self)
+        self.recorder = recorder
+        self._record_state(recorder)
+        self.statusBar().showMessage(f"Recording session to {recorder.log.path}", 15000)
+
+    def stop_recording(self, reason: str) -> None:
+        app = QApplication.instance()
+        if self.recorder is None or not isinstance(app, QApplication):
+            return
+        stop_session_recording(app, self.recorder, reason)
+        self.recorder = None
+        self.statusBar().showMessage("Session recording stopped", 5000)
+
+    def _record_state(self, recorder: SessionRecorder) -> None:
+        """Everything needed to reproduce the session from this point on.
+
+        Until projects can be saved (M9) the only possible net is the default one; then the full project state will
+        be written here.
+        """
+        recorder.note("state", "net", "default")
+        recorder.note("state", "labels", "on" if self.settings.show_vertex_labels else "off")
+        recorder.note("state", "window", f"{self.width()}x{self.height()}")
+        QTimer.singleShot(0, recorder.record_view)  # zoom and position, once the view has been laid out
+
     def _create_menus(self) -> None:
         menu_bar = self.menuBar()
         assert menu_bar is not None
@@ -59,9 +114,24 @@ class MainWindow(QMainWindow):
         self.show_labels_action.toggled.connect(self._on_show_labels_toggled)
         view_menu.addAction(self.show_labels_action)
 
+        self.record_session_action = QAction("&Record session (development)", self)
+        self.record_session_action.setCheckable(True)
+        self.record_session_action.setChecked(self.settings.record_session)
+        self.record_session_action.toggled.connect(self._on_record_session_toggled)
+        view_menu.addAction(self.record_session_action)
+
     def _on_show_labels_toggled(self, checked: bool) -> None:
         self.settings.show_vertex_labels = checked
         self._update_vertex_labels()
+        if self.recorder is not None:
+            self.recorder.note("labels", "on" if checked else "off")
+
+    def _on_record_session_toggled(self, checked: bool) -> None:
+        self.settings.record_session = checked
+        if checked:
+            self.start_recording(STARTED_BY_USER)
+        else:
+            self.stop_recording(STOPPED_BY_USER)
 
     def _update_vertex_labels(self) -> None:
         labels = vertex_labels(self.net, self.point_labels) if self.settings.show_vertex_labels else None
