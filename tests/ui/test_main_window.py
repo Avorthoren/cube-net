@@ -1,6 +1,18 @@
+from pathlib import Path
+
+import pytest
+from PyQt6.QtCore import QSettings
 from pytestqt.qtbot import QtBot
 
+from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.main_window import APP_TITLE, NO_COORDINATES, MainWindow, format_coordinates
+
+
+@pytest.fixture(autouse=True)
+def isolated_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never touch the real user settings in tests."""
+    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+    QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(tmp_path))
 
 
 def test_main_window_opens(qtbot: QtBot) -> None:
@@ -42,3 +54,29 @@ def test_hit_test_follows_default_net(qtbot: QtBot) -> None:
     view = window.sheet_view
     assert view.is_on_net(11.5, 12.5)  # face 2
     assert not view.is_on_net(10.5, 13.5)  # empty corner left of face 1
+
+
+def test_vertex_labels_toggle(qtbot: QtBot, tmp_path: Path) -> None:
+    settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    window = MainWindow(settings=settings)
+    qtbot.addWidget(window)
+    item = window.sheet_view.net_item()
+    assert item is not None
+    assert window.show_labels_action.isChecked()
+    labels = item.labels()
+    assert labels is not None and len(labels) == 14
+    window.show_labels_action.setChecked(False)
+    assert item.labels() is None
+    assert settings.show_vertex_labels is False
+    window.show_labels_action.setChecked(True)
+    assert item.labels() is not None and settings.show_vertex_labels is True
+
+
+def test_labels_off_at_start_when_disabled_in_settings(qtbot: QtBot, tmp_path: Path) -> None:
+    settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    settings.show_vertex_labels = False
+    window = MainWindow(settings=settings)
+    qtbot.addWidget(window)
+    item = window.sheet_view.net_item()
+    assert item is not None and item.labels() is None
+    assert not window.show_labels_action.isChecked()

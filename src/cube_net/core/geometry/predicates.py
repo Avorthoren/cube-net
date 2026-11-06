@@ -28,14 +28,17 @@ def on_segment(p: Vec, a: Vec, b: Vec) -> bool:
 
 
 class IntersectionKind(Enum):
+    # No common points.
     DISJOINT = "disjoint"
-    """No common points."""
+
+    # Exactly one common point, lying strictly inside both segments (a proper crossing).
     CROSSING = "crossing"
-    """Exactly one common point, lying strictly inside both segments (a proper crossing)."""
+
+    # Exactly one common point, which is an endpoint of at least one segment (endpoint-endpoint or T-touch).
     TOUCH = "touch"
-    """Exactly one common point, which is an endpoint of at least one segment (endpoint-endpoint or T-touch)."""
+
+    # Collinear segments sharing a sub-segment of positive length.
     OVERLAP = "overlap"
-    """Collinear segments sharing a sub-segment of positive length."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +80,7 @@ def classify_segments(p1: Vec, p2: Vec, q1: Vec, q2: Vec) -> SegmentIntersection
 
     # Lines intersect at p1 + t*r == q1 + u*s.
     t = offset.cross(s) / denominator
+
     u = offset.cross(r) / denominator
     if not (0 <= t <= 1 and 0 <= u <= 1):
         return _DISJOINT

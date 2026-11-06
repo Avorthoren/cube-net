@@ -4,8 +4,8 @@ from collections.abc import Iterable
 
 from cube_net.core.geometry import Box, Vec
 
+# Distance (in units) from the net's bounding box to each edge of the sheet.
 SHEET_MARGIN = 5
-"""Distance (in units) from the net's bounding box to each edge of the sheet."""
 
 
 def sheet_box(net_points: Iterable[Vec]) -> Box:

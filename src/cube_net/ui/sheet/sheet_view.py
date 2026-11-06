@@ -11,7 +11,8 @@ from PyQt6.QtGui import QMouseEvent, QPainter, QResizeEvent, QShowEvent, QTransf
 from PyQt6.QtWidgets import QGraphicsScene, QGraphicsView, QWidget
 
 from cube_net.core.geometry import Box
-from cube_net.core.net import Net
+from cube_net.core.labels import VertexLabel
+from cube_net.core.net import Net, NetVertex
 from cube_net.ui import palette
 from cube_net.ui.sheet import zoom
 from cube_net.ui.sheet.net_item import NetItem
@@ -26,10 +27,11 @@ def _to_rect(box: Box) -> QRectF:
 
 
 class SheetView(QGraphicsView):
+    # Mouse position in sheet coordinates (emitted on every move over the view).
     mouse_moved = pyqtSignal(float, float)
-    """Mouse position in sheet coordinates (emitted on every move over the view)."""
+
+    # The mouse left the view.
     mouse_left = pyqtSignal()
-    """The mouse left the view."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -70,6 +72,11 @@ class SheetView(QGraphicsView):
             self._scene().addItem(self._net_item)
         else:
             self._net_item.set_net(net)
+
+    def set_vertex_labels(self, labels: dict[NetVertex, VertexLabel] | None) -> None:
+        """Debug labels next to the net's vertices (None: hide them)."""
+        if self._net_item is not None:
+            self._net_item.set_labels(labels)
 
     def net_item(self) -> NetItem | None:
         return self._net_item

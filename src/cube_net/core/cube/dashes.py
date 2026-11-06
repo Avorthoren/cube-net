@@ -15,8 +15,8 @@ from cube_net.core.cube.surface_point import SurfacePoint
 from cube_net.core.cube.topology import CUBE, Face
 from cube_net.core.geometry import Vec
 
+# So that a whole cube edge has 10 dashes of each of its 2 colours.
 DASH_LENGTH = Fraction(1, 20)
-"""So that a whole cube edge has 10 dashes of each of its 2 colours."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,12 +27,14 @@ class DashLayout:
     `faces[floor((offset + s) / DASH_LENGTH) % 2]`, where the second entry may be None for white.
     """
 
+    # Colour of even dashes, colour of odd dashes (None = white).
     faces: tuple[Face, Face | None]
-    """Colour of even dashes, colour of odd dashes (None = white)."""
+
+    # The endpoint the pattern is measured from.
     start: SurfacePoint
-    """The endpoint the pattern is measured from."""
+
+    # Pattern position at `start`.
     offset: Fraction
-    """Pattern position at `start`."""
 
 
 def dash_layout(p: SurfacePoint, q: SurfacePoint) -> DashLayout:
@@ -54,6 +56,7 @@ def dash_layout(p: SurfacePoint, q: SurfacePoint) -> DashLayout:
 
     # Inside one face (distinct points share at most 2 faces): measure from the canonically smaller endpoint.
     face = min(common)
+
     start = min(p, q, key=lambda s: (s.face, s.local.x, s.local.y))
     return DashLayout((face, None), start, Fraction(0))
 

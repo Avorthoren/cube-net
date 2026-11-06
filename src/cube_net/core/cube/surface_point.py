@@ -16,12 +16,14 @@ from cube_net.core.geometry import Vec
 
 
 class SurfacePointKind(Enum):
+    # Strictly inside a face: 1 face.
     FACE = "face"
-    """Strictly inside a face: 1 face."""
+
+    # Strictly inside an edge: 2 faces.
     EDGE = "edge"
-    """Strictly inside an edge: 2 faces."""
+
+    # A vertex of the cube: 3 faces.
     VERTEX = "vertex"
-    """A vertex of the cube: 3 faces."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,16 +33,20 @@ class SurfacePoint:
     Equality and hashing use only the canonical `(face, local)` pair; the other attributes are derived from it.
     """
 
+    # The lowest-numbered face containing the point (the canonical frame).
     face: Face
-    """The lowest-numbered face containing the point (the canonical frame)."""
+
+    # Coordinates in the canonical face's frame, in [0, 1]^2.
     local: Vec
-    """Coordinates in the canonical face's frame, in [0, 1]^2."""
+
+    # All faces containing the point: 1, 2 or 3 of them. They define the point's colours.
     faces: frozenset[Face] = field(compare=False)
-    """All faces containing the point: 1, 2 or 3 of them. They define the point's colours."""
+
+    # The cube vertex label, if the point is a vertex of the cube.
     vertex: VertexLabel | None = field(compare=False)
-    """The cube vertex label, if the point is a vertex of the cube."""
+
+    # The cube edge (as a set of 2 vertex labels), if the point lies strictly inside an edge.
     edge: Edge | None = field(compare=False)
-    """The cube edge (as a set of 2 vertex labels), if the point lies strictly inside an edge."""
 
     def __init__(self, face: Face, local: Vec) -> None:
         if face not in FACES:

@@ -1,7 +1,9 @@
 import pytest
 from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QColor, QImage, QPainter, QTransform
+from PyQt6.QtWidgets import QApplication
 
+from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import default_net
 from cube_net.ui import palette
 from cube_net.ui.sheet import net_style
@@ -11,13 +13,17 @@ SCALE = 100.0  # px per unit
 ORIGIN = QPointF(9, 15)  # sheet point drawn at the image's top-left corner
 
 
-def render() -> tuple[QImage, QTransform]:
+def render(with_labels: bool = False, background: str = "black") -> tuple[QImage, QTransform]:
     image = QImage(500, 600, QImage.Format.Format_RGB32)
-    image.fill(QColor("black"))
+    image.fill(QColor(background))
     world = QTransform().scale(SCALE, -SCALE).translate(-ORIGIN.x(), -ORIGIN.y())
     painter = QPainter(image)
     painter.setTransform(world)
-    NetItem(default_net()).paint(painter, None)
+    net = default_net()
+    item = NetItem(net)
+    if with_labels:
+        item.set_labels(vertex_labels(net, PointLabels()))
+    item.paint(painter, None)
     painter.end()
     return image, world
 
@@ -62,3 +68,18 @@ def test_vertex_circle_drawn_on_perimeter_vertex() -> None:
     image, world = render()
     colour = colour_at(image, world, 11 - 2 / SCALE, 14 - 2 / SCALE)  # A_1 at (11, 14): a pixel inside its circle
     assert colour in [palette.FACE_COLORS[f] for f in (1, 4, 5)]  # A is a vertex of faces 1, 4 and 5
+
+
+def test_labels_drawn_outside_the_net(qapp: QApplication) -> None:
+    """The label of A_1 (top-left corner of face 1) is drawn up-left of it, on the empty sheet; the faces stay as
+    they were. (Fonts need a running QApplication, hence `qapp`.)"""
+    plain, world = render(background="white")
+    labelled, _ = render(with_labels=True, background="white")  # labels are black
+    a1 = world.map(QPointF(11, 14))
+    x0, y0 = int(a1.x()) - 45, int(a1.y()) - 45
+    changed = sum(
+        plain.pixelColor(x, y) != labelled.pixelColor(x, y) for x in range(x0, x0 + 37) for y in range(y0, y0 + 37)
+    )
+    assert changed > 10
+    inside = world.map(QPointF(11.5, 13.5)).toPoint()
+    assert plain.pixelColor(inside) == labelled.pixelColor(inside)

@@ -4,11 +4,11 @@ Zoom is expressed as a scale: screen pixels per unit (1 unit = edge of the cube)
 The limits are provisional (docs/idea.txt), so they live in one replaceable function.
 """
 
+# A new project shows the net at 50% of the screen height.
 INITIAL_NET_SCREEN_FRACTION = 0.5
-"""A new project shows the net at 50% of the screen height."""
 
+# Zoom factor per mouse wheel notch.
 WHEEL_STEP = 1.15
-"""Zoom factor per mouse wheel notch."""
 
 
 def initial_scale(screen_height_px: float, net_height: float) -> float:

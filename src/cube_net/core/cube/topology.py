@@ -266,5 +266,5 @@ def _edge_name(edge: Edge) -> str:
     return "".join(sorted(edge))
 
 
+# The one and only cube.
 CUBE = CubeTopology()
-"""The one and only cube."""

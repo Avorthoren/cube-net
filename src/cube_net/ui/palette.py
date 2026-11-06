@@ -4,12 +4,14 @@ from types import MappingProxyType
 
 from PyQt6.QtGui import QColor
 
+# Background of the main area around the sheet.
 MAIN_AREA = QColor("#9AA0A6")
-"""Background of the main area around the sheet."""
+
 SHEET = QColor("#FFFFFF")
 SHEET_BORDER = QColor("#5F6368")
+
+# Thin light-grey 1x1 grid on the sheet.
 GRID = QColor("#D3D3D3")
-"""Thin light-grey 1x1 grid on the sheet."""
 
 FACE_COLORS = MappingProxyType(
     {
@@ -23,7 +25,12 @@ FACE_COLORS = MappingProxyType(
         6: QColor("#00A6D6"),  # cyan
     }
 )
+
+# Second colour of the hatch pattern and of dashes of cuts inside a face.
 WHITE = QColor("#FFFFFF")
-"""Second colour of the hatch pattern and of dashes of cuts inside a face."""
+
+# Thin outline of vertex circles, so that sectors stand out on similar colours.
 VERTEX_OUTLINE = QColor("#3C4043")
-"""Thin outline of vertex circles, so that sectors stand out on similar colours."""
+
+# Debug vertex labels.
+LABEL = QColor("#000000")

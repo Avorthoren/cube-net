@@ -21,10 +21,12 @@ class NetBuildError(ValueError):
 @dataclass(frozen=True, slots=True)
 class RegionSpec:
     face: Face
+
+    # Face-local frame -> sheet.
     placement: Rigid90
-    """Face-local frame -> sheet."""
+
+    # Sheet positions of the region's corners, counter-clockwise.
     corners: Sequence[Vec]
-    """Sheet positions of the region's corners, counter-clockwise."""
 
 
 def build_net(specs: Iterable[RegionSpec]) -> Net:

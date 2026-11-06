@@ -18,12 +18,14 @@ from cube_net.core.geometry import Rigid90, Vec
 
 
 class EdgeKind(Enum):
+    # A cube edge inside the net (always drawn).
     FOLD = "fold"
-    """A cube edge inside the net (always drawn)."""
+
+    # A glued user cut inside the net (never drawn; exists only transiently, see docs/plan.md section 4.6).
     SEAM = "seam"
-    """A glued user cut inside the net (never drawn; exists only transiently, see docs/plan.md section 4.6)."""
+
+    # A segment of the outer perimeter: a cut.
     BOUNDARY = "boundary"
-    """A segment of the outer perimeter: a cut."""
 
 
 class NetVertex:
@@ -34,8 +36,9 @@ class NetVertex:
     id: int
     position: Vec
     point: SurfacePoint
+
+    # Some half-edge that starts at this vertex.
     edge: HalfEdge
-    """Some half-edge that starts at this vertex."""
 
     def __init__(self, vertex_id: int, position: Vec, point: SurfacePoint) -> None:
         self.id = vertex_id
@@ -54,8 +57,10 @@ class HalfEdge:
     id: int
     origin: NetVertex
     kind: EdgeKind
+
+    # The region on the left of this half-edge, or None for the outside of the net.
     region: Region | None
-    """The region on the left of this half-edge, or None for the outside of the net."""
+
     twin: HalfEdge
     next: HalfEdge
     prev: HalfEdge
@@ -86,10 +91,12 @@ class Region:
 
     id: int
     face: Face
+
+    # Maps the face's local frame to the sheet (used for colours and the hatch pattern).
     placement: Rigid90
-    """Maps the face's local frame to the sheet (used for colours and the hatch pattern)."""
+
+    # Some half-edge of this region's boundary cycle.
     edge: HalfEdge
-    """Some half-edge of this region's boundary cycle."""
 
     def __init__(self, region_id: int, face: Face, placement: Rigid90) -> None:
         self.id = region_id

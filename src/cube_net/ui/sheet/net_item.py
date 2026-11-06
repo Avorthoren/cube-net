@@ -5,17 +5,19 @@ Painted bottom to top:
 2. Fold edges: two-colour dashes centred on the cube edge.
 3. Cuts (the perimeter): dashes drawn fully inside their region.
 4. Vertex circles on the perimeter, one equal sector per face of the vertex.
+5. Optional debug labels (A_1, B_2, ...) next to all vertices, placed outside the net.
 Hatch is drawn in sheet units; lines and circles have constant pixel sizes, so they are drawn in device pixels.
 """
 
 import math
 
 from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
-from PyQt6.QtGui import QPainter, QPainterPath, QPen, QPolygonF, QTransform
+from PyQt6.QtGui import QFont, QFontMetricsF, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 
 from cube_net.core.cube import DASH_LENGTH, dash_layout
-from cube_net.core.net import HalfEdge, Net
+from cube_net.core.labels import VertexLabel
+from cube_net.core.net import HalfEdge, Net, NetVertex
 from cube_net.core.sheet import SHEET_MARGIN
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf, to_qtransform
@@ -41,11 +43,21 @@ class NetItem(QGraphicsItem):
         super().__init__()
         self._net = net
         self._hatch = hatch_path()
+        self._labels: dict[NetVertex, VertexLabel] | None = None
 
     def set_net(self, net: Net) -> None:
         self.prepareGeometryChange()
         self._net = net
+        self._labels = None
         self.update()
+
+    def set_labels(self, labels: dict[NetVertex, VertexLabel] | None) -> None:
+        """Debug labels to draw next to vertices (None: no labels)."""
+        self._labels = labels
+        self.update()
+
+    def labels(self) -> dict[NetVertex, VertexLabel] | None:
+        return self._labels
 
     def boundingRect(self) -> QRectF:
         # The sheet margin is always large enough for pixel-sized decorations at the allowed zoom levels.
@@ -68,6 +80,8 @@ class NetItem(QGraphicsItem):
         for he in self._net.boundary_edges():
             self._paint_dashed(painter, world, he, inset=net_style.EDGE_WIDTH_PX / 2 * units_per_px)
         self._paint_vertices(painter, world)
+        if self._labels:
+            self._paint_labels(painter, world, self._labels)
         painter.restore()
 
     # --- layers -----------------------------------------------------------------------------------------------------
@@ -113,3 +127,41 @@ class NetItem(QGraphicsItem):
             for i, face in enumerate(faces):
                 painter.setBrush(palette.FACE_COLORS[face])
                 painter.drawPie(rect, round((90 + i * span) * 16), round(span * 16))
+
+    def _paint_labels(self, painter: QPainter, world: QTransform, labels: dict[NetVertex, VertexLabel]) -> None:
+        name_font, index_font = QFont(), QFont()
+        name_font.setPixelSize(net_style.LABEL_FONT_PX)
+        index_font.setPixelSize(round(net_style.LABEL_FONT_PX * 0.75))
+        name_metrics, index_metrics = QFontMetricsF(name_font), QFontMetricsF(index_font)
+        painter.setPen(palette.LABEL)
+        outward = self._outward_directions(world)
+        for vertex, label in labels.items():
+            index = str(label.index)
+            width = name_metrics.horizontalAdvance(label.name) + index_metrics.horizontalAdvance(index)
+            height = name_metrics.ascent()
+            direction = outward.get(vertex, QPointF(math.sqrt(0.5), -math.sqrt(0.5)))  # default: up-right
+            distance = net_style.VERTEX_RADIUS_PX + net_style.LABEL_GAP_PX + max(width, height) / 2
+            center = world.map(to_qpointf(vertex.position)) + direction * distance
+            baseline = QPointF(center.x() - width / 2, center.y() + height / 2)
+            painter.setFont(name_font)
+            painter.drawText(baseline, label.name)
+            painter.setFont(index_font)
+            subscript = baseline + QPointF(name_metrics.horizontalAdvance(label.name), index_metrics.ascent() / 3)
+            painter.drawText(subscript, index)
+
+    def _outward_directions(self, world: QTransform) -> dict[NetVertex, QPointF]:
+        """Unit vectors in device pixels pointing away from the net at every perimeter vertex (bisector of the outer
+        angle). The perimeter goes clockwise around the net, so the outside is on the left of each of its segments."""
+        perimeter = self._net.perimeter()
+        directions: dict[NetVertex, QPointF] = {}
+        for incoming, outgoing in zip(perimeter[-1:] + perimeter[:-1], perimeter, strict=True):
+            total = QPointF(0, 0)
+            for he in (incoming, outgoing):
+                a, b = world.map(to_qpointf(he.origin.position)), world.map(to_qpointf(he.destination.position))
+                d = b - a
+                length = math.hypot(d.x(), d.y())
+                total += QPointF(d.y(), -d.x()) / length  # left in sheet = right in device (Y is flipped)
+            length = math.hypot(total.x(), total.y())
+            if length > 1e-9:
+                directions[outgoing.origin] = total / length
+        return directions

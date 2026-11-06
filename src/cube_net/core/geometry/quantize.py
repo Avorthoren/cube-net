@@ -10,8 +10,8 @@ from fractions import Fraction
 
 from cube_net.core.geometry.vec import Vec
 
+# Default rounding step for user input, in cube units.
 QUANTUM = Fraction(1, 1000)
-"""Default rounding step for user input, in cube units."""
 
 
 def quantize_scalar(value: float | int, step: Fraction = QUANTUM) -> Fraction:
