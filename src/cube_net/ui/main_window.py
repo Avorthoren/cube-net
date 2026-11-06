@@ -26,6 +26,7 @@ class MainWindow(QMainWindow):
         net_box = self.net.bounding_box()
         self.sheet_view = SheetView(self)
         self.sheet_view.set_sheet(sheet_box(v.position for v in self.net.vertices))
+        self.sheet_view.set_net(self.net)
         self.sheet_view.set_net_hit_test(lambda x, y: self.net.contains(quantize(x, y)))
         self.sheet_view.show_initial_view(net_box)
         self.setCentralWidget(self.sheet_view)

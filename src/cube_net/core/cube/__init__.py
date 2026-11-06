@@ -1,5 +1,6 @@
 """The cube surface: topology of faces/edges/vertices and points on the surface (docs/plan.md, section 3.2)."""
 
+from cube_net.core.cube.dashes import DASH_LENGTH, DashLayout, dash_layout
 from cube_net.core.cube.surface_point import SurfacePoint, SurfacePointKind
 from cube_net.core.cube.topology import (
     CUBE,
@@ -17,6 +18,7 @@ from cube_net.core.cube.topology import (
 
 __all__ = [
     "CUBE",
+    "DASH_LENGTH",
     "DEFAULT_FACE_ORIGINS",
     "FACES",
     "FACE_CORNERS",
@@ -24,9 +26,11 @@ __all__ = [
     "VERTICES",
     "CubeTableError",
     "CubeTopology",
+    "DashLayout",
     "Edge",
     "Face",
     "SurfacePoint",
     "SurfacePointKind",
     "VertexLabel",
+    "dash_layout",
 ]

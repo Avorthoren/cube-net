@@ -145,3 +145,15 @@ class TestSheet:
         view.zoom_by(1e6, center_of_viewport(view))
         view.set_sheet(Box(Vec(0, 0), Vec(100, 100)))  # much bigger sheet: lower zoom-in limit
         assert view.scale_factor() == pytest.approx(view.zoom_limits()[1])
+
+
+class TestNet:
+    def test_set_net_adds_and_replaces_item(self, view: SheetView) -> None:
+        from cube_net.core.net import default_net
+
+        assert view.net_item() is None
+        view.set_net(default_net())
+        item = view.net_item()
+        assert item is not None and item.scene() is view.scene()
+        view.set_net(default_net())
+        assert view.net_item() is item

@@ -11,8 +11,10 @@ from PyQt6.QtGui import QMouseEvent, QPainter, QResizeEvent, QShowEvent, QTransf
 from PyQt6.QtWidgets import QGraphicsScene, QGraphicsView, QWidget
 
 from cube_net.core.geometry import Box
+from cube_net.core.net import Net
 from cube_net.ui import palette
 from cube_net.ui.sheet import zoom
+from cube_net.ui.sheet.net_item import NetItem
 from cube_net.ui.sheet.sheet_item import SheetItem
 
 type HitTest = Callable[[float, float], bool]
@@ -34,6 +36,7 @@ class SheetView(QGraphicsView):
         self.setScene(QGraphicsScene(self))
         self._sheet_item = SheetItem()
         self._scene().addItem(self._sheet_item)
+        self._net_item: NetItem | None = None
 
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.NoAnchor)  # zoom anchoring is done manually
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.NoAnchor)
@@ -59,6 +62,17 @@ class SheetView(QGraphicsView):
         self._sheet_item.set_rect(self._sheet)
         self._scale = zoom.clamp_scale(self._scale, self.zoom_limits())
         self._apply_transform()
+
+    def set_net(self, net: Net) -> None:
+        """Show `net` on the sheet (replacing the previous one)."""
+        if self._net_item is None:
+            self._net_item = NetItem(net)
+            self._scene().addItem(self._net_item)
+        else:
+            self._net_item.set_net(net)
+
+    def net_item(self) -> NetItem | None:
+        return self._net_item
 
     def set_net_hit_test(self, on_net: HitTest) -> None:
         """Panning by dragging is only allowed outside the cube net; this tells where the net is."""
