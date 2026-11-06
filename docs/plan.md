@@ -25,7 +25,9 @@ gets fixed.
    call it after every operation, and debug builds call it after every action.
 6. **Test-first for the core.** pytest for unit and scenario tests, hypothesis for property tests (random valid cuts
    must keep every invariant), pytest-qt with `QT_QPA_PLATFORM=offscreen` for UI smoke tests.
-7. **Small modules.** Only very close relatives share a source file: a class and its tiny helpers. Anything else gets
+7. **See it early.** Logic and its UI are built together, in small steps, so every feature can be tried in the
+   app as soon as possible (§7).
+8. **Small modules.** Only very close relatives share a source file: a class and its tiny helpers. Anything else gets
    its own module. When an area grows to several modules, it becomes a package, like `core/geometry/`. Tests mirror
    the source layout (`tests/core/geometry/test_vec.py` tests `core/geometry/vec.py`).
 
@@ -39,7 +41,7 @@ gets fixed.
 | GUI           | PyQt6 6.12 (`QGraphicsView`-based sheet)                                        |
 | Tests         | pytest, pytest-qt, hypothesis                                                   |
 | Lint / format | ruff (lint + format), mypy in non-strict mode for `core`                        |
-| Packaging     | `pyproject.toml` (setuptools); PyInstaller → `.deb` / AppImage later (§7, M12)  |
+| Packaging     | `pyproject.toml` (setuptools); PyInstaller → `.deb` / AppImage later (§7, M11)  |
 | App settings  | `QSettings` (face colours, last project path, recent projects)                  |
 | Project file  | single file `*.cubenet`: gzip-compressed JSON with a `format_version` field     |
 
@@ -373,24 +375,25 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
 
 ## 7. Milestones
 
-Each milestone ends with green tests and something that runs. Core milestones (M1, M2, M5–M8) are mostly headless;
-UI milestones can run in parallel once M2 exists.
+**Vertical slices.** Every milestone delivers a feature end to end: core logic, its UI, and tests. Inside a
+milestone, work goes one class/module at a time, and **as soon as some logic can be shown or used in the app, its UI
+part is built right away**, before more logic is added. Every step marked 👁 ends with something you can try in
+`python main.py`. Tests stay green after every step.
 
-| #   | Milestone                       | Content                                                                 | Done when |
-|-----|---------------------------------|-------------------------------------------------------------------------|-----------|
-| M0  | Project setup                   | `pyproject.toml` (deps + tool config), package layout, ruff, mypy, pytest/pytest-qt/hypothesis, thin `main.py` | **Done.**  `pytest` runs; `python main.py` opens an empty window |
-| M1  | Geometry kernel                 | `Vec`, `orient`, `classify`, `Rigid90`, `quantize`                      | **Done.** Every `classify` case is covered, including degenerate ones |
-| M2  | Cube and default net            | `cube.py`, DCEL `net.py`, `default_net()`, `validate_net()`, serialization of the net | Default net validates; 14 vertex images, 7 counterpart pairs; round-trip to JSON |
-| M3  | Static rendering                | Main window, sheet view, grid, coordinates in the status bar, zoom, pan, scrollbars, net painting (hatch, dashes, vertex circles) | The cross looks as specified; zoom and pan behave as specified |
-| M4  | Bounding rectangle              | `bounding.py`, toggle button, area label, threshold colouring and blinking | 12.000 for the cross; unit tests for rotated nets |
-| M5  | Cut line                        | `cutline.py`, endpoint counterpart images, CUTTING/CUT_EDITING controllers, rejections with black flashes, midpoint insert, delete, drag | All CUTTING/CUT_EDITING rules from `idea.txt` are covered by core tests; usable in the UI |
-| M6  | Split, rearrange, overlap check | `split.py`, `rearrange.py` (candidate), §4.5 overlap check, CUT_APPROVING UI | The corner-cut example from `idea.txt` reproduces exactly; overlapping cases show black segments |
-| M7  | Approve                         | Gluing, auto-glue walk, cleanup, ✓ button and Ctrl+Enter                | Scenario: all **11 hexomino nets** are reachable from the cross through edge cuts, each passing `validate_net`; property test: random valid cut→glue→approve sequences keep all invariants |
-| M8  | Undo / redo                     | `history.py` with every special rule, wired to Ctrl+Z / Ctrl+Y           | Table-driven history tests; manual check across states |
-| M9  | Projects                        | Save/Save As/Open/New, atomic save, startup flow, project settings dialog (threshold), unsaved-changes prompt | Save → restart → identical state and full undo/redo |
-| M10 | Ruler                           | Ruler tool and its interaction precedence                               | Behaviour as specified; doesn't affect history |
-| M11 | Polish                          | Hover highlights, colour variants, cursor shapes, performance check at about 50 cuts | Smooth interaction with a heavily cut net |
-| M12 | Packaging                       | PyInstaller one-folder build → `.deb` and/or AppImage for Ubuntu 24; later macOS (`.app`/`.dmg`) and Windows | Install on a clean Ubuntu VM and run |
+| #   | Milestone                         | Steps (👁 = you can try it in the app afterwards)                                                                                   | Done when |
+|-----|-----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|-----------|
+| M0  | Project setup                     | `pyproject.toml`, package layout, ruff, mypy, pytest/pytest-qt/hypothesis, thin `main.py`                                           | **Done.** |
+| M1  | Geometry kernel                   | `Vec`, `orient`, `classify_segments`, `Rigid90`, `quantize`                                                                         | **Done.** |
+| M2  | Sheet and the static default net  | 1. `CubeTopology`, `SurfacePoint` (**done**). 2. 👁 Sheet view: white sheet with the 1×1 grid, Y-up coordinates (H_1 = (11,12)), mouse coordinates with 3 decimals in the status bar, initial zoom (net = 50% of screen height), mouse-wheel zoom around the cursor with the provisional limits, scrollbars, left-drag panning outside the net. The sheet bounds come from the 6 default face squares for now. 3. Net model (DCEL) with `default_net()`: regions, fold edges, boundary segments, vertex images. 4. 👁 Net painting: hatch per face, two-colour dashed fold edges and cuts (drawn inside the faces), vertex circles. 5. 👁 Hover highlight of cuts (needs hit-testing, §4.1). | The cross looks and behaves as specified |
+| M3  | Ruler                             | 1. Ruler model (points, segment lengths; no history). 2. 👁 Ruler toggle on the instrument panel, points, lines, coordinate and distance labels, panning disabled while active. | Behaviour as specified |
+| M4  | Bounding rectangle                | 1. `bounding.py` (exact hull + minimum-area rectangle). 2. 👁 Area label, toggle button, rectangle drawing, green colouring and blinking below the threshold (fixed 7.100 until M9). | 12.000 for the cross |
+| M5  | Cut line                          | 1. Cut-line model and validation rules (§4.2). 2. 👁 DEFAULT → CUTTING → CUT_EDITING in the app: start on a cut, add points, rubber band, black flashes on rejection. 3. Endpoint counterpart images (z_3). 4. 👁 Midpoint circles, Shift+click delete, dragging points (endpoints along their segment). | Every CUTTING/CUT_EDITING rule from `idea.txt` is covered by core tests and usable in the app |
+| M6  | Rearrange and the overlap check   | 1. Splitting the net along the cut line, the two halves (§4.3). 2. Rearrangement (§4.4). 3. 👁 Clicking a segment moves the other half (CUT_APPROVING), the glued segment is shown, a counterpart in the same half flashes black. 4. Overlap check (§4.5). 5. 👁 Overlapping segments in black, ✓ button enabled only when valid. Bounding rectangle follows the candidate. | The corner-cut example from `idea.txt` reproduces exactly in the app |
+| M7  | Approve                           | 1. Gluing, auto-glue walk, cleanup (§4.6), `validate_net()` (§3.4). 2. 👁 ✓ button and Ctrl+Enter accept the cut; you can keep cutting the new net. | All **11 hexomino nets** are reachable from the cross (core scenario test) and in the app |
+| M8  | Undo / redo                       | 1. `history.py` with every special rule (§5.2). 2. 👁 Ctrl+Z / Ctrl+Y and Edit menu items, in every state.                         | Table-driven history tests pass; works in the app |
+| M9  | Projects                          | 1. Serialization of the editor state and history. 2. 👁 File menu: New/Open/Save/Save As (Ctrl+S), unsaved-changes prompt, startup flow (reopen last saved project). 3. 👁 Project settings dialog (area threshold). | Save → restart → identical state with full undo/redo |
+| M10 | Polish                            | Colour variants for the new cut line, cursor shapes, performance check at about 50 cuts, anything found while trying the app      | Smooth interaction with a heavily cut net |
+| M11 | Packaging                         | PyInstaller one-folder build → `.deb` and/or AppImage for Ubuntu 24; later macOS (`.app`/`.dmg`) and Windows                       | Install on a clean Ubuntu VM and run |
 
 M7's "all 11 nets" scenario is the main acceptance test for the whole topology engine. It's written against the
 core API with exact coordinates, so it doesn't need snapping.
