@@ -1,5 +1,6 @@
 """Exact 2D geometry (docs/plan.md, section 3.1). One closely related group of definitions per module."""
 
+from cube_net.core.geometry.box import Box
 from cube_net.core.geometry.predicates import (
     IntersectionKind,
     SegmentIntersection,
@@ -13,6 +14,7 @@ from cube_net.core.geometry.vec import Scalar, Vec, to_fraction
 
 __all__ = [
     "QUANTUM",
+    "Box",
     "IntersectionKind",
     "Rigid90",
     "Scalar",
