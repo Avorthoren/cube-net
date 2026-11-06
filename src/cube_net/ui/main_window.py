@@ -2,21 +2,13 @@
 
 from PyQt6.QtWidgets import QLabel, QMainWindow, QWidget
 
-from cube_net.core.cube import CUBE, FACES, LOCAL_CORNERS
-from cube_net.core.geometry import Box, quantize
+from cube_net.core.geometry import quantize
+from cube_net.core.net import Net, default_net
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.sheet.sheet_view import SheetView
 
 APP_TITLE = "Cube Net"
 NO_COORDINATES = "x: —   y: —"
-
-
-def _default_net_squares() -> list[Box]:
-    """The 6 face squares of the default net on the sheet.
-
-    Temporary (M2 step 2): stands in for the net model until it exists (M2 step 3).
-    """
-    return [Box.around(CUBE.default_placement(f).apply(c) for c in LOCAL_CORNERS) for f in FACES]
 
 
 def format_coordinates(x: float, y: float) -> str:
@@ -30,11 +22,11 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.setWindowTitle(APP_TITLE)
 
-        squares = _default_net_squares()
-        net_box = Box.around(p for square in squares for p in (square.lo, square.hi))
+        self.net: Net = default_net()
+        net_box = self.net.bounding_box()
         self.sheet_view = SheetView(self)
-        self.sheet_view.set_sheet(sheet_box([net_box.lo, net_box.hi]))
-        self.sheet_view.set_net_hit_test(lambda x, y: any(s.contains(quantize(x, y)) for s in squares))
+        self.sheet_view.set_sheet(sheet_box(v.position for v in self.net.vertices))
+        self.sheet_view.set_net_hit_test(lambda x, y: self.net.contains(quantize(x, y)))
         self.sheet_view.show_initial_view(net_box)
         self.setCentralWidget(self.sheet_view)
 

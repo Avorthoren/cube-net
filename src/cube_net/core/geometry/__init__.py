@@ -1,6 +1,7 @@
 """Exact 2D geometry (docs/plan.md, section 3.1). One closely related group of definitions per module."""
 
 from cube_net.core.geometry.box import Box
+from cube_net.core.geometry.polygon import polygon_contains, signed_area
 from cube_net.core.geometry.predicates import (
     IntersectionKind,
     SegmentIntersection,
@@ -23,7 +24,9 @@ __all__ = [
     "classify_segments",
     "on_segment",
     "orient",
+    "polygon_contains",
     "quantize",
     "quantize_scalar",
+    "signed_area",
     "to_fraction",
 ]

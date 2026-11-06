@@ -76,7 +76,11 @@ cube_net/
 │   │   ├── cube/
 │   │   │   ├── topology.py      # CubeTopology: faces, vertices, edges, frame transitions
 │   │   │   └── surface_point.py # SurfacePoint: canonical point on the cube surface
-│   │   ├── net.py               # net model (DCEL), default net, queries
+│   │   ├── net/
+│   │   │   ├── elements.py      # NetVertex, HalfEdge, Region, EdgeKind (the DCEL building blocks)
+│   │   │   ├── net.py           # Net: queries (regions, perimeter, folds, cuts, counterparts, images)
+│   │   │   ├── builder.py       # build_net() from region polygons, with input checks
+│   │   │   └── default_net.py   # default_net(): the cross
 │   │   ├── invariants.py        # validate_net()
 │   │   ├── cutline.py           # cut line in progress + validation rules
 │   │   ├── split.py             # inserting the cut line into the net, halves
@@ -133,7 +137,7 @@ cube_net/
 - `faces(p)` returns the face set (1, 2 or 3 faces). This drives vertex colours. A segment's colours are the
   *intersection* of its endpoints' face sets: 2 faces means a cube edge, 1 face means face colour plus white.
 
-### 3.3 Net (`net.py`): a DCEL over the sheet plane
+### 3.3 Net (`net/` package): a DCEL over the sheet plane
 - **Vertex** (an *image*): its sheet position (`Vec`) and its `SurfacePoint`. Several vertices can share one
   `SurfacePoint`, like A_1, A_2 and A_3.
 - **Half-edge**: origin vertex, twin, next, prev, region, and a `kind`:
@@ -141,7 +145,8 @@ cube_net/
   - `SEAM`: an inner glued user cut, never drawn;
   - `BOUNDARY`: a perimeter cut.
 
-  Boundary half-edges have no twin inside the net; their **counterpart** is found by `SurfacePoint` pair.
+  Every edge has two half-edges; a boundary edge's outer half-edge has `region = None`, and the outer half-edges form
+  the perimeter cycle (clockwise). A cut's **counterpart** is found by its `SurfacePoint` pair (reversed).
 - **Region**: a polygon that lies in exactly one cube face. It stores the face id and a `Rigid90` placement
   (face-local → sheet), which the hatching and colour code use. Regions can be non-convex.
 - **Perimeter**: the single boundary cycle of half-edges. Touching parts of the net mean the same sheet position can
@@ -384,7 +389,7 @@ part is built right away**, before more logic is added. Every step marked 👁 e
 |-----|-----------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|-----------|
 | M0  | Project setup                     | `pyproject.toml`, package layout, ruff, mypy, pytest/pytest-qt/hypothesis, thin `main.py`                                           | **Done.** |
 | M1  | Geometry kernel                   | `Vec`, `orient`, `classify_segments`, `Rigid90`, `quantize`                                                                         | **Done.** |
-| M2  | Sheet and the static default net  | 1. `CubeTopology`, `SurfacePoint` (**done**). 2. 👁 (**done**) Sheet view: white sheet with the 1×1 grid, Y-up coordinates (H_1 = (11,12)), mouse coordinates with 3 decimals in the status bar, initial zoom (net = 50% of screen height), mouse-wheel zoom around the cursor with the provisional limits, scrollbars, left-drag panning outside the net. The sheet bounds come from the 6 default face squares for now. 3. Net model (DCEL) with `default_net()`: regions, fold edges, boundary segments, vertex images. 4. 👁 Net painting: hatch per face, two-colour dashed fold edges and cuts (drawn inside the faces), vertex circles. 5. 👁 Hover highlight of cuts (needs hit-testing, §4.1). | The cross looks and behaves as specified |
+| M2  | Sheet and the static default net  | 1. `CubeTopology`, `SurfacePoint` (**done**). 2. 👁 (**done**) Sheet view: white sheet with the 1×1 grid, Y-up coordinates (H_1 = (11,12)), mouse coordinates with 3 decimals in the status bar, initial zoom (net = 50% of screen height), mouse-wheel zoom around the cursor with the provisional limits, scrollbars, left-drag panning outside the net. The sheet bounds come from the 6 default face squares for now. 3. (**done**) Net model (DCEL) with `default_net()`: regions, fold edges, boundary segments, vertex images. 4. 👁 Net painting: hatch per face, two-colour dashed fold edges and cuts (drawn inside the faces), vertex circles. 5. 👁 Hover highlight of cuts (needs hit-testing, §4.1). | The cross looks and behaves as specified |
 | M3  | Ruler                             | 1. Ruler model (points, segment lengths; no history). 2. 👁 Ruler toggle on the instrument panel, points, lines, coordinate and distance labels, panning disabled while active. | Behaviour as specified |
 | M4  | Bounding rectangle                | 1. `bounding.py` (exact hull + minimum-area rectangle). 2. 👁 Area label, toggle button, rectangle drawing, green colouring and blinking below the threshold (fixed 7.100 until M9). | 12.000 for the cross |
 | M5  | Cut line                          | 1. Cut-line model and validation rules (§4.2). 2. 👁 DEFAULT → CUTTING → CUT_EDITING in the app: start on a cut, add points, rubber band, black flashes on rejection. 3. Endpoint counterpart images (z_3). 4. 👁 Midpoint circles, Shift+click delete, dragging points (endpoints along their segment). | Every CUTTING/CUT_EDITING rule from `idea.txt` is covered by core tests and usable in the app |
