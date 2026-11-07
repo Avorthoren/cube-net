@@ -99,7 +99,13 @@ def test_recording_started_at_launch(qtbot: QtBot, tmp_path: Path) -> None:
     assert window.recorder is not None
     lines = session_lines(window.recorder.log.path)
     assert "# recording started: at app launch" in lines
-    assert lines[-3:] == ["state net default", "state labels on", f"state window {window.width()}x{window.height()}"]
+    assert lines[-5:] == [
+        "state net default",
+        "state labels on",
+        f"state window {window.width()}x{window.height()}",
+        "state bounds off",
+        "state ruler off",
+    ]
     window.stop_recording("test over")
 
 
@@ -219,3 +225,31 @@ def test_sheet_does_not_move_when_ruler_total_widens_the_panel(qtbot: QtBot, tmp
     window.ruler_action.setChecked(False)
     qtbot.waitUntil(lambda: view.x() == x)
     assert h1_in_window() == before
+
+
+def test_bounding_rectangle_on_panel_and_recorded(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(settings=settings_in(tmp_path, record=True), session_dir=tmp_path)
+    qtbot.addWidget(window)
+    assert window.bounding.label.text() == "Area\n12.000"
+    assert not window.bounding.success  # 12 is not below 7.1
+    window.bounding.action.setChecked(True)
+    assert len(window.bounding_item.corners()) == 4
+    window.bounding.action.setChecked(False)
+    assert window.recorder is not None
+    assert session_lines(window.recorder.log.path)[-2:] == ["bounds on", "bounds off"]
+    window.stop_recording("test over")
+
+
+def test_state_snapshot_includes_ruler_points_and_bounds(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+    qtbot.addWidget(window)
+    window.bounding.action.setChecked(True)
+    window.ruler_action.setChecked(True)
+    window.sheet_view.left_pressed.emit(11.0, 12.0)
+    window.sheet_view.left_pressed.emit(12.5, 13.25)
+    window.record_session_action.setChecked(True)  # turned on now: the file must describe all of this
+    assert window.recorder is not None
+    lines = session_lines(window.recorder.log.path)
+    assert "state bounds on" in lines
+    assert "state ruler on 11.000,12.000 12.500,13.250" in lines
+    window.stop_recording("test over")

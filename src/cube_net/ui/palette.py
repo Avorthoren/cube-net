@@ -41,3 +41,9 @@ RULER = QColor("#C5221F")
 # Text of ruler labels, drawn on a translucent white box so it's readable over the hatch.
 RULER_TEXT = QColor("#000000")
 RULER_LABEL_BACKGROUND = QColor(255, 255, 255, 210)
+
+# The bounding rectangle (thin line).
+BOUNDING_RECTANGLE = QColor("#000000")
+
+# Success: the bounding rectangle's area is below the threshold. Clearly different from face 3's green (#008A4B).
+SUCCESS = QColor("#39D353")

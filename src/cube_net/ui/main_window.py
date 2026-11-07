@@ -6,11 +6,14 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QToolBar, QWidget
 
+from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.geometry import Vec, quantize
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import Net, default_net
+from cube_net.core.project_settings import ProjectSettings
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
+from cube_net.ui.instruments.bounding_controls import BoundingControls
 from cube_net.ui.session.session_recorder import SessionRecorder
 from cube_net.ui.session.start import (
     STARTED_AT_LAUNCH,
@@ -20,6 +23,7 @@ from cube_net.ui.session.start import (
     start_session_recording,
     stop_session_recording,
 )
+from cube_net.ui.sheet.bounding_item import BoundingItem
 from cube_net.ui.sheet.cut_hover import CutHover
 from cube_net.ui.sheet.ruler_tool import RulerTool
 from cube_net.ui.sheet.sheet_view import SheetView
@@ -50,6 +54,8 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(APP_TITLE)
         self.settings = AppSettings() if settings is None else settings
         self.point_labels = PointLabels()
+        self.project_settings = ProjectSettings()
+        self.recorder: SessionRecorder | None = None
 
         self.net: Net = default_net()
         net_box = self.net.bounding_box()
@@ -77,7 +83,6 @@ class MainWindow(QMainWindow):
         self._resize_to_screen()
 
         self._session_dir = session_dir
-        self.recorder: SessionRecorder | None = None
         if self.settings.record_session:
             self.start_recording(STARTED_AT_LAUNCH)
 
@@ -115,6 +120,9 @@ class MainWindow(QMainWindow):
         recorder.note("state", "net", "default")
         recorder.note("state", "labels", "on" if self.settings.show_vertex_labels else "off")
         recorder.note("state", "window", f"{self.width()}x{self.height()}")
+        recorder.note("state", "bounds", "on" if self.bounding.action.isChecked() else "off")
+        ruler_points = [f"{float(p.x):.3f},{float(p.y):.3f}" for p in self.ruler_tool.ruler.points]
+        recorder.note("state", "ruler", "on" if self.ruler_tool.active else "off", *ruler_points)
         recorder.schedule_view_record()  # zoom and position, once the view has been laid out
 
     def _create_instruments(self) -> None:
@@ -134,6 +142,23 @@ class MainWindow(QMainWindow):
         self.ruler_total_action = toolbar.addWidget(self.ruler_total_label)
         self.ruler_tool.points_changed.connect(self._update_ruler_total)
         self._update_ruler_total()
+
+        self.bounding_item = BoundingItem()
+        scene = self.sheet_view.scene()
+        assert scene is not None
+        scene.addItem(self.bounding_item)
+        self.bounding = BoundingControls(toolbar, self.bounding_item)
+        self.bounding.toggled.connect(self._on_bounding_toggled)
+        self._update_bounding()
+
+    def _update_bounding(self) -> None:
+        """Recompute the minimum-area bounding rectangle of the current net."""
+        rectangle = min_area_rectangle(v.position for v in self.net.vertices)
+        self.bounding.update(rectangle, self.project_settings.area_threshold)
+
+    def _on_bounding_toggled(self, checked: bool) -> None:
+        if self.recorder is not None:
+            self.recorder.note("bounds", "on" if checked else "off")
 
     def _update_ruler_total(self) -> None:
         """Shown under the ruler button while the ruler is active: Σ of the placed segments, 3 decimals."""

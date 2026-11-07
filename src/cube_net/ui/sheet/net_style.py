@@ -21,3 +21,6 @@ CUT_HITBOX_PX = EDGE_WIDTH_PX * 1.5
 
 # A highlighted cut (under the mouse) is drawn this wide, still fully inside its face.
 HIGHLIGHT_WIDTH_PX = CUT_HITBOX_PX
+
+# Width of the bounding rectangle's line.
+BOUNDING_LINE_PX = 1.5

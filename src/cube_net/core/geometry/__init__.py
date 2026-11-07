@@ -1,6 +1,7 @@
 """Exact 2D geometry (docs/plan.md, section 3.1). One closely related group of definitions per module."""
 
 from cube_net.core.geometry.box import Box
+from cube_net.core.geometry.convex_hull import convex_hull
 from cube_net.core.geometry.polygon import polygon_contains, signed_area
 from cube_net.core.geometry.predicates import (
     IntersectionKind,
@@ -22,6 +23,7 @@ __all__ = [
     "SegmentIntersection",
     "Vec",
     "classify_segments",
+    "convex_hull",
     "on_segment",
     "orient",
     "polygon_contains",
