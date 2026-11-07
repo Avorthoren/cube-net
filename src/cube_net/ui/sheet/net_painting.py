@@ -1,4 +1,4 @@
-"""Painting helpers shared by the net and the cut line: two-colour dashed lines and vertex circles.
+"""Painting helpers shared by the net and the cut line: two-colour dashed lines, vertex circles, debug labels.
 
 They paint in device pixels: the painter must have no transform; `world` maps sheet units to device pixels.
 """
@@ -7,10 +7,11 @@ import math
 from collections.abc import Iterable
 
 from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
-from PyQt6.QtGui import QPainter, QPen, QTransform
+from PyQt6.QtGui import QFont, QFontMetricsF, QPainter, QPen, QTransform
 
 from cube_net.core.cube import DASH_LENGTH, Face, SurfacePoint, dash_layout
 from cube_net.core.geometry import Vec
+from cube_net.core.labels import VertexLabel
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
@@ -62,3 +63,33 @@ def paint_vertex(painter: QPainter, center: QPointF, faces: Iterable[Face], radi
     for i, face in enumerate(ordered):
         painter.setBrush(palette.FACE_COLORS[face])
         painter.drawPie(rect, round((90 + i * span) * 16), round(span * 16))
+
+
+# Labels go up-right of their vertex unless a better direction is known.
+UP_RIGHT = QPointF(math.sqrt(0.5), -math.sqrt(0.5))
+
+
+def paint_labels(painter: QPainter, labels: Iterable[tuple[QPointF, QPointF, VertexLabel]]) -> None:
+    """Debug labels like A₁: (device center of the vertex, unit direction to put the label in, label)."""
+    name_font, index_font = QFont(), QFont()
+    name_font.setPixelSize(net_style.LABEL_FONT_PX)
+    index_font.setPixelSize(round(net_style.LABEL_FONT_PX * 0.75))
+    name_metrics, index_metrics = QFontMetricsF(name_font), QFontMetricsF(index_font)
+    painter.setPen(palette.LABEL)
+    for center, direction, label in labels:
+        index = str(label.index)
+        width = name_metrics.horizontalAdvance(label.name) + index_metrics.horizontalAdvance(index)
+        height = name_metrics.ascent()
+        distance = net_style.VERTEX_RADIUS_PX + net_style.LABEL_GAP_PX + max(width, height) / 2
+        middle = center + direction * distance
+        baseline = QPointF(middle.x() - width / 2, middle.y() + height / 2)
+        box = QRectF(baseline.x() - 1, middle.y() - height / 2 - 1, width + 2, height + index_metrics.descent() + 3)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(palette.LABEL_BACKGROUND)
+        painter.drawRect(box)
+        painter.setPen(palette.LABEL)
+        painter.setFont(name_font)
+        painter.drawText(baseline, label.name)
+        painter.setFont(index_font)
+        subscript = baseline + QPointF(name_metrics.horizontalAdvance(label.name), index_metrics.ascent() / 3)
+        painter.drawText(subscript, index)

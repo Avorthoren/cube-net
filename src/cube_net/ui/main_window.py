@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QToolBar, QWidget
 from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.editor import Editor
 from cube_net.core.geometry import Vec, quantize
-from cube_net.core.labels import PointLabels, vertex_labels
+from cube_net.core.labels import PointLabels, cut_line_labels, vertex_labels
 from cube_net.core.net import Net, boundary_vertex_at, default_net
 from cube_net.core.project_settings import ProjectSettings
 from cube_net.core.sheet import sheet_box
@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
         self.editor = Editor(self.net)
         self.cut_tool = CutTool(self.sheet_view, self.editor, self.ruler_tool)
         self.cut_tool.point_added.connect(self._on_cut_point)
+        self.cut_tool.point_added.connect(lambda _point: self._update_vertex_labels())
         self.cut_tool.rejected.connect(self._on_cut_rejected)
         self.sheet_view.set_net_hit_test(self._is_on_net)
         self.sheet_view.show_initial_view(net_box)
@@ -233,8 +234,12 @@ class MainWindow(QMainWindow):
             self.stop_recording(STOPPED_BY_USER)
 
     def _update_vertex_labels(self) -> None:
-        labels = vertex_labels(self.net, self.point_labels) if self.settings.show_vertex_labels else None
-        self.sheet_view.set_vertex_labels(labels)
+        """Debug labels of the net's vertices and of the cut line's new points and images (if switched on)."""
+        show = self.settings.show_vertex_labels
+        self.sheet_view.set_vertex_labels(vertex_labels(self.net, self.point_labels) if show else None)
+        line = self.editor.cut_line
+        cut_labels = cut_line_labels(self.net, line, self.point_labels) if show and line is not None else []
+        self.cut_tool.item.set_labels(cut_labels)
 
     def _resize_to_screen(self, fraction: float = 0.8) -> None:
         screen = self.screen()

@@ -4,6 +4,7 @@ A straight segment on the sheet can cross fold edges; on the cube it then goes f
 those crossings, every piece lies in a single region, so its ends can be expressed as cube surface points.
 """
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 
@@ -48,4 +49,20 @@ def pieces(net: Net, a: Vec, b: Vec) -> list[Piece]:
         if region is None:
             raise ValueError(f"segment {a} - {b} leaves the net")
         result.append(Piece(start, end, surface_point_at(net, start, region), surface_point_at(net, end, region)))
+    return result
+
+
+def crossings(net: Net, positions: Sequence[Vec]) -> list[Vec]:
+    """Where the polyline through `positions` meets cube edges between its own points (in order along the line).
+
+    These are vertices of the new cut line too (docs/idea.txt, note 3): when the line becomes cuts, every piece between
+    two consecutive vertices lies in one face (or along one cube edge). They are derived from the line, so they follow
+    its points when those move.
+    """
+    own = set(positions)
+    result: list[Vec] = []
+    for a, b in pairwise(positions):
+        for piece in pieces(net, a, b)[:-1]:
+            if piece.end not in own:
+                result.append(piece.end)
     return result

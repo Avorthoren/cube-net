@@ -14,7 +14,7 @@ SCALE = 100.0
 
 
 def render(item: CutLineItem) -> tuple[QImage, QTransform]:
-    image = QImage(400, 500, QImage.Format.Format_RGB32)
+    image = QImage(400, 700, QImage.Format.Format_RGB32)
     image.fill(QColor("white"))
     world = QTransform().scale(SCALE, -SCALE).translate(-9, -15)
     painter = QPainter(image)
@@ -60,3 +60,49 @@ def test_rubber_band_state() -> None:
     segment = (Vec(F(23, 2), F(25, 2)), Vec(12, 12))
     item.set_rubber_band(segment)
     assert item.rubber_band() == segment
+
+
+def test_images_of_endpoints() -> None:
+    net = default_net()
+    top = next(
+        he for he in net.boundary_edges() if {he.origin.position, he.destination.position} == {Vec(11, 14), Vec(12, 14)}
+    )
+    item = CutLineItem(net)
+    item.set_points([CutPoint(Vec(F(23, 2), 14), top), CutPoint(Vec(F(23, 2), F(27, 2)))])
+    assert item.images() == [Vec(F(23, 2), 10)]  # x_2 at the bottom of face 5
+
+
+def test_crossings_of_placed_segments() -> None:
+    item = CutLineItem(default_net())
+    item.set_points([CutPoint(Vec(11, 13)), CutPoint(Vec(F(23, 2), F(23, 2)))])
+    assert item.crossings() == [Vec(F(34, 3), 12)]
+    item.set_rubber_band((Vec(F(23, 2), F(23, 2)), Vec(F(23, 2), F(21, 2))))  # the line to the mouse doesn't count
+    assert item.crossings() == [Vec(F(34, 3), 12)]
+
+
+def test_crossings_are_small_grey_dots_while_drawing() -> None:
+    item = CutLineItem(default_net())
+    item.set_area(QRectF(5, 5, 13, 14))
+    item.set_points([CutPoint(Vec(11, 13)), CutPoint(Vec(F(23, 2), F(23, 2)))])
+    image, world = render(item)
+    center = world.map(QPointF(34 / 3, 12))
+    assert image.pixelColor(center.toPoint()) == palette.DERIVED_POINT
+    # Farther from the center than the small radius, but within a normal vertex radius: no grey any more.
+    r = net_style.VERTEX_RADIUS_PX * net_style.DERIVED_POINT_RADIUS_FACTOR
+    beside = (center + QPointF(0, -(r + 2))).toPoint()  # straight up, off the line (which goes down-left to up-right)
+    assert image.pixelColor(beside) != palette.DERIVED_POINT
+
+
+def test_counterpart_images_are_small_black_dots_while_drawing() -> None:
+    net = default_net()
+    top = next(
+        he for he in net.boundary_edges() if {he.origin.position, he.destination.position} == {Vec(11, 14), Vec(12, 14)}
+    )
+    item = CutLineItem(net)
+    item.set_area(QRectF(5, 5, 13, 14))
+    item.set_points([CutPoint(Vec(F(23, 2), 14), top), CutPoint(Vec(F(23, 2), F(27, 2)))])
+    image, world = render(item)
+    center = world.map(QPointF(11.5, 10))  # x_2, the image of the start, at the bottom of face 5
+    assert image.pixelColor(center.toPoint()) == palette.COUNTERPART_IMAGE
+    r = net_style.VERTEX_RADIUS_PX * net_style.DERIVED_POINT_RADIUS_FACTOR
+    assert image.pixelColor((center + QPointF(r + 2, -2)).toPoint()) != palette.COUNTERPART_IMAGE  # small dot only

@@ -47,9 +47,16 @@ class Editor:
     def candidate(self, p: Vec, cut: HalfEdge | None, vertex: NetVertex | None = None) -> CutPoint:
         """The point a click at `p` would create: exactly at `vertex`, on `cut` (projected onto it), or inside the
         net."""
+        if cut is not None and vertex is None:
+            projected = project_onto(cut, p)
+            for end in (cut.origin, cut.destination):
+                if projected == end.position:  # landed exactly on the end of the cut: that's the vertex
+                    vertex = end
+            if vertex is None:
+                return CutPoint(projected, cut)
         if vertex is not None:
             return CutPoint(vertex.position, boundary_edge_from(self.net, vertex), vertex)
-        return CutPoint(project_onto(cut, p), cut) if cut is not None else CutPoint(p)
+        return CutPoint(p)
 
     def click(self, p: Vec, cut: HalfEdge | None, vertex: NetVertex | None = None) -> Rejection | None:
         """A left click at sheet point `p`; `vertex` is the perimeter vertex whose circle contains `p`, `cut` the cut

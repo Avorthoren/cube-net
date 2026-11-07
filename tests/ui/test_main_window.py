@@ -294,3 +294,19 @@ def test_no_panning_inside_a_vertex_circle_outside_the_net(qtbot: QtBot, tmp_pat
     near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
     assert view.is_on_net(11 - near, 14 + near)  # up-left of A_1: off the net, but in its circle
     assert not view.is_on_net(11 - 3 * near, 14 + 3 * near)  # farther out: panning is fine there
+
+
+def test_cut_line_labels_follow_the_line_and_the_setting(qtbot: QtBot, tmp_path: Path) -> None:
+    from cube_net.ui.sheet import net_style
+
+    window = MainWindow(settings=settings_in(tmp_path, record=False))
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    view = window.sheet_view
+    view.left_pressed.emit(11.5, 14 - net_style.CUT_HITBOX_PX / 2 / view.scale_factor())
+    assert [str(label) for _, label in window.cut_tool.item.labels()] == ["I_1", "I_2"]
+    window.show_labels_action.setChecked(False)
+    assert window.cut_tool.item.labels() == ()
+    window.show_labels_action.setChecked(True)
+    assert len(window.cut_tool.item.labels()) == 2

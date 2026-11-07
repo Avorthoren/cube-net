@@ -12,7 +12,7 @@ Hatch is drawn in sheet units; lines and circles have constant pixel sizes, so t
 import math
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QFont, QFontMetricsF, QPainter, QPainterPath, QPen, QPolygonF, QTransform
+from PyQt6.QtGui import QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 
 from cube_net.core.labels import VertexLabel
@@ -21,7 +21,7 @@ from cube_net.core.sheet import SHEET_MARGIN
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf, to_qtransform
 from cube_net.ui.sheet import net_style
-from cube_net.ui.sheet.net_painting import paint_dashed, paint_vertex
+from cube_net.ui.sheet.net_painting import UP_RIGHT, paint_dashed, paint_labels, paint_vertex
 
 
 def hatch_path() -> QPainterPath:
@@ -141,25 +141,11 @@ class NetItem(QGraphicsItem):
             paint_vertex(painter, center, vertex.point.faces, net_style.VERTEX_RADIUS_PX)
 
     def _paint_labels(self, painter: QPainter, world: QTransform, labels: dict[NetVertex, VertexLabel]) -> None:
-        name_font, index_font = QFont(), QFont()
-        name_font.setPixelSize(net_style.LABEL_FONT_PX)
-        index_font.setPixelSize(round(net_style.LABEL_FONT_PX * 0.75))
-        name_metrics, index_metrics = QFontMetricsF(name_font), QFontMetricsF(index_font)
-        painter.setPen(palette.LABEL)
         outward = self._outward_directions(world)
-        for vertex, label in labels.items():
-            index = str(label.index)
-            width = name_metrics.horizontalAdvance(label.name) + index_metrics.horizontalAdvance(index)
-            height = name_metrics.ascent()
-            direction = outward.get(vertex, QPointF(math.sqrt(0.5), -math.sqrt(0.5)))  # default: up-right
-            distance = net_style.VERTEX_RADIUS_PX + net_style.LABEL_GAP_PX + max(width, height) / 2
-            center = world.map(to_qpointf(vertex.position)) + direction * distance
-            baseline = QPointF(center.x() - width / 2, center.y() + height / 2)
-            painter.setFont(name_font)
-            painter.drawText(baseline, label.name)
-            painter.setFont(index_font)
-            subscript = baseline + QPointF(name_metrics.horizontalAdvance(label.name), index_metrics.ascent() / 3)
-            painter.drawText(subscript, index)
+        paint_labels(
+            painter,
+            ((world.map(to_qpointf(v.position)), outward.get(v, UP_RIGHT), label) for v, label in labels.items()),
+        )
 
     def _outward_directions(self, world: QTransform) -> dict[NetVertex, QPointF]:
         """Unit vectors in device pixels pointing away from the net at every perimeter vertex (bisector of the outer

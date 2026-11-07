@@ -132,3 +132,12 @@ def test_ending_at_the_starting_vertex_is_rejected(net: Net) -> None:
     editor.click(v("11", "13"), None, c1)
     editor.click(v("11.5", "12.5"), None)
     assert editor.click(v("11", "13"), None, c1) is not None
+
+
+def test_projection_onto_the_end_of_a_cut_is_that_vertex(net: Net, cut: Callable[[str], HalfEdge]) -> None:
+    editor = Editor(net)
+    editor.click(v("10.8", "13.99"), cut("B_1-A_1"))  # beyond A_1: projected onto the end of the cut
+    assert editor.cut_line is not None
+    start = editor.cut_line.points[0]
+    assert start.position == Vec(11, 14)
+    assert start.vertex is not None and start.vertex.position == Vec(11, 14)

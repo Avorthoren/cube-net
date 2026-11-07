@@ -59,3 +59,14 @@ REJECTED = QColor("#000000")
 
 # Ring around a perimeter vertex under the mouse (a click there starts / ends the cut line at that vertex).
 VERTEX_HIGHLIGHT = QColor(255, 214, 0, 230)
+
+# Translucent box behind debug labels, so they're readable on the hatch too.
+LABEL_BACKGROUND = QColor(255, 255, 255, 200)
+
+# Points the cut line gets automatically (crossings with cube edges): plain grey while the line is being drawn
+# and edited, so they're not mistaken for points the user placed (and can drag or delete).
+DERIVED_POINT = QColor("#9E9E9E")
+
+# Counterpart images of the cut line's endpoints (docs/idea.txt: z_3): small black dots while the line is being drawn
+# and edited (they can't be edited themselves; they follow their endpoint).
+COUNTERPART_IMAGE = QColor("#000000")

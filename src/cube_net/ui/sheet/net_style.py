@@ -33,3 +33,7 @@ RUBBER_BAND_PX = 1.5
 
 # Width of the ring around a highlighted (hovered) perimeter vertex.
 VERTEX_HIGHLIGHT_PX = 3.0
+
+# Points of the cut line the user can't edit (crossings with cube edges, counterpart images of endpoints) are drawn
+# smaller than the user's points while the line is being drawn and edited: this many times the vertex radius.
+DERIVED_POINT_RADIUS_FACTOR = 0.5

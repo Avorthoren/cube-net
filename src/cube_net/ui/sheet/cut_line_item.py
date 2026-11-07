@@ -1,23 +1,30 @@
 """`CutLineItem`: draws the cut line being created (docs/idea.txt, CUTTING state).
 
 Segments and points follow the usual colouring rules (two-colour dashes, sector circles), with a halo that marks them
-as new. While cutting, a thin line goes from the last point to the mouse. A rejected segment flashes black.
+as new. Points the user can't edit themselves are drawn as small dots (half the vertex radius) instead: the
+counterpart images of the endpoints (docs/idea.txt: z_3, black, on the counterpart cuts) and the points where the line
+crosses cube edges (grey; they become vertices of the new cuts). Once the line is applied they look like any other
+vertex.
+While cutting, a thin line goes from the last point to the mouse. A rejected segment flashes black. Optionally,
+debug labels name the new points and images.
 """
 
+import math
 from collections.abc import Sequence
 from itertools import pairwise
 
-from PyQt6.QtCore import QRectF, Qt
+from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPen, QTransform
 from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 
-from cube_net.core.cutting import CutPoint, pieces, surface_point_at
+from cube_net.core.cutting import CutPoint, counterpart_image, crossings, endpoint_point, pieces
 from cube_net.core.geometry import Vec
-from cube_net.core.net import Net
+from cube_net.core.labels import VertexLabel
+from cube_net.core.net import HalfEdge, Net
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
-from cube_net.ui.sheet.net_painting import paint_dashed, paint_vertex
+from cube_net.ui.sheet.net_painting import UP_RIGHT, paint_dashed, paint_labels, paint_vertex
 
 
 class CutLineItem(QGraphicsItem):
@@ -29,6 +36,7 @@ class CutLineItem(QGraphicsItem):
         self._points: tuple[CutPoint, ...] = ()
         self._rubber: tuple[Vec, Vec] | None = None
         self._flash: tuple[Vec, Vec] | None = None
+        self._labels: tuple[tuple[Vec, VertexLabel], ...] = ()
 
     # --- state ------------------------------------------------------------------------------------------------------
 
@@ -44,6 +52,23 @@ class CutLineItem(QGraphicsItem):
     def set_points(self, points: Sequence[CutPoint]) -> None:
         self._points = tuple(points)
         self.update()
+
+    def set_labels(self, labels: Sequence[tuple[Vec, VertexLabel]]) -> None:
+        """Debug labels: (position, label) of new points and images (empty: no labels)."""
+        self._labels = tuple(labels)
+        self.update()
+
+    def labels(self) -> tuple[tuple[Vec, VertexLabel], ...]:
+        return self._labels
+
+    def images(self) -> list[Vec]:
+        """Positions of the counterpart images of the endpoints."""
+        images = (counterpart_image(self._net, p) for p in self._points if p.on_perimeter)
+        return [image.position for image in images if image is not None]
+
+    def crossings(self) -> list[Vec]:
+        """Where the placed segments cross cube edges (between the line's own points)."""
+        return crossings(self._net, [p.position for p in self._points])
 
     def set_rubber_band(self, segment: tuple[Vec, Vec] | None) -> None:
         if segment != self._rubber:
@@ -82,7 +107,19 @@ class CutLineItem(QGraphicsItem):
         for a, b in pairwise(p.position for p in self._points):
             self._paint_segment(painter, world, a, b)
         for point in self._points:
-            self._paint_point(painter, world, point.position)
+            self._paint_point(painter, world, point)
+        for point in self._points:
+            image = counterpart_image(self._net, point)
+            if image is not None:
+                self._paint_dot(painter, world, image.position, palette.COUNTERPART_IMAGE)
+        for crossing in self.crossings():
+            self._paint_dot(painter, world, crossing, palette.DERIVED_POINT)
+        if self._labels:
+            outward = self._outward_directions(world)
+            paint_labels(
+                painter,
+                ((world.map(to_qpointf(p)), outward.get(p, UP_RIGHT), label) for p, label in self._labels),
+            )
         if self._flash is not None:
             self._paint_line(painter, world, self._flash, palette.REJECTED, net_style.EDGE_WIDTH_PX)
         painter.restore()
@@ -93,14 +130,71 @@ class CutLineItem(QGraphicsItem):
         for piece in pieces(self._net, a, b):
             paint_dashed(painter, world, piece.start, piece.end, piece.start_point, piece.end_point)
 
-    def _paint_point(self, painter: QPainter, world: QTransform, p: Vec) -> None:
+    def _outward_directions(self, world: QTransform) -> dict[Vec, QPointF]:
+        """For points on the perimeter (endpoints and images): the unit device direction away from the net, so their
+        labels don't cover it. The region is on the left of its cut, so "away" is the cut's right side."""
+        cuts: dict[Vec, HalfEdge] = {}
+        for point in self._points:
+            if point.edge is not None:
+                cuts[point.position] = point.edge
+            image = counterpart_image(self._net, point)
+            if image is not None:
+                cuts[image.position] = image.edge
+        directions = self._away_from_segments(world)
+        for position, cut in cuts.items():
+            d = to_qpointf(cut.destination.position) - to_qpointf(cut.origin.position)
+            outward = QPointF(d.y(), -d.x())
+            a, b = world.map(to_qpointf(position)), world.map(to_qpointf(position) + outward)
+            device = b - a
+            length = math.hypot(device.x(), device.y())
+            if length > 0:
+                directions[position] = device / length
+        return directions
+
+    def _away_from_segments(self, world: QTransform) -> dict[Vec, QPointF]:
+        """For points inside the net: the unit device direction opposite to their one or two segments (the bisector
+        of the wider angle), so their labels don't lie on the line."""
+        directions: dict[Vec, QPointF] = {}
+        positions = [p.position for p in self._points]
+        for i, p in enumerate(positions):
+            neighbours = [positions[j] for j in (i - 1, i + 1) if 0 <= j < len(positions)]
+            center = world.map(to_qpointf(p))
+            total = QPointF(0, 0)
+            for q in neighbours:
+                d = world.map(to_qpointf(q)) - center
+                length = math.hypot(d.x(), d.y())
+                if length > 0:
+                    total -= d / length
+            length = math.hypot(total.x(), total.y())
+            if length > 1e-6:
+                directions[p] = total / length
+            elif neighbours:  # a straight line through the point: go sideways
+                directions[p] = _sideways(center, world.map(to_qpointf(neighbours[0])))
+        for a, b in pairwise(positions):  # crossings lie on a straight segment: go sideways too
+            for crossing in crossings(self._net, [a, b]):
+                directions[crossing] = _sideways(world.map(to_qpointf(a)), world.map(to_qpointf(b)))
+        return directions
+
+    def _paint_point(self, painter: QPainter, world: QTransform, point: CutPoint) -> None:
+        self._paint_circle(painter, world, point.position, endpoint_point(self._net, point).faces)
+
+    @staticmethod
+    def _paint_dot(painter: QPainter, world: QTransform, p: Vec, colour: QColor) -> None:
+        """A small dot for a point the user can't edit (it follows the line)."""
+        r = net_style.VERTEX_RADIUS_PX * net_style.DERIVED_POINT_RADIUS_FACTOR
+        painter.setPen(QPen(palette.VERTEX_OUTLINE, 1))
+        painter.setBrush(colour)
+        painter.drawEllipse(world.map(to_qpointf(p)), r, r)
+
+    @staticmethod
+    def _paint_circle(painter: QPainter, world: QTransform, p: Vec, faces: frozenset[int]) -> None:
         center = world.map(to_qpointf(p))
         r = net_style.VERTEX_RADIUS_PX
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(palette.CUT_LINE_HALO)
         halo = r + net_style.CUT_LINE_HALO_PX
         painter.drawEllipse(center, halo, halo)
-        paint_vertex(painter, center, surface_point_at(self._net, p).faces, r)
+        paint_vertex(painter, center, faces, r)
 
     @staticmethod
     def _paint_line(
@@ -117,3 +211,10 @@ class CutLineItem(QGraphicsItem):
             pen.setStyle(Qt.PenStyle.DashLine)
         painter.setPen(pen)
         painter.drawLine(world.map(to_qpointf(segment[0])), world.map(to_qpointf(segment[1])))
+
+
+def _sideways(a: QPointF, b: QPointF) -> QPointF:
+    """A unit vector perpendicular to a-b (device pixels); up-right if a == b."""
+    d = b - a
+    length = math.hypot(d.x(), d.y())
+    return QPointF(d.y(), -d.x()) / length if length > 0 else UP_RIGHT
