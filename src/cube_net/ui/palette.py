@@ -47,3 +47,15 @@ BOUNDING_RECTANGLE = QColor("#000000")
 
 # Success: the bounding rectangle's area is below the threshold. Clearly different from face 3's green (#008A4B).
 SUCCESS = QColor("#39D353")
+
+# The new cut line being drawn: a translucent halo around its dashes and points, so it differs from existing cuts.
+CUT_LINE_HALO = QColor(255, 214, 0, 170)
+
+# The segment from the cut line's last point to the mouse.
+RUBBER_BAND = QColor(32, 33, 36, 200)
+
+# A rejected segment is shown in this colour for a moment (docs/idea.txt: black for 200 ms).
+REJECTED = QColor("#000000")
+
+# Ring around a perimeter vertex under the mouse (a click there starts / ends the cut line at that vertex).
+VERTEX_HIGHLIGHT = QColor(255, 214, 0, 230)

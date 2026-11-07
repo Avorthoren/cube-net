@@ -1,13 +1,33 @@
-"""`CutHover`: highlights the cut under the mouse (docs/idea.txt, DEFAULT state, rule 1)."""
+"""`CutHover`: highlights the cut or perimeter vertex under the mouse (docs/idea.txt, DEFAULT state, rule 1)."""
 
 from fractions import Fraction
 
 from PyQt6.QtCore import QObject
 
 from cube_net.core.geometry import quantize
-from cube_net.core.net import HalfEdge, Net, boundary_edge_at
+from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_edge_at, boundary_vertex_at
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.sheet_view import SheetView
+
+
+def cut_hitbox(view: SheetView) -> Fraction:
+    """The width of cut hitboxes in sheet units at the view's current zoom."""
+    return Fraction(net_style.CUT_HITBOX_PX / view.scale_factor()).limit_denominator(100_000)
+
+
+def vertex_radius(view: SheetView) -> Fraction:
+    """The radius of vertex circles in sheet units at the view's current zoom (clicks inside pick the vertex)."""
+    return Fraction(net_style.VERTEX_RADIUS_PX / view.scale_factor()).limit_denominator(100_000)
+
+
+def perimeter_target(view: SheetView, net: Net, x: float, y: float) -> tuple[NetVertex | None, HalfEdge | None]:
+    """What a click at sheet point (x, y) would pick on the perimeter: a vertex (inside its circle) or else a cut
+    (inside its hitbox), or nothing."""
+    p = quantize(x, y)
+    vertex = boundary_vertex_at(net, p, vertex_radius(view))
+    if vertex is not None:
+        return vertex, None
+    return None, boundary_edge_at(net, p, cut_hitbox(view))
 
 
 class CutHover(QObject):
@@ -28,21 +48,25 @@ class CutHover(QObject):
         item = self._view.net_item()
         return None if item is None else item.highlight()
 
+    def hovered_vertex(self) -> NetVertex | None:
+        item = self._view.net_item()
+        return None if item is None else item.highlight_vertex()
+
     def clear(self) -> None:
-        self._set(None)
+        self._set(None, None)
 
     def update_at(self, x: float, y: float) -> None:
-        """Highlight the cut at sheet point (x, y), if any."""
+        """Highlight the vertex or the cut at sheet point (x, y), if any."""
         if self._view.is_panning():
-            self._set(None)
+            self._set(None, None)
             return
-        max_distance = Fraction(net_style.CUT_HITBOX_PX / self._view.scale_factor()).limit_denominator(100_000)
-        self._set(boundary_edge_at(self._net, quantize(x, y), max_distance))
+        self._set(*perimeter_target(self._view, self._net, x, y))
 
     def _on_mouse_moved(self, x: float, y: float) -> None:
         self.update_at(x, y)
 
-    def _set(self, cut: HalfEdge | None) -> None:
+    def _set(self, vertex: NetVertex | None, cut: HalfEdge | None) -> None:
         item = self._view.net_item()
         if item is not None:
             item.set_highlight(cut)
+            item.set_highlight_vertex(vertex)

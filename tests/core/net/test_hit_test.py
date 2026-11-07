@@ -55,3 +55,23 @@ def test_tie_is_deterministic(net: Net) -> None:
     assert first is not None
     assert boundary_edge_at(net, corner, HITBOX) is first
     assert first.id == min(he.id for he in net.boundary_edges() if name(net, he) in ("B_1-A_1", "A_1-C_1"))
+
+
+def test_vertex_at(net: Net) -> None:
+    from cube_net.core.net import boundary_vertex_at
+
+    radius = F(1, 10)
+    a1 = boundary_vertex_at(net, Vec(F(1105, 100), F(1395, 100)), radius)  # 0.07 from A_1 = (11, 14)
+    assert a1 is not None and a1.position == Vec(11, 14)
+    assert boundary_vertex_at(net, Vec(F(1095, 100), F(1405, 100)), radius) is a1  # outside the net, still the circle
+    assert boundary_vertex_at(net, Vec(F(1115, 100), 14), radius) is None  # 0.15 away
+    assert boundary_vertex_at(net, Vec(F(23, 2), F(25, 2)), radius) is None
+
+
+def test_edge_from_vertex(net: Net) -> None:
+    from cube_net.core.net import boundary_edge_from, boundary_vertex_at
+
+    c1 = boundary_vertex_at(net, Vec(11, 13), F(1, 100))
+    assert c1 is not None
+    he = boundary_edge_from(net, c1)
+    assert he.origin is c1 and he.twin.region is None

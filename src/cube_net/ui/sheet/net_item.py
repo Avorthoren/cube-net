@@ -4,25 +4,24 @@ Painted bottom to top:
 1. Hatch: each region is white with coloured triangles in its face's own frame (so the pattern rotates with it).
 2. Fold edges: two-colour dashes centred on the cube edge.
 3. Cuts (the perimeter): dashes drawn fully inside their region; a highlighted cut is drawn wider.
-4. Vertex circles on the perimeter, one equal sector per face of the vertex.
+4. Vertex circles on the perimeter, one equal sector per face of the vertex; a highlighted vertex gets a ring.
 5. Optional debug labels (A_1, B_2, ...) next to all vertices, placed outside the net.
 Hatch is drawn in sheet units; lines and circles have constant pixel sizes, so they are drawn in device pixels.
 """
 
 import math
 
-from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
+from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QFont, QFontMetricsF, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 
-from cube_net.core.cube import DASH_LENGTH, dash_layout
 from cube_net.core.labels import VertexLabel
 from cube_net.core.net import HalfEdge, Net, NetVertex
 from cube_net.core.sheet import SHEET_MARGIN
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf, to_qtransform
 from cube_net.ui.sheet import net_style
-from cube_net.ui.sheet.dashing import dash_pieces
+from cube_net.ui.sheet.net_painting import paint_dashed, paint_vertex
 
 
 def hatch_path() -> QPainterPath:
@@ -45,12 +44,14 @@ class NetItem(QGraphicsItem):
         self._hatch = hatch_path()
         self._labels: dict[NetVertex, VertexLabel] | None = None
         self._highlight: HalfEdge | None = None
+        self._highlight_vertex: NetVertex | None = None
 
     def set_net(self, net: Net) -> None:
         self.prepareGeometryChange()
         self._net = net
         self._labels = None
         self._highlight = None
+        self._highlight_vertex = None
         self.update()
 
     def set_highlight(self, cut: HalfEdge | None) -> None:
@@ -61,6 +62,15 @@ class NetItem(QGraphicsItem):
 
     def highlight(self) -> HalfEdge | None:
         return self._highlight
+
+    def set_highlight_vertex(self, vertex: NetVertex | None) -> None:
+        """Draw this perimeter vertex highlighted (None: no highlight)."""
+        if vertex is not self._highlight_vertex:
+            self._highlight_vertex = vertex
+            self.update()
+
+    def highlight_vertex(self) -> NetVertex | None:
+        return self._highlight_vertex
 
     def set_labels(self, labels: dict[NetVertex, VertexLabel] | None) -> None:
         """Debug labels to draw next to vertices (None: no labels)."""
@@ -94,6 +104,12 @@ class NetItem(QGraphicsItem):
             width = net_style.HIGHLIGHT_WIDTH_PX
             self._paint_dashed(painter, world, self._highlight, inset=width / 2 * units_per_px, width=width)
         self._paint_vertices(painter, world)
+        if self._highlight_vertex is not None:
+            center = world.map(to_qpointf(self._highlight_vertex.position))
+            r = net_style.VERTEX_RADIUS_PX + net_style.VERTEX_HIGHLIGHT_PX / 2
+            painter.setPen(QPen(palette.VERTEX_HIGHLIGHT, net_style.VERTEX_HIGHLIGHT_PX))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(center, r, r)
         if self._labels:
             self._paint_labels(painter, world, self._labels)
         painter.restore()
@@ -116,33 +132,13 @@ class NetItem(QGraphicsItem):
         self, painter: QPainter, world: QTransform, he: HalfEdge, inset: float, width: float = net_style.EDGE_WIDTH_PX
     ) -> None:
         """Dashed line of `width` px along `he`, shifted by `inset` units to its left (into its region)."""
-        a, b = to_qpointf(he.origin.position), to_qpointf(he.destination.position)
-        d = b - a
-        length = math.hypot(d.x(), d.y())
-        normal = QPointF(-d.y(), d.x()) / length
-        a, b = world.map(a + normal * inset), world.map(b + normal * inset)
-        layout = dash_layout(he.origin.point, he.destination.point)
-        if layout.start != he.origin.point:
-            a, b = b, a
-        line = QLineF(a, b)
-        colours = [palette.FACE_COLORS[f] if f is not None else palette.WHITE for f in layout.faces]
-        for s0, s1, parity in dash_pieces(length, float(layout.offset), float(DASH_LENGTH)):
-            pen = QPen(colours[parity], width)
-            pen.setCapStyle(Qt.PenCapStyle.FlatCap)
-            painter.setPen(pen)
-            painter.drawLine(QLineF(line.pointAt(s0 / length), line.pointAt(s1 / length)))
+        a, b = he.origin, he.destination
+        paint_dashed(painter, world, a.position, b.position, a.point, b.point, inset, width)
 
     def _paint_vertices(self, painter: QPainter, world: QTransform) -> None:
-        r = net_style.VERTEX_RADIUS_PX
-        painter.setPen(QPen(palette.VERTEX_OUTLINE, 1))
         for vertex in {v.id: v for v in self._net.boundary_vertices()}.values():
             center = world.map(to_qpointf(vertex.position))
-            rect = QRectF(center.x() - r, center.y() - r, 2 * r, 2 * r)
-            faces = sorted(vertex.point.faces)
-            span = 360 / len(faces)
-            for i, face in enumerate(faces):
-                painter.setBrush(palette.FACE_COLORS[face])
-                painter.drawPie(rect, round((90 + i * span) * 16), round(span * 16))
+            paint_vertex(painter, center, vertex.point.faces, net_style.VERTEX_RADIUS_PX)
 
     def _paint_labels(self, painter: QPainter, world: QTransform, labels: dict[NetVertex, VertexLabel]) -> None:
         name_font, index_font = QFont(), QFont()

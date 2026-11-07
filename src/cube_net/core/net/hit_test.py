@@ -1,4 +1,4 @@
-"""Finding the cut under the mouse (docs/plan.md, section 4.1).
+"""Finding the cut or the perimeter vertex under the mouse (docs/plan.md, section 4.1).
 
 A cut's hitbox lies inside the region it bounds (docs/idea.txt, note 4): a strip of width `max_distance` along the
 inner side of the cut. So when two parts of the net touch along a segment, each side reaches only its own cut.
@@ -7,7 +7,7 @@ inner side of the cut. So when two parts of the net touch along a segment, each 
 from fractions import Fraction
 
 from cube_net.core.geometry import Vec, polygon_contains
-from cube_net.core.net.elements import HalfEdge
+from cube_net.core.net.elements import HalfEdge, NetVertex
 from cube_net.core.net.net import Net
 
 
@@ -41,3 +41,23 @@ def boundary_edge_at(net: Net, p: Vec, max_distance: Fraction) -> HalfEdge | Non
             continue
         best = (distance2, he.id, he)
     return None if best is None else best[2]
+
+
+def boundary_vertex_at(net: Net, p: Vec, radius: Fraction) -> NetVertex | None:
+    """The perimeter vertex whose circle (of `radius` units) contains `p`, or None. The closest one wins; ties go to
+    the lower id."""
+    best: tuple[Fraction, int, NetVertex] | None = None
+    limit = radius * radius
+    for vertex in net.boundary_vertices():
+        distance2 = (vertex.position - p).length_squared()
+        if distance2 <= limit and (best is None or (distance2, vertex.id) < best[:2]):
+            best = (distance2, vertex.id, vertex)
+    return None if best is None else best[2]
+
+
+def boundary_edge_from(net: Net, vertex: NetVertex) -> HalfEdge:
+    """A cut that starts at perimeter vertex `vertex` (the inner half-edge leaving it along the perimeter)."""
+    for he in net.boundary_edges():
+        if he.origin is vertex:
+            return he
+    raise ValueError(f"{vertex} is not on the perimeter")

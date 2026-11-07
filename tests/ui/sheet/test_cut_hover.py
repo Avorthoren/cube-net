@@ -85,3 +85,14 @@ def test_set_net_clears(setup: tuple[SheetView, CutHover, Net]) -> None:
     hover.update_at(near_cut(view), 12.5)
     hover.set_net(net)
     assert hover.hovered() is None
+
+
+def test_vertex_is_highlighted_instead_of_its_cuts(setup: tuple[SheetView, CutHover, Net]) -> None:
+    view, hover, _ = setup
+    near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
+    hover.update_at(11 + near, 14 - near)  # inside the circle of A_1, also inside the hitboxes of its cuts
+    vertex = hover.hovered_vertex()
+    assert vertex is not None and vertex.position == Vec(11, 14)
+    assert hover.hovered() is None
+    hover.update_at(11.5, 12.5)
+    assert hover.hovered_vertex() is None

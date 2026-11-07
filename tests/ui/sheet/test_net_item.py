@@ -100,3 +100,16 @@ def test_highlighted_cut_drawn_with_highlight_width_inside() -> None:
     near_inner_edge = 10 + max(net_style.HIGHLIGHT_WIDTH_PX - 1.5, 0.5) / SCALE
     assert colour_at(lit, world, near_inner_edge, y) in (palette.FACE_COLORS[4], palette.FACE_COLORS[5])
     assert colour_at(lit, world, 10 - 3 / SCALE, y) == QColor("black")  # nothing outside the net
+
+
+def test_single_face_circle_has_no_radius_line() -> None:
+    """A circle with one colour is drawn as a plain disc: no outline line from its center (a 360-degree pie had one)."""
+    from cube_net.ui.sheet.net_painting import paint_vertex
+
+    image = QImage(60, 60, QImage.Format.Format_RGB32)
+    image.fill(QColor("white"))
+    painter = QPainter(image)
+    paint_vertex(painter, QPointF(30, 30), {2}, 20)
+    painter.end()
+    for y in range(14, 29):  # straight up from the center: all face colour, no outline pixels
+        assert image.pixelColor(30, y) == palette.FACE_COLORS[2], y

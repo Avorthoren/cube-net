@@ -3,7 +3,7 @@
 from cube_net.core.net.builder import NetBuildError, RegionSpec, build_net
 from cube_net.core.net.default_net import default_net
 from cube_net.core.net.elements import EdgeKind, HalfEdge, NetVertex, Region
-from cube_net.core.net.hit_test import boundary_edge_at
+from cube_net.core.net.hit_test import boundary_edge_at, boundary_edge_from, boundary_vertex_at
 from cube_net.core.net.net import Net, NetInvariantError
 
 __all__ = [
@@ -16,6 +16,8 @@ __all__ = [
     "Region",
     "RegionSpec",
     "boundary_edge_at",
+    "boundary_edge_from",
+    "boundary_vertex_at",
     "build_net",
     "default_net",
 ]

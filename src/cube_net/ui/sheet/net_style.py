@@ -24,3 +24,12 @@ HIGHLIGHT_WIDTH_PX = CUT_HITBOX_PX
 
 # Width of the bounding rectangle's line.
 BOUNDING_LINE_PX = 1.5
+
+# Extra width (each side) of the halo that marks the new cut line.
+CUT_LINE_HALO_PX = 3.0
+
+# Width of the segment from the cut line's last point to the mouse.
+RUBBER_BAND_PX = 1.5
+
+# Width of the ring around a highlighted (hovered) perimeter vertex.
+VERTEX_HIGHLIGHT_PX = 3.0

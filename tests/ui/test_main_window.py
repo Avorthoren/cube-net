@@ -51,6 +51,8 @@ def test_format_coordinates_three_decimals() -> None:
 def test_hit_test_follows_default_net(qtbot: QtBot) -> None:
     window = MainWindow()
     qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)  # vertex circles have their pixel size only once the zoom is set
     view = window.sheet_view
     assert view.is_on_net(11.5, 12.5)  # face 2
     assert not view.is_on_net(10.5, 13.5)  # empty corner left of face 1
@@ -99,12 +101,13 @@ def test_recording_started_at_launch(qtbot: QtBot, tmp_path: Path) -> None:
     assert window.recorder is not None
     lines = session_lines(window.recorder.log.path)
     assert "# recording started: at app launch" in lines
-    assert lines[-5:] == [
+    assert lines[-6:] == [
         "state net default",
         "state labels on",
         f"state window {window.width()}x{window.height()}",
         "state bounds off",
         "state ruler off",
+        "state cut default",
     ]
     window.stop_recording("test over")
 
@@ -138,6 +141,8 @@ def test_turning_recording_off_and_on(qtbot: QtBot, tmp_path: Path) -> None:
 def test_cut_hover_wired(qtbot: QtBot, tmp_path: Path) -> None:
     window = MainWindow(settings=settings_in(tmp_path, record=False))
     qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
     from cube_net.ui.sheet import net_style
 
     x = 10 + net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()  # inside the hitbox of A_2 - E_2
@@ -253,3 +258,39 @@ def test_state_snapshot_includes_ruler_points_and_bounds(qtbot: QtBot, tmp_path:
     assert "state bounds on" in lines
     assert "state ruler on 11.000,12.000 12.500,13.250" in lines
     window.stop_recording("test over")
+
+
+def test_cut_points_and_rejections_recorded(qtbot: QtBot, tmp_path: Path) -> None:
+    from cube_net.ui.sheet import net_style
+
+    window = MainWindow(settings=settings_in(tmp_path, record=True), session_dir=tmp_path)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)  # the zoom (and so the hitbox in sheet units) is set when the view is shown
+    view = window.sheet_view
+    inside = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+    view.left_pressed.emit(11.5, 14 - inside)  # on the cut B_1-A_1
+    view.left_pressed.emit(12.5, 13.5)  # outside: rejected
+    view.left_pressed.emit(11.5, 13.5)
+    assert window.recorder is not None
+    lines = session_lines(window.recorder.log.path)
+    assert lines[-3:] == ["cut cutting 11.500,14.000", "cut rejected 12.500,13.500", "cut cutting 11.500,13.500"]
+    window.stop_recording("test over")
+    window.record_session_action.setChecked(False)
+    window.record_session_action.setChecked(True)  # a new file: its state block holds the cut line
+    assert window.recorder is not None
+    assert "state cut cutting 11.500,14.000p 11.500,13.500" in session_lines(window.recorder.log.path)
+    window.stop_recording("test over")
+
+
+def test_no_panning_inside_a_vertex_circle_outside_the_net(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(settings=settings_in(tmp_path, record=False))
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    from cube_net.ui.sheet import net_style
+
+    view = window.sheet_view
+    near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
+    assert view.is_on_net(11 - near, 14 + near)  # up-left of A_1: off the net, but in its circle
+    assert not view.is_on_net(11 - 3 * near, 14 + 3 * near)  # farther out: panning is fine there

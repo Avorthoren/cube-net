@@ -7,9 +7,10 @@ from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QToolBar, QWidget
 
 from cube_net.core.bounding import min_area_rectangle
+from cube_net.core.editor import Editor
 from cube_net.core.geometry import Vec, quantize
 from cube_net.core.labels import PointLabels, vertex_labels
-from cube_net.core.net import Net, default_net
+from cube_net.core.net import Net, boundary_vertex_at, default_net
 from cube_net.core.project_settings import ProjectSettings
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
@@ -24,12 +25,18 @@ from cube_net.ui.session.start import (
     stop_session_recording,
 )
 from cube_net.ui.sheet.bounding_item import BoundingItem
-from cube_net.ui.sheet.cut_hover import CutHover
+from cube_net.ui.sheet.cut_hover import CutHover, vertex_radius
+from cube_net.ui.sheet.cut_tool import CutTool
 from cube_net.ui.sheet.ruler_tool import RulerTool
 from cube_net.ui.sheet.sheet_view import SheetView
 
 APP_TITLE = "Cube Net"
 NO_COORDINATES = "x: —   y: —"
+
+
+def format_point(p: Vec) -> str:
+    """A point in session recordings: x,y with 3 decimals (the input rounding)."""
+    return f"{float(p.x):.3f},{float(p.y):.3f}"
 
 
 def format_ruler_total(total: float | None) -> str:
@@ -65,7 +72,11 @@ class MainWindow(QMainWindow):
         self.cut_hover = CutHover(self.sheet_view, self.net)
         self.ruler_tool = RulerTool(self.sheet_view)
         self.ruler_tool.point_added.connect(self._on_ruler_point)
-        self.sheet_view.set_net_hit_test(lambda x, y: self.net.contains(quantize(x, y)))
+        self.editor = Editor(self.net)
+        self.cut_tool = CutTool(self.sheet_view, self.editor, self.ruler_tool)
+        self.cut_tool.point_added.connect(self._on_cut_point)
+        self.cut_tool.rejected.connect(self._on_cut_rejected)
+        self.sheet_view.set_net_hit_test(self._is_on_net)
         self.sheet_view.show_initial_view(net_box)
         self.setCentralWidget(self.sheet_view)
 
@@ -121,9 +132,17 @@ class MainWindow(QMainWindow):
         recorder.note("state", "labels", "on" if self.settings.show_vertex_labels else "off")
         recorder.note("state", "window", f"{self.width()}x{self.height()}")
         recorder.note("state", "bounds", "on" if self.bounding.action.isChecked() else "off")
-        ruler_points = [f"{float(p.x):.3f},{float(p.y):.3f}" for p in self.ruler_tool.ruler.points]
+        ruler_points = [format_point(p) for p in self.ruler_tool.ruler.points]
         recorder.note("state", "ruler", "on" if self.ruler_tool.active else "off", *ruler_points)
+        line = self.editor.cut_line
+        cut_points = [format_point(p.position) + ("p" if p.on_perimeter else "") for p in line.points] if line else []
+        recorder.note("state", "cut", self.editor.state.value, *cut_points)  # "p": on the perimeter
         recorder.schedule_view_record()  # zoom and position, once the view has been laid out
+
+    def _is_on_net(self, x: float, y: float) -> bool:
+        """On the net, or inside a perimeter vertex's circle (which sticks out of the net): no panning there."""
+        p = quantize(x, y)
+        return self.net.contains(p) or boundary_vertex_at(self.net, p, vertex_radius(self.sheet_view)) is not None
 
     def _create_instruments(self) -> None:
         toolbar = QToolBar("Instruments", self)
@@ -171,9 +190,17 @@ class MainWindow(QMainWindow):
         if self.recorder is not None:
             self.recorder.note("ruler", "on" if checked else "off")
 
+    def _on_cut_point(self, point: Vec) -> None:
+        if self.recorder is not None:
+            self.recorder.note("cut", self.editor.state.value, format_point(point))
+
+    def _on_cut_rejected(self, point: Vec) -> None:
+        if self.recorder is not None:
+            self.recorder.note("cut", "rejected", format_point(point))
+
     def _on_ruler_point(self, point: Vec) -> None:
         if self.recorder is not None:
-            self.recorder.note("ruler", f"{float(point.x):.3f},{float(point.y):.3f}")
+            self.recorder.note("ruler", format_point(point))
 
     def _create_menus(self) -> None:
         menu_bar = self.menuBar()
