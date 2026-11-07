@@ -34,3 +34,10 @@ VERTEX_OUTLINE = QColor("#3C4043")
 
 # Debug vertex labels.
 LABEL = QColor("#000000")
+
+# Ruler lines and points (red, so they stand out on every face colour and never look like the black error flashes).
+RULER = QColor("#C5221F")
+
+# Text of ruler labels, drawn on a translucent white box so it's readable over the hatch.
+RULER_TEXT = QColor("#000000")
+RULER_LABEL_BACKGROUND = QColor(255, 255, 255, 210)

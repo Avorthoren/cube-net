@@ -2,11 +2,11 @@
 
 from pathlib import Path
 
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QToolBar, QWidget
 
-from cube_net.core.geometry import quantize
+from cube_net.core.geometry import Vec, quantize
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import Net, default_net
 from cube_net.core.sheet import sheet_box
@@ -16,14 +16,20 @@ from cube_net.ui.session.start import (
     STARTED_AT_LAUNCH,
     STARTED_BY_USER,
     STOPPED_BY_USER,
+    WINDOW_CLOSED,
     start_session_recording,
     stop_session_recording,
 )
 from cube_net.ui.sheet.cut_hover import CutHover
+from cube_net.ui.sheet.ruler_tool import RulerTool
 from cube_net.ui.sheet.sheet_view import SheetView
 
 APP_TITLE = "Cube Net"
 NO_COORDINATES = "x: —   y: —"
+
+
+def format_ruler_total(total: float | None) -> str:
+    return "Σ —" if total is None else f"Σ {total:.3f}"
 
 
 def format_coordinates(x: float, y: float) -> str:
@@ -51,6 +57,8 @@ class MainWindow(QMainWindow):
         self.sheet_view.set_sheet(sheet_box(v.position for v in self.net.vertices))
         self.sheet_view.set_net(self.net)
         self.cut_hover = CutHover(self.sheet_view, self.net)
+        self.ruler_tool = RulerTool(self.sheet_view)
+        self.ruler_tool.point_added.connect(self._on_ruler_point)
         self.sheet_view.set_net_hit_test(lambda x, y: self.net.contains(quantize(x, y)))
         self.sheet_view.show_initial_view(net_box)
         self.setCentralWidget(self.sheet_view)
@@ -63,6 +71,7 @@ class MainWindow(QMainWindow):
         self.sheet_view.mouse_moved.connect(lambda x, y: self.coords_label.setText(format_coordinates(x, y)))
         self.sheet_view.mouse_left.connect(lambda: self.coords_label.setText(NO_COORDINATES))
 
+        self._create_instruments()
         self._create_menus()
         self._update_vertex_labels()
         self._resize_to_screen()
@@ -83,6 +92,9 @@ class MainWindow(QMainWindow):
         recorder.watch_sheet(self.sheet_view)
         recorder.watch_main_window(self)
         self.recorder = recorder
+        # If the window goes away before the app quits, its recording ends with it (only `app` and `recorder` are
+        # captured: the window itself is already gone when this runs).
+        self.destroyed.connect(lambda: _end_recording(app, recorder))
         self._record_state(recorder)
         self.statusBar().showMessage(f"Recording session to {recorder.log.path}", 15000)
 
@@ -103,7 +115,40 @@ class MainWindow(QMainWindow):
         recorder.note("state", "net", "default")
         recorder.note("state", "labels", "on" if self.settings.show_vertex_labels else "off")
         recorder.note("state", "window", f"{self.width()}x{self.height()}")
-        QTimer.singleShot(0, recorder.record_view)  # zoom and position, once the view has been laid out
+        recorder.schedule_view_record()  # zoom and position, once the view has been laid out
+
+    def _create_instruments(self) -> None:
+        toolbar = QToolBar("Instruments", self)
+        toolbar.setObjectName("instruments")
+        toolbar.setMovable(False)
+        self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, toolbar)
+        self.ruler_action = QAction("Ruler", self)
+        self.ruler_action.setCheckable(True)
+        self.ruler_action.setShortcut("R")
+        self.ruler_action.setToolTip("Ruler (R): click on the sheet to measure; turn off to clear")
+        self.ruler_action.toggled.connect(self._on_ruler_toggled)
+        toolbar.addAction(self.ruler_action)
+        self.ruler_total_label = QLabel(self)
+        self.ruler_total_label.setToolTip("Total length of the placed ruler segments")
+        self.ruler_total_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.ruler_total_action = toolbar.addWidget(self.ruler_total_label)
+        self.ruler_tool.points_changed.connect(self._update_ruler_total)
+        self._update_ruler_total()
+
+    def _update_ruler_total(self) -> None:
+        """Shown under the ruler button while the ruler is active: Σ of the placed segments, 3 decimals."""
+        assert self.ruler_total_action is not None
+        self.ruler_total_action.setVisible(self.ruler_tool.active)
+        self.ruler_total_label.setText(format_ruler_total(self.ruler_tool.total_length()))
+
+    def _on_ruler_toggled(self, checked: bool) -> None:
+        self.ruler_tool.set_active(checked)
+        if self.recorder is not None:
+            self.recorder.note("ruler", "on" if checked else "off")
+
+    def _on_ruler_point(self, point: Vec) -> None:
+        if self.recorder is not None:
+            self.recorder.note("ruler", f"{float(point.x):.3f},{float(point.y):.3f}")
 
     def _create_menus(self) -> None:
         menu_bar = self.menuBar()
@@ -145,3 +190,8 @@ class MainWindow(QMainWindow):
             return
         available = screen.availableGeometry()
         self.resize(int(available.width() * fraction), int(available.height() * fraction))
+
+
+def _end_recording(app: QApplication, recorder: SessionRecorder) -> None:
+    if not recorder.log.closed:
+        stop_session_recording(app, recorder, WINDOW_CLOSED)

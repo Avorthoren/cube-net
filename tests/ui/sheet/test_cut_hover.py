@@ -5,6 +5,7 @@ from pytestqt.qtbot import QtBot
 from cube_net.core.geometry import Vec
 from cube_net.core.net import Net, default_net
 from cube_net.core.sheet import sheet_box
+from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.cut_hover import CutHover
 from cube_net.ui.sheet.sheet_view import SheetView
 
@@ -30,6 +31,15 @@ def move(qtbot: QtBot, view: SheetView, target: QPoint) -> None:
     qtbot.mouseMove(view.viewport(), target)
 
 
+# Half the hitbox: always inside it, whatever net_style says.
+HALF_HITBOX = net_style.CUT_HITBOX_PX / 2
+
+
+def near_cut(view: SheetView) -> float:
+    """x (sheet units) half a hitbox inside face 4 from the cut A_2 - E_2 at x = 10."""
+    return 10 + HALF_HITBOX / view.scale_factor()
+
+
 def px_inside(view: SheetView, x: float, y: float, dx_px: float) -> QPoint:
     """Viewport pixel at sheet (x, y), shifted dx_px pixels to the right."""
     return (view.from_sheet(QPointF(x, y)) + QPointF(dx_px, 0)).toPoint()
@@ -37,7 +47,7 @@ def px_inside(view: SheetView, x: float, y: float, dx_px: float) -> QPoint:
 
 def test_moving_near_a_cut_highlights_it(setup: tuple[SheetView, CutHover, Net], qtbot: QtBot) -> None:
     view, hover, _ = setup
-    move(qtbot, view, px_inside(view, 10, 12.5, 3))  # 3 px inside face 4 from cut A_2 - E_2
+    move(qtbot, view, px_inside(view, 10, 12.5, HALF_HITBOX))  # inside face 4, within the hitbox of A_2 - E_2
     cut = hover.hovered()
     assert cut is not None
     assert {cut.origin.position, cut.destination.position} == {Vec(10, 13), Vec(10, 12)}
@@ -45,33 +55,33 @@ def test_moving_near_a_cut_highlights_it(setup: tuple[SheetView, CutHover, Net],
 
 def test_moving_away_or_leaving_clears(setup: tuple[SheetView, CutHover, Net], qtbot: QtBot) -> None:
     view, hover, _ = setup
-    move(qtbot, view, px_inside(view, 10, 12.5, 3))
+    move(qtbot, view, px_inside(view, 10, 12.5, HALF_HITBOX))
     assert hover.hovered() is not None
     move(qtbot, view, px_inside(view, 11.5, 12.5, 0))  # middle of face 2
     assert hover.hovered() is None
-    move(qtbot, view, px_inside(view, 10, 12.5, 3))
+    move(qtbot, view, px_inside(view, 10, 12.5, HALF_HITBOX))
     view.mouse_left.emit()
     assert hover.hovered() is None
 
 
 def test_hitbox_is_inside_the_face_only(setup: tuple[SheetView, CutHover, Net], qtbot: QtBot) -> None:
     view, hover, _ = setup
-    move(qtbot, view, px_inside(view, 10, 12.5, -3))  # 3 px outside the net
+    move(qtbot, view, px_inside(view, 10, 12.5, -HALF_HITBOX))  # just outside the net
     assert hover.hovered() is None
 
 
 def test_no_highlight_while_panning(setup: tuple[SheetView, CutHover, Net], qtbot: QtBot) -> None:
     view, hover, _ = setup
     qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=px_inside(view, 7, 7, 0))
-    hover.update_at(10.02, 12.5)
+    hover.update_at(near_cut(view), 12.5)
     assert hover.hovered() is None
     qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=px_inside(view, 7, 7, 0))
-    hover.update_at(10.02, 12.5)
+    hover.update_at(near_cut(view), 12.5)
     assert hover.hovered() is not None
 
 
 def test_set_net_clears(setup: tuple[SheetView, CutHover, Net]) -> None:
-    _view, hover, net = setup
-    hover.update_at(10.02, 12.5)
+    view, hover, net = setup
+    hover.update_at(near_cut(view), 12.5)
     hover.set_net(net)
     assert hover.hovered() is None

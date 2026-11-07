@@ -21,6 +21,7 @@ from cube_net.ui.session.session_recorder import SessionRecorder
 STARTED_AT_LAUNCH = "at app launch"
 STARTED_BY_USER = "turned on by the user"
 STOPPED_BY_USER = "turned off by the user"
+WINDOW_CLOSED = "the main window was closed"
 
 
 def session_log_directory() -> Path:
@@ -49,9 +50,9 @@ def start_session_recording(app: QApplication, reason: str, directory: Path | No
 def stop_session_recording(app: QApplication, recorder: SessionRecorder, reason: str) -> None:
     """End the recording: a final `stop <reason>` line, then no more input is recorded into this file."""
     app.removeEventFilter(recorder)
+    recorder.detach()
     _finish(recorder.log, "stop", reason)
-    recorder.setParent(None)
-    recorder.deleteLater()
+    recorder.setParent(None)  # from now on owned by Python only: freed when nothing refers to it any more
 
 
 def _finish(log: SessionLog, kind: str, *fields: object) -> None:

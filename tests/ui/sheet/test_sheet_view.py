@@ -157,3 +157,62 @@ class TestNet:
         assert item is not None and item.scene() is view.scene()
         view.set_net(default_net())
         assert view.net_item() is item
+
+
+class TestLeftPressed:
+    def test_click_on_net_emits_left_pressed(self, view: SheetView, qtbot: QtBot) -> None:
+        with qtbot.waitSignal(view.left_pressed) as blocker:
+            qtbot.mousePress(
+                view.viewport(), Qt.MouseButton.LeftButton, pos=view.from_sheet(QPointF(11.5, 12.5)).toPoint()
+            )
+        assert blocker.args == pytest.approx([11.5, 12.5], abs=2 / view.scale_factor())
+        assert not view.is_panning()
+
+    def test_click_outside_net_pans_unless_disabled(self, view: SheetView, qtbot: QtBot) -> None:
+        pos = view.from_sheet(QPointF(7, 7)).toPoint()
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        assert view.is_panning()
+        qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        view.set_panning_enabled(False)
+        with qtbot.waitSignal(view.left_pressed):
+            qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        assert not view.is_panning()
+
+
+class TestStaysInPlace:
+    """When the view moves inside its window (a panel next to it grows), the sheet must not move on screen."""
+
+    def test_sheet_stays_when_neighbour_widens(self, qtbot: QtBot) -> None:
+        from PyQt6.QtWidgets import QHBoxLayout, QWidget
+
+        window = QWidget()
+        qtbot.addWidget(window)
+        panel = QWidget(window)
+        panel.setFixedWidth(50)
+        view = SheetView(window)
+        view.set_sheet(SHEET)
+        layout = QHBoxLayout(window)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(panel)
+        layout.addWidget(view)
+        window.resize(900, 600)
+        view.show_initial_view(NET)
+        window.show()
+        qtbot.waitExposed(window)
+
+        def h1_in_window() -> QPoint:
+            return view.viewport().mapTo(window, view.from_sheet(QPointF(11, 12)).toPoint())
+
+        before, x = h1_in_window(), view.x()
+        panel.setFixedWidth(130)  # the view moves 80 px to the right and gets narrower
+        qtbot.waitUntil(lambda: view.x() == x + 80)
+        assert h1_in_window() == before
+        panel.setFixedWidth(50)  # and back
+        qtbot.waitUntil(lambda: view.x() == x)
+        assert h1_in_window() == before
+
+    def test_moving_the_whole_window_moves_the_sheet_with_it(self, view: SheetView) -> None:
+        before = view.to_sheet(QPointF(100, 100))
+        view.window().move(view.window().pos() + QPoint(40, 30))
+        after = view.to_sheet(QPointF(100, 100))
+        assert (after.x(), after.y()) == pytest.approx((before.x(), before.y()))

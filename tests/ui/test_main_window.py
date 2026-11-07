@@ -1,11 +1,11 @@
 from pathlib import Path
 
 import pytest
-from PyQt6.QtCore import QSettings
+from PyQt6.QtCore import QSettings, Qt
 from pytestqt.qtbot import QtBot
 
 from cube_net.ui.app_settings import AppSettings
-from cube_net.ui.main_window import APP_TITLE, NO_COORDINATES, MainWindow, format_coordinates
+from cube_net.ui.main_window import APP_TITLE, NO_COORDINATES, MainWindow, format_coordinates, format_ruler_total
 
 
 @pytest.fixture(autouse=True)
@@ -132,5 +132,90 @@ def test_turning_recording_off_and_on(qtbot: QtBot, tmp_path: Path) -> None:
 def test_cut_hover_wired(qtbot: QtBot, tmp_path: Path) -> None:
     window = MainWindow(settings=settings_in(tmp_path, record=False))
     qtbot.addWidget(window)
-    window.cut_hover.update_at(10.02, 12.5)
+    from cube_net.ui.sheet import net_style
+
+    x = 10 + net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()  # inside the hitbox of A_2 - E_2
+    window.cut_hover.update_at(x, 12.5)
     assert window.cut_hover.hovered() is not None
+
+
+def test_ruler_toggle_and_recording(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(settings=settings_in(tmp_path, record=True), session_dir=tmp_path)
+    qtbot.addWidget(window)
+    window.ruler_action.setChecked(True)
+    assert window.ruler_tool.active
+    window.sheet_view.left_pressed.emit(11.25, 12.0)
+    window.ruler_action.setChecked(False)
+    assert not window.ruler_tool.active
+    assert window.recorder is not None
+    lines = session_lines(window.recorder.log.path)
+    assert lines[-3:] == ["ruler on", "ruler 11.250,12.000", "ruler off"]
+    window.stop_recording("test over")
+
+
+def test_ruler_shortcut_recorded_every_time(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(settings=settings_in(tmp_path, record=True), session_dir=tmp_path)
+    qtbot.addWidget(window)
+    window.show()
+    window.activateWindow()
+    qtbot.waitUntil(window.isActiveWindow)  # shortcuts only work in the active window
+    qtbot.keyClick(window, Qt.Key.Key_R)
+    qtbot.keyClick(window, Qt.Key.Key_R)
+    assert window.recorder is not None
+    lines = [line for line in session_lines(window.recorder.log.path) if line.startswith(("shortcut", "ruler"))]
+    assert lines == ["shortcut R", "ruler on", "shortcut R", "ruler off"]
+    window.stop_recording("test over")
+
+
+def test_destroying_the_window_ends_its_recording(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(settings=settings_in(tmp_path, record=True), session_dir=tmp_path)
+    recorder = window.recorder
+    assert recorder is not None
+    window.deleteLater()
+    qtbot.waitUntil(lambda: recorder.log.closed)
+    assert session_lines(recorder.log.path)[-1] == "stop the main window was closed"
+
+
+def test_ruler_total_on_instrument_panel(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(settings=settings_in(tmp_path, record=False))
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    action = window.ruler_total_action
+    assert not action.isVisible()  # only while the ruler is active
+    window.ruler_action.setChecked(True)
+    assert action.isVisible()
+    assert window.ruler_total_label.text() == "Σ —"
+    window.sheet_view.left_pressed.emit(11.0, 12.0)
+    assert window.ruler_total_label.text() == "Σ 0.000"
+    window.sheet_view.left_pressed.emit(12.0, 13.0)
+    assert window.ruler_total_label.text() == "Σ 1.414"
+    window.ruler_action.setChecked(False)
+    assert not action.isVisible()
+
+
+def test_format_ruler_total() -> None:
+    assert format_ruler_total(None) == "Σ —"
+    assert format_ruler_total(7.0999) == "Σ 7.100"
+
+
+def test_sheet_does_not_move_when_ruler_total_widens_the_panel(qtbot: QtBot, tmp_path: Path) -> None:
+    from PyQt6.QtCore import QPointF
+
+    window = MainWindow(settings=settings_in(tmp_path, record=False))
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    view = window.sheet_view
+
+    def h1_in_window() -> object:
+        return view.viewport().mapTo(window, view.from_sheet(QPointF(11, 12)).toPoint())
+
+    before, x = h1_in_window(), view.x()
+    window.ruler_action.setChecked(True)
+    window.ruler_total_label.setText("Σ 123456789.123")  # a long total: the panel gets wider
+    qtbot.waitUntil(lambda: view.x() > x)
+    assert h1_in_window() == before
+    window.ruler_action.setChecked(False)
+    qtbot.waitUntil(lambda: view.x() == x)
+    assert h1_in_window() == before

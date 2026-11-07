@@ -9,6 +9,7 @@ Line format (after the time in seconds since start):
     wheel +1 11.250,12.500         wheel notches (positive = scroll up / zoom in) at a sheet point
     view 135.000 11.500,12.000     zoom (px per unit) and the sheet point at the view's center, whenever it changed
     key Ctrl+Z                     key press (no auto-repeat, no lone modifier keys)
+    shortcut R                     key press that triggered a menu/toolbar shortcut (no plain key press then)
     press L QMenu"View" 12,40      mouse input outside the sheet: widget and pixel position in it
     menu "Show vertex labels (development)"   menu item chosen with the mouse
     resize 1600x900                main window size
@@ -20,8 +21,9 @@ from __future__ import annotations
 
 import time
 
+from PyQt6 import sip
 from PyQt6.QtCore import QEvent, QObject, QPointF, Qt, QTimer
-from PyQt6.QtGui import QKeyEvent, QKeySequence, QMouseEvent, QWheelEvent
+from PyQt6.QtGui import QKeyEvent, QKeySequence, QMouseEvent, QShortcutEvent, QWheelEvent
 from PyQt6.QtWidgets import QAbstractButton, QMenu, QWidget
 
 from cube_net.ui.session.session_log import SessionLog
@@ -82,10 +84,30 @@ class SessionRecorder(QObject):
     def watch_sheet(self, view: SheetView) -> None:
         """Record positions over this view in sheet coordinates, and record its zoom/scroll state."""
         self._sheet = view
+        view.destroyed.connect(self._forget_sheet)
 
     def watch_main_window(self, window: QWidget) -> None:
         """Record this window's size changes."""
         self._main_window = window
+        window.destroyed.connect(self._forget_main_window)
+
+    def detach(self) -> None:
+        """Stop watching the sheet and the window (when the recording ends)."""
+        for widget, slot in ((self._sheet, self._forget_sheet), (self._main_window, self._forget_main_window)):
+            if widget is not None and not sip.isdeleted(widget):
+                widget.destroyed.disconnect(slot)
+        self._sheet = None
+        self._main_window = None
+
+    def schedule_view_record(self) -> None:
+        """Record the view state once pending events (zooming, scrolling) have been handled."""
+        QTimer.singleShot(0, lambda: self.record_view())  # a lambda: safe even if this recorder is gone by then
+
+    def _forget_sheet(self) -> None:
+        self._sheet = None
+
+    def _forget_main_window(self) -> None:
+        self._main_window = None
 
     def note(self, kind: str, *fields: object) -> None:
         """Record something the application did (not direct user input)."""
@@ -93,7 +115,7 @@ class SessionRecorder(QObject):
 
     def record_view(self) -> None:
         """Record the sheet's zoom and center if they changed since the last record."""
-        if self._sheet is None:
+        if self._log.closed or self._sheet is None or sip.isdeleted(self._sheet):
             return
         center = self._sheet.to_sheet(QPointF(self._sheet.viewport().rect().center()))
         state = f"{self._sheet.scale_factor():.3f} {format_point(center)}"
@@ -104,7 +126,12 @@ class SessionRecorder(QObject):
     # --- event filter -----------------------------------------------------------------------------------------------
 
     def eventFilter(self, obj: QObject | None, event: QEvent | None) -> bool:
-        if event is None or not isinstance(obj, QWidget):
+        if event is None:
+            return False
+        if event.type() == QEvent.Type.Shortcut and isinstance(event, QShortcutEvent):
+            self._shortcut(event)  # delivered to the QAction, which is not a widget
+            return False
+        if not isinstance(obj, QWidget):
             return False
         kind = event.type()
         if kind in _MOUSE_KINDS and isinstance(event, QMouseEvent):
@@ -176,11 +203,16 @@ class SessionRecorder(QObject):
         if event.isAutoRepeat() or Qt.Key(event.key()) in _MODIFIER_KEYS:
             return
         self._log.write("key", QKeySequence(event.keyCombination()).toString() or f"0x{event.key():x}")
-        QTimer.singleShot(0, self.record_view)
+        self.schedule_view_record()
+
+    def _shortcut(self, event: QShortcutEvent) -> None:
+        # Shortcut events go to one action only (they are not offered to parents), so no de-duplication.
+        self._log.write("shortcut", event.key().toString())
+        self.schedule_view_record()
 
     def _after_input(self, obj: QWidget) -> None:
         if self._sheet is not None and obj is self._sheet.viewport():
-            QTimer.singleShot(0, self.record_view)  # after the view has handled the event
+            self.schedule_view_record()  # after the view has handled the event
 
     @staticmethod
     def _log_clock() -> float:

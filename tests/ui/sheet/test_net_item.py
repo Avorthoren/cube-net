@@ -71,7 +71,8 @@ def test_cut_drawn_inside_its_face() -> None:
 
 def test_vertex_circle_drawn_on_perimeter_vertex() -> None:
     image, world = render()
-    colour = colour_at(image, world, 11 - 2 / SCALE, 14 - 2 / SCALE)  # A_1 at (11, 14): a pixel inside its circle
+    inside = net_style.VERTEX_RADIUS_PX / 2 / SCALE  # half the radius down-left of A_1 = (11, 14)
+    colour = colour_at(image, world, 11 - inside, 14 - inside)
     assert colour in [palette.FACE_COLORS[f] for f in (1, 4, 5)]  # A is a vertex of faces 1, 4 and 5
 
 
@@ -81,21 +82,21 @@ def test_labels_drawn_outside_the_net(qapp: QApplication) -> None:
     plain, world = render(background="white")
     labelled, _ = render(with_labels=True, background="white")  # labels are black
     a1 = world.map(QPointF(11, 14))
-    x0, y0 = int(a1.x()) - 45, int(a1.y()) - 45
+    reach = round(net_style.VERTEX_RADIUS_PX + net_style.LABEL_GAP_PX + 4 * net_style.LABEL_FONT_PX)
     changed = sum(
-        plain.pixelColor(x, y) != labelled.pixelColor(x, y) for x in range(x0, x0 + 37) for y in range(y0, y0 + 37)
+        plain.pixelColor(x, y) != labelled.pixelColor(x, y)
+        for x in range(int(a1.x()) - reach, int(a1.x()))
+        for y in range(int(a1.y()) - reach, int(a1.y()))
     )
     assert changed > 10
     inside = world.map(QPointF(11.5, 13.5)).toPoint()
     assert plain.pixelColor(inside) == labelled.pixelColor(inside)
 
 
-def test_highlighted_cut_is_wider_and_still_inside() -> None:
-    """A_2 - E_2 at x = 10: normally 5 px wide; highlighted 10 px, both fully right of x = 10 (inside face 4)."""
-    plain, world = render()
-    lit, _ = render(highlight_left_of_face_4=True)
-    x7 = 10 + 7 / SCALE  # 7 px inside: hatch when plain, cut colour when highlighted
+def test_highlighted_cut_drawn_with_highlight_width_inside() -> None:
+    """A_2 - E_2 at x = 10: highlighted, it covers HIGHLIGHT_WIDTH_PX to the right of x = 10 (inside face 4)."""
+    lit, world = render(highlight_left_of_face_4=True)
     y = 12.525
-    assert colour_at(plain, world, x7, y) != colour_at(lit, world, x7, y)
-    assert colour_at(lit, world, x7, y) in (palette.FACE_COLORS[4], palette.FACE_COLORS[5])
+    near_inner_edge = 10 + max(net_style.HIGHLIGHT_WIDTH_PX - 1.5, 0.5) / SCALE
+    assert colour_at(lit, world, near_inner_edge, y) in (palette.FACE_COLORS[4], palette.FACE_COLORS[5])
     assert colour_at(lit, world, 10 - 3 / SCALE, y) == QColor("black")  # nothing outside the net

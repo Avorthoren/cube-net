@@ -7,7 +7,7 @@ from the core are used as-is.
 from collections.abc import Callable
 
 from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QMouseEvent, QPainter, QResizeEvent, QShowEvent, QTransform, QWheelEvent
+from PyQt6.QtGui import QMouseEvent, QMoveEvent, QPainter, QResizeEvent, QShowEvent, QTransform, QWheelEvent
 from PyQt6.QtWidgets import QGraphicsScene, QGraphicsView, QWidget
 
 from cube_net.core.geometry import Box
@@ -33,6 +33,12 @@ class SheetView(QGraphicsView):
     # The mouse left the view.
     mouse_left = pyqtSignal()
 
+    # Left button pressed at a sheet point (x, y) that doesn't start panning.
+    left_pressed = pyqtSignal(float, float)
+
+    # The zoom changed: new scale in pixels per unit.
+    zoom_changed = pyqtSignal(float)
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setScene(QGraphicsScene(self))
@@ -53,7 +59,10 @@ class SheetView(QGraphicsView):
         self._sheet = QRectF()
         self._on_net: HitTest = lambda _x, _y: False
         self._pan_last: QPoint | None = None
+        self._panning_enabled = True
         self._pending_initial_view: Box | None = None
+        # Where the viewport's top-left corner was in the window, so the sheet can be kept in place when it moves.
+        self._viewport_origin: QPoint | None = None
         self._apply_transform()
 
     # --- setup ------------------------------------------------------------------------------------------------------
@@ -81,6 +90,10 @@ class SheetView(QGraphicsView):
     def net_item(self) -> NetItem | None:
         return self._net_item
 
+    def set_panning_enabled(self, enabled: bool) -> None:
+        """Dragging outside the net pans the view only when enabled (e.g. not while the ruler is active)."""
+        self._panning_enabled = enabled
+
     def set_net_hit_test(self, on_net: HitTest) -> None:
         """Panning by dragging is only allowed outside the cube net; this tells where the net is."""
         self._on_net = on_net
@@ -94,6 +107,7 @@ class SheetView(QGraphicsView):
         self._scale = zoom.clamp_scale(zoom.initial_scale(self._screen_height(), float(net.height)), self.zoom_limits())
         self._apply_transform()
         self.centerOn(float(net.center.x), float(net.center.y))
+        self._viewport_origin = self._viewport_origin_in_window()
 
     # --- queries ----------------------------------------------------------------------------------------------------
 
@@ -165,11 +179,13 @@ class SheetView(QGraphicsView):
             return
         if event.button() == Qt.MouseButton.LeftButton:
             p = self.to_sheet(event.position())
-            if not self.is_on_net(p.x(), p.y()):
+            if self._panning_enabled and not self.is_on_net(p.x(), p.y()):
                 self._pan_last = event.position().toPoint()
                 self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
-                event.accept()
-                return
+            else:
+                self.left_pressed.emit(p.x(), p.y())
+            event.accept()
+            return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
@@ -199,6 +215,11 @@ class SheetView(QGraphicsView):
     def resizeEvent(self, event: QResizeEvent | None) -> None:
         super().resizeEvent(event)
         self._update_scene_rect()
+        self._keep_sheet_in_place()
+
+    def moveEvent(self, event: QMoveEvent | None) -> None:
+        super().moveEvent(event)
+        self._keep_sheet_in_place()
 
     def showEvent(self, event: QShowEvent | None) -> None:
         super().showEvent(event)
@@ -206,6 +227,24 @@ class SheetView(QGraphicsView):
             self.show_initial_view(self._pending_initial_view)
 
     # --- internals --------------------------------------------------------------------------------------------------
+
+    def _viewport_origin_in_window(self) -> QPoint:
+        return self.viewport().mapTo(self.window(), QPoint(0, 0))
+
+    def _keep_sheet_in_place(self) -> None:
+        """When the view moves or changes size inside its window (e.g. the instrument panel next to it gets wider),
+        scroll by the same amount, so the sheet stays where it was on the screen.
+
+        Measured relative to the window, not the screen: moving the whole window moves the sheet with it, as it should.
+        """
+        if not self.isVisible():
+            return
+        origin = self._viewport_origin_in_window()
+        if self._viewport_origin is not None:
+            shift = origin - self._viewport_origin
+            if not shift.isNull():
+                self.pan_by(shift.x(), shift.y())
+        self._viewport_origin = origin
 
     def _scene(self) -> QGraphicsScene:
         scene = self.scene()
@@ -219,6 +258,7 @@ class SheetView(QGraphicsView):
     def _apply_transform(self) -> None:
         self.setTransform(QTransform.fromScale(self._scale, -self._scale))
         self._update_scene_rect()
+        self.zoom_changed.emit(self._scale)
 
     def _update_scene_rect(self) -> None:
         """The scene extends one viewport beyond the sheet on every side, so any part of the sheet can be scrolled to
