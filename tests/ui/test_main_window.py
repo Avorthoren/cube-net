@@ -127,3 +127,10 @@ def test_turning_recording_off_and_on(qtbot: QtBot, tmp_path: Path) -> None:
     assert second is not None and second.log.path != first.log.path
     assert "state labels off" in session_lines(second.log.path)
     window.stop_recording("test over")
+
+
+def test_cut_hover_wired(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(settings=settings_in(tmp_path, record=False))
+    qtbot.addWidget(window)
+    window.cut_hover.update_at(10.02, 12.5)
+    assert window.cut_hover.hovered() is not None

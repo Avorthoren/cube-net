@@ -104,6 +104,10 @@ class SheetView(QGraphicsView):
     def sheet_rect(self) -> QRectF:
         return QRectF(self._sheet)
 
+    def is_panning(self) -> bool:
+        """Whether the user is dragging the sheet right now."""
+        return self._pan_last is not None
+
     def is_on_net(self, x: float, y: float) -> bool:
         """Whether the sheet point (x, y) lies on the cube net."""
         return self._on_net(x, y)

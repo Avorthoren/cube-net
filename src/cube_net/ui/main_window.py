@@ -19,6 +19,7 @@ from cube_net.ui.session.start import (
     start_session_recording,
     stop_session_recording,
 )
+from cube_net.ui.sheet.cut_hover import CutHover
 from cube_net.ui.sheet.sheet_view import SheetView
 
 APP_TITLE = "Cube Net"
@@ -49,6 +50,7 @@ class MainWindow(QMainWindow):
         self.sheet_view = SheetView(self)
         self.sheet_view.set_sheet(sheet_box(v.position for v in self.net.vertices))
         self.sheet_view.set_net(self.net)
+        self.cut_hover = CutHover(self.sheet_view, self.net)
         self.sheet_view.set_net_hit_test(lambda x, y: self.net.contains(quantize(x, y)))
         self.sheet_view.show_initial_view(net_box)
         self.setCentralWidget(self.sheet_view)

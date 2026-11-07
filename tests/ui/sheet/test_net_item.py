@@ -13,7 +13,9 @@ SCALE = 100.0  # px per unit
 ORIGIN = QPointF(9, 15)  # sheet point drawn at the image's top-left corner
 
 
-def render(with_labels: bool = False, background: str = "black") -> tuple[QImage, QTransform]:
+def render(
+    with_labels: bool = False, background: str = "black", highlight_left_of_face_4: bool = False
+) -> tuple[QImage, QTransform]:
     image = QImage(500, 600, QImage.Format.Format_RGB32)
     image.fill(QColor(background))
     world = QTransform().scale(SCALE, -SCALE).translate(-ORIGIN.x(), -ORIGIN.y())
@@ -23,6 +25,9 @@ def render(with_labels: bool = False, background: str = "black") -> tuple[QImage
     item = NetItem(net)
     if with_labels:
         item.set_labels(vertex_labels(net, PointLabels()))
+    if highlight_left_of_face_4:
+        cut = next(he for he in net.boundary_edges() if he.origin.position.x == he.destination.position.x == 10)
+        item.set_highlight(cut)
     item.paint(painter, None)
     painter.end()
     return image, world
@@ -83,3 +88,14 @@ def test_labels_drawn_outside_the_net(qapp: QApplication) -> None:
     assert changed > 10
     inside = world.map(QPointF(11.5, 13.5)).toPoint()
     assert plain.pixelColor(inside) == labelled.pixelColor(inside)
+
+
+def test_highlighted_cut_is_wider_and_still_inside() -> None:
+    """A_2 - E_2 at x = 10: normally 5 px wide; highlighted 10 px, both fully right of x = 10 (inside face 4)."""
+    plain, world = render()
+    lit, _ = render(highlight_left_of_face_4=True)
+    x7 = 10 + 7 / SCALE  # 7 px inside: hatch when plain, cut colour when highlighted
+    y = 12.525
+    assert colour_at(plain, world, x7, y) != colour_at(lit, world, x7, y)
+    assert colour_at(lit, world, x7, y) in (palette.FACE_COLORS[4], palette.FACE_COLORS[5])
+    assert colour_at(lit, world, 10 - 3 / SCALE, y) == QColor("black")  # nothing outside the net

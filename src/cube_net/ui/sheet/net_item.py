@@ -3,7 +3,7 @@
 Painted bottom to top:
 1. Hatch: each region is white with coloured triangles in its face's own frame (so the pattern rotates with it).
 2. Fold edges: two-colour dashes centred on the cube edge.
-3. Cuts (the perimeter): dashes drawn fully inside their region.
+3. Cuts (the perimeter): dashes drawn fully inside their region; a highlighted cut is drawn wider.
 4. Vertex circles on the perimeter, one equal sector per face of the vertex.
 5. Optional debug labels (A_1, B_2, ...) next to all vertices, placed outside the net.
 Hatch is drawn in sheet units; lines and circles have constant pixel sizes, so they are drawn in device pixels.
@@ -44,12 +44,23 @@ class NetItem(QGraphicsItem):
         self._net = net
         self._hatch = hatch_path()
         self._labels: dict[NetVertex, VertexLabel] | None = None
+        self._highlight: HalfEdge | None = None
 
     def set_net(self, net: Net) -> None:
         self.prepareGeometryChange()
         self._net = net
         self._labels = None
+        self._highlight = None
         self.update()
+
+    def set_highlight(self, cut: HalfEdge | None) -> None:
+        """Draw this cut highlighted (None: no highlight)."""
+        if cut is not self._highlight:
+            self._highlight = cut
+            self.update()
+
+    def highlight(self) -> HalfEdge | None:
+        return self._highlight
 
     def set_labels(self, labels: dict[NetVertex, VertexLabel] | None) -> None:
         """Debug labels to draw next to vertices (None: no labels)."""
@@ -79,6 +90,9 @@ class NetItem(QGraphicsItem):
             self._paint_dashed(painter, world, he, inset=0.0)
         for he in self._net.boundary_edges():
             self._paint_dashed(painter, world, he, inset=net_style.EDGE_WIDTH_PX / 2 * units_per_px)
+        if self._highlight is not None:
+            width = net_style.HIGHLIGHT_WIDTH_PX
+            self._paint_dashed(painter, world, self._highlight, inset=width / 2 * units_per_px, width=width)
         self._paint_vertices(painter, world)
         if self._labels:
             self._paint_labels(painter, world, self._labels)
@@ -98,8 +112,10 @@ class NetItem(QGraphicsItem):
             painter.fillPath(self._hatch, palette.FACE_COLORS[region.face])
             painter.restore()
 
-    def _paint_dashed(self, painter: QPainter, world: QTransform, he: HalfEdge, inset: float) -> None:
-        """Dashed line along `he`, shifted by `inset` units to its left (into its region)."""
+    def _paint_dashed(
+        self, painter: QPainter, world: QTransform, he: HalfEdge, inset: float, width: float = net_style.EDGE_WIDTH_PX
+    ) -> None:
+        """Dashed line of `width` px along `he`, shifted by `inset` units to its left (into its region)."""
         a, b = to_qpointf(he.origin.position), to_qpointf(he.destination.position)
         d = b - a
         length = math.hypot(d.x(), d.y())
@@ -111,7 +127,7 @@ class NetItem(QGraphicsItem):
         line = QLineF(a, b)
         colours = [palette.FACE_COLORS[f] if f is not None else palette.WHITE for f in layout.faces]
         for s0, s1, parity in dash_pieces(length, float(layout.offset), float(DASH_LENGTH)):
-            pen = QPen(colours[parity], net_style.EDGE_WIDTH_PX)
+            pen = QPen(colours[parity], width)
             pen.setCapStyle(Qt.PenCapStyle.FlatCap)
             painter.setPen(pen)
             painter.drawLine(QLineF(line.pointAt(s0 / length), line.pointAt(s1 / length)))

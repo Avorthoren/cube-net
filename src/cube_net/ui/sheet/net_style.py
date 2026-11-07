@@ -15,3 +15,9 @@ LABEL_FONT_PX = 13
 
 # Gap between a vertex circle and its label.
 LABEL_GAP_PX = 3.0
+
+# Hitbox of a cut: a strip of this width along the cut, inside its face (wider than the drawn line, easier to hit).
+CUT_HITBOX_PX = EDGE_WIDTH_PX * 1.5
+
+# A highlighted cut (under the mouse) is drawn this wide, still fully inside its face.
+HIGHLIGHT_WIDTH_PX = CUT_HITBOX_PX
