@@ -124,3 +124,36 @@ def test_ignored_cuts_do_not_highlight(setup: tuple[SheetView, CutHover, Net]) -
     hover.set_net(net, frozenset({cut}))
     hover.update_at(near_cut(view), 12.5)
     assert hover.hovered() is None
+
+
+class TestWithoutVertices:
+    def in_circle_of_a_1(self, view: SheetView) -> tuple[float, float]:
+        near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
+        return 11 + near, 14 - near
+
+    def test_a_vertex_means_nothing(self, setup: tuple[SheetView, CutHover, Net]) -> None:
+        view, hover, net = setup
+        hover.set_net(net, vertices=False)
+        hover.update_at(*self.in_circle_of_a_1(view))
+        assert hover.hovered_vertex() is None
+        assert hover.hovered() is None  # as a click there does nothing, it's not on a cut either
+
+    def test_cuts_still_highlight(self, setup: tuple[SheetView, CutHover, Net]) -> None:
+        view, hover, net = setup
+        hover.set_net(net, vertices=False)
+        hover.update_at(near_cut(view), 12.5)
+        assert hover.hovered() is not None
+
+    def test_switching_clears_a_highlighted_vertex(self, setup: tuple[SheetView, CutHover, Net]) -> None:
+        view, hover, net = setup
+        hover.update_at(*self.in_circle_of_a_1(view))
+        assert hover.hovered_vertex() is not None
+        hover.set_net(net, vertices=False)
+        assert hover.hovered_vertex() is None
+
+    def test_on_again(self, setup: tuple[SheetView, CutHover, Net]) -> None:
+        view, hover, net = setup
+        hover.set_net(net, vertices=False)
+        hover.set_net(net)
+        hover.update_at(*self.in_circle_of_a_1(view))
+        assert hover.hovered_vertex() is not None

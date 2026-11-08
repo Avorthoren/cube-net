@@ -9,6 +9,8 @@
   snaps to perimeter vertices. An inner point snaps to fold lines, and may not be released in a hitbox of the perimeter.
 - A fold line is highlighted while the mouse is in its hitbox, whenever that means a point would land on it: while
   cutting, and while dragging an inner point.
+- In CUT_EDITING, perimeter vertices mean nothing to the mouse, so they don't highlight; the exception is the one a
+  dragged endpoint would snap to (never a counterpart image: an endpoint can't snap to those).
 - In CUT_EDITING, a click on a cut of the perimeter (not on a vertex, not on the new line) moves the half with its
   counterpart onto it: CUT_APPROVING.
 - In CUT_APPROVING, a round button in the middle of the chosen segment approves the rearrangement, if it's valid. If
@@ -241,6 +243,7 @@ class CutTool(QObject):
         i, target = self._drag_index, self._drag_target
         self._drag_index, self._drag_target = None, None
         self._highlight_fold(None)
+        self._highlight_vertex(None)
         if i is None:
             return
         if target is None:  # pressed and released without moving
@@ -303,6 +306,8 @@ class CutTool(QObject):
     def _on_mouse_left(self) -> None:
         self.item.set_rubber_band(None)
         self._highlight_fold(None)
+        if self._drag_index is not None:
+            self._highlight_vertex(None)
 
     def _on_ruler_changed(self) -> None:
         if self._ruler.active:
@@ -314,6 +319,11 @@ class CutTool(QObject):
         if net_item is not None:
             net_item.set_highlight_fold(fold)
 
+    def _highlight_vertex(self, vertex: NetVertex | None) -> None:
+        net_item = self._view.net_item()
+        if net_item is not None:
+            net_item.set_highlight_vertex(vertex)
+
     def _drag_to(self, x: float, y: float) -> None:
         i = self._drag_index
         line = self._editor.cut_line
@@ -323,6 +333,7 @@ class CutTool(QObject):
         original = line.points[i]
         if original.on_perimeter:
             self._drag_target = self._editor.drag_target(i, quantize(x, y), vertex=vertex, current=self._drag_target)
+            self._highlight_vertex(vertex)
         else:
             self._drag_over_perimeter = vertex is not None or cut is not None
             on_fold = (self._drag_target or original).fold

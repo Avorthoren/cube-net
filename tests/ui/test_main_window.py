@@ -985,3 +985,174 @@ class TestFlashKeepsTheHover:
 
         assert window.cut_hover.hovered() is hovered
         assert item.divided() is window.editor.split()
+
+
+class TestVertexHoverWhileEditing:
+    """In CUT_EDITING perimeter vertices can't be clicked, so they don't highlight, except for where a dragged endpoint
+    would go."""
+
+    # The corner cut: x on the top of face 1, y, z on its right side; z's image is on the top of face 3.
+    X = 11.5, 14.0
+    Y = 11.5, 13.5
+    Z_IMAGE = 12.5, 13.0
+    A_1 = 11.0, 14.0
+    B_1 = 12.0, 14.0
+    B_2 = 13.0, 13.0
+
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def close_line(self, window: MainWindow) -> None:
+        from cube_net.ui.sheet import net_style
+
+        h = net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(*self.Y)
+        view.left_pressed.emit(12 - h, 13.5)
+        assert window.editor.state.value == "cut_editing"
+
+    def highlighted(self, window: MainWindow) -> tuple[float, float] | None:
+        vertex = window.cut_hover.hovered_vertex()
+        return None if vertex is None else (float(vertex.position.x), float(vertex.position.y))
+
+    def test_not_while_just_hovering(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        view = window.sheet_view
+        for place in (self.A_1, self.B_2, self.Z_IMAGE, self.X):
+            view.mouse_moved.emit(*place)
+            assert self.highlighted(window) is None, place
+
+    def test_gone_as_soon_as_the_line_closes(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        view = window.sheet_view
+        view.left_pressed.emit(*self.A_1)
+        view.left_pressed.emit(*self.Y)
+        view.mouse_moved.emit(*self.B_1)
+        assert self.highlighted(window) == self.B_1  # still cutting: a vertex can end the line
+        view.left_pressed.emit(*self.B_1)
+        assert window.editor.state.value == "cut_editing"
+        assert self.highlighted(window) is None
+
+    def test_where_a_dragged_endpoint_would_go(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        view = window.sheet_view
+        view.left_pressed.emit(*self.X)
+        view.mouse_moved.emit(*self.A_1)
+        assert self.highlighted(window) == self.A_1
+        view.mouse_moved.emit(11.2, 14.0)
+        assert self.highlighted(window) is None
+        view.mouse_moved.emit(*self.B_2)
+        assert self.highlighted(window) == self.B_2
+        view.left_released.emit(*self.B_2)
+        assert self.highlighted(window) is None
+
+    def test_a_dragged_endpoint_does_not_light_up_an_image(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        view = window.sheet_view
+        view.left_pressed.emit(*self.X)
+        view.mouse_moved.emit(*self.Z_IMAGE)
+        assert self.highlighted(window) is None
+
+    def test_a_dragged_inner_point_does_not_light_up_anything(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        view = window.sheet_view
+        view.left_pressed.emit(*self.Y)
+        view.mouse_moved.emit(*self.A_1)
+        assert self.highlighted(window) is None
+
+    def test_back_after_undo(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        window.undo_action.trigger()
+        assert window.editor.state.value == "cutting"
+        window.sheet_view.mouse_moved.emit(*self.B_2)
+        assert self.highlighted(window) == self.B_2
+
+
+class TestNoHoverWhileApproving:
+    """Only the button can be clicked in CUT_APPROVING, so nothing on the perimeter highlights."""
+
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def hitbox(self, window: MainWindow) -> float:
+        from cube_net.ui.sheet import net_style
+
+        return net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+
+    def valid(self, window: MainWindow) -> None:
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+        view.left_pressed.emit(11.75, 10 + h)
+
+    def overlapping(self, window: MainWindow) -> None:
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(12 - h, 13.5)
+        view.left_pressed.emit(11 + h, 11.5)
+        view.left_pressed.emit(12.75, 13 - h)
+
+    def assert_nothing_highlights(self, window: MainWindow) -> None:
+        view = window.sheet_view
+        h = self.hitbox(window)
+        for x, y in ((10 + h, 12.5), (10.0, 13.0), (11 - h, 11.5), (12.0, 10.0)):  # cuts and vertices
+            view.mouse_moved.emit(x, y)
+            assert window.cut_hover.hovered() is None, (x, y)
+            assert window.cut_hover.hovered_vertex() is None, (x, y)
+
+    def test_with_a_valid_rearrangement(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.valid(window)
+        assert window.editor.state.value == "cut_approving"
+        self.assert_nothing_highlights(window)
+
+    def test_with_an_overlapping_one(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.overlapping(window)
+        assert window.editor.state.value == "cut_approving"
+        self.assert_nothing_highlights(window)
+
+    def test_gone_at_once_when_rearranging(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+        view.mouse_moved.emit(11.75, 10 + h)
+        assert window.cut_hover.hovered() is not None
+        view.left_pressed.emit(11.75, 10 + h)
+        assert window.cut_hover.hovered() is None
+
+    def test_back_after_undo_and_after_approving(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.valid(window)
+        h = self.hitbox(window)
+        view = window.sheet_view
+        window.undo_action.trigger()
+        view.mouse_moved.emit(10 + h, 12.5)
+        assert window.cut_hover.hovered() is not None  # CUT_EDITING: cuts can be chosen
+        window.redo_action.trigger()
+        self.assert_nothing_highlights(window)
+        window.approve_action.trigger()
+        assert window.editor.state.value == "default"
+        view.mouse_moved.emit(10 + h, 12.5)
+        assert window.cut_hover.hovered() is not None
+        view.mouse_moved.emit(10.0, 13.0)
+        assert window.cut_hover.hovered_vertex() is not None

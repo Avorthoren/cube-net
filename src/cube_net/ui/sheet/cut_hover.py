@@ -47,17 +47,23 @@ class CutHover(QObject):
         self._view = view
         self._net = net
         self._ignored: frozenset[HalfEdge] = frozenset()
+        self._vertices = True
         view.mouse_moved.connect(self._on_mouse_moved)
         view.mouse_left.connect(self.clear)
 
-    def set_net(self, net: Net, ignored: frozenset[HalfEdge] = frozenset()) -> None:
-        """Follow the cuts of `net`; those in `ignored` mean nothing, and don't highlight. If that's what it follows
-        already, the mouse is still on the same cut, and nothing changes."""
-        if net is self._net and ignored == self._ignored:
+    def set_net(self, net: Net, ignored: frozenset[HalfEdge] = frozenset(), vertices: bool = True) -> None:
+        """Follow the cuts of `net`; those in `ignored` mean nothing, and don't highlight. Without `vertices`, vertices
+        mean nothing either: they don't highlight, and the mouse in a vertex's circle isn't on a cut. If that's what it
+        follows already, the mouse is still on the same cut, and nothing changes."""
+        if net is self._net and ignored == self._ignored and vertices == self._vertices:
             return
         self._net = net
         self._ignored = ignored
+        self._vertices = vertices
         self.clear()
+        item = self._view.net_item()
+        if item is not None:
+            item.set_highlight_vertex(None)
 
     def hovered(self) -> HalfEdge | None:
         item = self._view.net_item()
@@ -86,6 +92,7 @@ class CutHover(QObject):
         if item is not None:
             changed = item.highlight() is not cut
             item.set_highlight(cut)
-            item.set_highlight_vertex(vertex)
+            if self._vertices:
+                item.set_highlight_vertex(vertex)
             if changed:
                 self.hover_changed.emit()

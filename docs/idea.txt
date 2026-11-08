@@ -299,6 +299,9 @@ As soon as first point of a new cut line created, we are in a slightly different
      that means a new or a moved point would land on it.
 As it was said earlier, as soon as we create another point on the outer perimeter of the cube net (in addition to the
 very first one, from which this new cut started) - we transition to the next state (CUT_EDITING).
+Vertices of the outer perimeter (counterpart images included) can't be clicked in this state, so they don't highlight
+when hovered. The exception: while the first/last point of the cut line is dragged, the vertex it would go to is
+highlighted (that's never a counterpart image: the point can't go to those).
 1. Here in the middle of every segment of the new cut line should be a small hollow circle (just a thin outline, with
    transparent inside), click on which should create new point of the new cut line.
 2. SHIFT+click on any point of the new cut line (except for first and last one) should delete that point. But there is
@@ -354,6 +357,8 @@ to the next state (CUT_APPROVING):
    pixels). If there are no intersections, it is green, and clicking it (or the shortcut CTRL+ENTER) ends the process of
    cutting the cube net, getting us in the DEFAULT state. If there are intersections, it is grey, shows an "x" instead of the
    check mark, and clicking it does the same as CTRL+z: it undoes the rearrangement. CTRL+ENTER does nothing then.
+   Nothing but this button can be clicked in this state, so cuts and vertices of the outer perimeter don't highlight
+   when hovered.
 
 Now let's describe actions that should be saved and be reversible (and redoable):
 1. Creating new point of new cut line.

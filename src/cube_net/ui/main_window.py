@@ -344,11 +344,14 @@ class MainWindow(QMainWindow):
 
     def _update_hover_net(self) -> None:
         """Which cuts follow the mouse: in CUT_EDITING the parts of the net as divided by the line, because that's what
-        a click chooses (the line itself means nothing there)."""
+        a click chooses (the line itself means nothing there); in CUT_APPROVING none, as only the button can be
+        clicked."""
         if self.editor.state is EditorState.CUT_EDITING:
             if not self.cut_tool.dragging:
                 split = self.editor.split()
-                self.cut_hover.set_net(split.net, split.line_edges)
+                self.cut_hover.set_net(split.net, split.line_edges, vertices=False)
+        elif self.editor.state is EditorState.CUT_APPROVING:
+            self.cut_hover.set_net(self.net, frozenset(self.net.boundary_edges()), vertices=False)
         else:
             self.cut_hover.set_net(self.net)
         self._update_divided_view()
