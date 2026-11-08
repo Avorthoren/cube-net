@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QCloseEvent
 from PyQt6.QtWidgets import QApplication, QFileDialog, QLabel, QMainWindow, QMessageBox, QSizePolicy, QToolBar, QWidget
 
 from cube_net.core.bounding import min_area_rectangle
@@ -12,11 +12,19 @@ from cube_net.core.editor import Editor, EditorState
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, cut_line_labels, vertex_labels
 from cube_net.core.net import Net, default_net
-from cube_net.core.project import PROJECT_SUFFIX, Project, ProjectFileError, load_project, save_project
+from cube_net.core.project import (
+    PROJECT_SUFFIX,
+    Project,
+    ProjectFileError,
+    load_project,
+    new_project,
+    save_project,
+)
 from cube_net.core.project_settings import ProjectSettings
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.instruments.bounding_controls import BoundingControls
+from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.session.session_recorder import SessionRecorder
 from cube_net.ui.session.start import (
     STARTED_AT_LAUNCH,
@@ -36,6 +44,9 @@ from cube_net.ui.sheet.sheet_view import SheetView
 APP_TITLE = "Cube Net"
 NO_COORDINATES = "x: —   y: —"
 PROJECT_FILES = f"Cube Net projects (*{PROJECT_SUFFIX})"
+
+# What a project is called until it's saved.
+UNTITLED = "Untitled"
 
 
 def format_point(p: Vec) -> str:
@@ -62,13 +73,15 @@ class MainWindow(QMainWindow):
     ) -> None:
         """`session_dir`: where session recordings go (default: the app data folder)."""
         super().__init__(parent)
-        self.setWindowTitle(APP_TITLE)
         self.settings = AppSettings() if settings is None else settings
         self.point_labels = PointLabels()
         self.project_settings = ProjectSettings()
 
         # The file of the project, once it has one.
         self.project_path: Path | None = None
+
+        # The revision of the history when the project was last saved (or created, or opened).
+        self._saved_revision = 0
         self.recorder: SessionRecorder | None = None
 
         self.net: Net = default_net()
@@ -105,6 +118,7 @@ class MainWindow(QMainWindow):
 
         self._create_instruments()
         self._create_menus()
+        self._update_title()
         self._update_vertex_labels()
         self._resize_to_screen()
 
@@ -232,6 +246,9 @@ class MainWindow(QMainWindow):
         self.redo_action.setEnabled(self.editor.history.can_redo and not dragging)
         rearranged = self.editor.rearranged
         self.approve_action.setEnabled(rearranged is not None and rearranged.valid)
+        for action in (self.new_action, self.open_action, self.save_action, self.save_as_action, self.quit_action):
+            action.setEnabled(not dragging)  # they may ask something, and the mouse button is still down
+        self.setWindowModified(self.is_dirty)
 
     def _on_open_logs(self) -> None:
         if not open_session_log_folder(self._session_dir):
@@ -269,6 +286,17 @@ class MainWindow(QMainWindow):
         if self.recorder is not None:
             self.recorder.note("ruler", format_point(point))
 
+    @property
+    def is_dirty(self) -> bool:
+        """Are there changes that aren't saved? Undo and redo count too: the history is saved with the project."""
+        return self.editor.history.revision != self._saved_revision
+
+    def _project_name(self) -> str:
+        return UNTITLED if self.project_path is None else self.project_path.name
+
+    def _update_title(self) -> None:
+        self.setWindowTitle(f"{self._project_name()}[*] — {APP_TITLE}")
+
     def save_project_to(self, path: Path) -> bool:
         """Save the project to `path`; from now on that's its file. Tells the user if it fails."""
         project = Project(self.editor.snapshot(), self.editor.history, self.project_settings, self.point_labels)
@@ -277,7 +305,10 @@ class MainWindow(QMainWindow):
         except ProjectFileError as e:
             QMessageBox.critical(self, APP_TITLE, str(e))
             return False
-        self._set_project_path(path)
+        self.project_path = path
+        self._saved_revision = self.editor.history.revision
+        self._update_title()
+        self.setWindowModified(False)
         if self.recorder is not None:
             self.recorder.note("project", "saved", path)
         return True
@@ -289,48 +320,101 @@ class MainWindow(QMainWindow):
         except ProjectFileError as e:
             QMessageBox.critical(self, APP_TITLE, str(e))
             return False
-        self.editor.load(project.state, project.history)
-        self.point_labels = project.labels
-        self.project_settings = project.settings
-        self.cut_tool.reload()
-        self.sheet_view.show_initial_view(self.net.bounding_box())
-        self._set_project_path(path)
+        self._show_project(project, path)
         if self.recorder is not None:
             self.recorder.note("project", "opened", path)
             self._record_state(self.recorder)
         return True
 
-    def _set_project_path(self, path: Path) -> None:
+    def start_new_project(self) -> None:
+        """Show a new project instead of the current one."""
+        self._show_project(new_project(), None)
+        if self.recorder is not None:
+            self.recorder.note("project", "new")
+            self._record_state(self.recorder)
+
+    def _show_project(self, project: Project, path: Path | None) -> None:
+        self.editor.load(project.state, project.history)
+        self.point_labels = project.labels
+        self.project_settings = project.settings
         self.project_path = path
-        self.setWindowTitle(f"{path.name} — {APP_TITLE}")
+        self._saved_revision = project.history.revision
+        self._update_title()
+        self.cut_tool.reload()
+        self.sheet_view.show_initial_view(self.net.bounding_box())
+
+    def _confirm_leaving_project(self) -> bool:
+        """The current project is about to go away: can it? If it has unsaved changes, that's up to the user."""
+        if not self.is_dirty:
+            return True
+        choice = ask_save_changes(self, self._project_name())
+        if self.recorder is not None:
+            self.recorder.note("project", "unsaved changes", choice.value)
+        if choice is SaveChoice.SAVE:
+            return self._save()
+        return choice is SaveChoice.DISCARD
 
     def _dialog_folder(self) -> str:
         return "" if self.project_path is None else str(self.project_path.parent)
 
+    def _on_new(self) -> None:
+        if self._confirm_leaving_project():
+            self.start_new_project()
+
     def _on_open(self) -> None:
+        if not self._confirm_leaving_project():
+            return
         name, _ = QFileDialog.getOpenFileName(self, "Open project", self._dialog_folder(), PROJECT_FILES)
         if name:
             self.open_project_from(Path(name))
 
-    def _on_save_as(self) -> None:
+    def _save(self) -> bool:
+        """Save to the project's file; a project without one needs a name first. False if it wasn't saved."""
+        return self._save_as() if self.project_path is None else self.save_project_to(self.project_path)
+
+    def _save_as(self) -> bool:
         name, _ = QFileDialog.getSaveFileName(self, "Save project as", self._dialog_folder(), PROJECT_FILES)
-        if name:
-            path = Path(name)
-            self.save_project_to(path if path.suffix else path.with_suffix(PROJECT_SUFFIX))
+        if not name:
+            return False
+        path = Path(name)
+        return self.save_project_to(path if path.suffix else path.with_suffix(PROJECT_SUFFIX))
+
+    def closeEvent(self, event: QCloseEvent | None) -> None:
+        """Closing the window is quitting: the project goes away."""
+        if event is None:
+            return
+        self.cut_tool.cancel_drag()  # the question below would leave the mouse release unnoticed
+        if self._confirm_leaving_project():
+            event.accept()
+        else:
+            event.ignore()
 
     def _create_menus(self) -> None:
         menu_bar = self.menuBar()
         assert menu_bar is not None
         file_menu = menu_bar.addMenu("&File")
         assert file_menu is not None
+        self.new_action = QAction("&New", self)
+        self.new_action.setShortcut("Ctrl+N")
+        self.new_action.triggered.connect(self._on_new)
+        file_menu.addAction(self.new_action)
         self.open_action = QAction("&Open...", self)
         self.open_action.setShortcut("Ctrl+O")
         self.open_action.triggered.connect(self._on_open)
         file_menu.addAction(self.open_action)
+        self.save_action = QAction("&Save", self)
+        self.save_action.setShortcut("Ctrl+S")
+        self.save_action.triggered.connect(lambda: self._save())
+        file_menu.addAction(self.save_action)
         self.save_as_action = QAction("Save &As...", self)
         self.save_as_action.setShortcut("Ctrl+Shift+S")
-        self.save_as_action.triggered.connect(self._on_save_as)
+        self.save_as_action.triggered.connect(lambda: self._save_as())
         file_menu.addAction(self.save_as_action)
+        file_menu.addSeparator()
+        self.quit_action = QAction("&Quit", self)
+        self.quit_action.setShortcut("Ctrl+Q")
+        self.quit_action.triggered.connect(self.close)
+        file_menu.addAction(self.quit_action)
 
         view_menu = menu_bar.addMenu("&View")
         assert view_menu is not None

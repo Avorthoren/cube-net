@@ -23,7 +23,7 @@ def test_main_window_opens(qtbot: QtBot) -> None:
     qtbot.addWidget(window)
     window.show()
     assert window.isVisible()
-    assert window.windowTitle() == APP_TITLE
+    assert window.windowTitle() == f"Untitled[*] — {APP_TITLE}"
     assert window.centralWidget() is window.sheet_view
 
 
@@ -1588,4 +1588,486 @@ class TestProjects:
         lines = session_lines(window.recorder.log.path)
         assert f"project opened {path}" in lines
         assert f"state project {path}" in lines
+        window.stop_recording("test over")
+
+
+class TestUnsavedChanges:
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        window.activateWindow()
+        qtbot.waitUntil(window.isActiveWindow)
+        return window
+
+    def hitbox(self, window: MainWindow) -> float:
+        from cube_net.ui.sheet import net_style
+
+        return net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+
+    def start_line(self, window: MainWindow) -> None:
+        window.sheet_view.left_pressed.emit(11.5, 14 - self.hitbox(window))
+
+    def close_line(self, window: MainWindow) -> None:
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+
+    def answer(self, monkeypatch: pytest.MonkeyPatch, *choices: object) -> list[str]:
+        """Make the question answer this, and "don't save" after that (the window gets closed when the test ends);
+        returns the list of the projects it was asked about."""
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        remaining = list(choices)
+        asked: list[str] = []
+
+        def ask(_parent: object, name: str) -> object:
+            asked.append(name)
+            return remaining.pop(0) if remaining else SaveChoice.DISCARD
+
+        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", ask)
+        return asked
+
+    def file_dialogs(self, monkeypatch: pytest.MonkeyPatch, save: str = "", open_: str = "") -> list[str]:
+        """Make the file dialogs answer this; returns the list of the dialogs that were shown."""
+        from PyQt6.QtWidgets import QFileDialog
+
+        shown: list[str] = []
+
+        def show_save(*_: object) -> tuple[str, str]:
+            shown.append("save")
+            return save, ""
+
+        def show_open(*_: object) -> tuple[str, str]:
+            shown.append("open")
+            return open_, ""
+
+        monkeypatch.setattr(QFileDialog, "getSaveFileName", show_save)
+        monkeypatch.setattr(QFileDialog, "getOpenFileName", show_open)
+        return shown
+
+    # --- what counts as a change -------------------------------------------------------------------------------------
+
+    def test_a_new_window_has_none(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert not window.is_dirty
+        assert not window.isWindowModified()
+
+    def test_every_action_is_one(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        path = tmp_path / "cube.cubenet"
+        view = window.sheet_view
+        h = self.hitbox(window)
+
+        def check(action: object) -> None:
+            assert window.save_project_to(path)
+            assert not window.isWindowModified()
+            assert callable(action)
+            action()
+            assert window.is_dirty
+            assert window.isWindowModified()
+
+        check(lambda: view.left_pressed.emit(11.5, 14 - h))  # the first point
+        check(lambda: view.left_pressed.emit(11.5, 13.5))  # a point
+        check(lambda: view.left_pressed.emit(12 - h, 13.5))  # the last point
+
+        def move() -> None:
+            view.left_pressed.emit(11.5, 13.5)
+            view.mouse_moved.emit(11.6, 13.6)
+            view.left_released.emit(11.6, 13.6)
+
+        check(move)
+        check(window.undo_action.trigger)
+        check(window.redo_action.trigger)
+        check(lambda: view.left_pressed.emit(11.75, 10 + h))  # rearranged
+        check(window.approve_action.trigger)
+
+    def test_what_changes_nothing_is_not_one(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        window.save_project_to(tmp_path / "cube.cubenet")
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 13.5)  # pressed and released without moving
+        view.left_released.emit(11.5, 13.5)
+        assert not window.is_dirty
+        h = self.hitbox(window)
+        view.left_pressed.emit(10.5, 12 + h)  # a useless cut flashes
+        assert not window.is_dirty
+        view.mouse_moved.emit(11.5, 12.5)
+        assert not window.isWindowModified()
+        window.ruler_tool.set_active(True)
+        view.left_pressed.emit(7.0, 7.0)
+        assert not window.is_dirty
+
+    def test_undoing_back_to_the_saved_state_is_still_one(self, qtbot: QtBot, tmp_path: Path) -> None:
+        """The history is saved too, and it's not what it was."""
+        window = self.make(qtbot, tmp_path)
+        self.start_line(window)
+        window.save_project_to(tmp_path / "cube.cubenet")
+        window.sheet_view.left_pressed.emit(11.5, 13.5)
+        window.undo_action.trigger()
+        assert window.isWindowModified()
+
+    def test_the_title_shows_the_name(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert window.windowTitle().startswith("Untitled[*]")
+        window.save_project_to(tmp_path / "cube.cubenet")
+        assert window.windowTitle().startswith("cube.cubenet[*]")
+
+    # --- Save --------------------------------------------------------------------------------------------------------
+
+    def test_save_without_a_file_asks_for_a_name(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        window = self.make(qtbot, tmp_path)
+        shown = self.file_dialogs(monkeypatch, save=str(tmp_path / "cube"))
+        self.start_line(window)
+        window.save_action.trigger()
+        assert shown == ["save"]
+        assert window.project_path == tmp_path / "cube.cubenet"
+        assert not window.is_dirty
+
+    def test_save_with_a_file_just_saves(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.core.project import load_project
+
+        window = self.make(qtbot, tmp_path)
+        path = tmp_path / "cube.cubenet"
+        window.save_project_to(path)
+        shown = self.file_dialogs(monkeypatch)
+        self.start_line(window)
+        window.save_action.trigger()
+        assert shown == []
+        assert not window.is_dirty
+        assert load_project(path).state.points is not None
+
+    def test_ctrl_s(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.save_project_to(tmp_path / "cube.cubenet")
+        self.start_line(window)
+        qtbot.keyClick(window, Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
+        assert not window.is_dirty
+
+    def test_save_cancelled_changes_nothing(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.file_dialogs(monkeypatch)
+        self.start_line(window)
+        window.save_action.trigger()
+        assert window.is_dirty
+        assert window.project_path is None
+
+    def test_save_as_moves_to_the_new_file(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.save_project_to(tmp_path / "a.cubenet")
+        self.file_dialogs(monkeypatch, save=str(tmp_path / "b.cubenet"))
+        self.start_line(window)
+        window.save_as_action.trigger()
+        assert window.project_path == tmp_path / "b.cubenet"
+        assert not window.is_dirty
+
+    def test_a_failed_save_leaves_the_changes_unsaved(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        window = self.make(qtbot, tmp_path)
+        monkeypatch.setattr(QMessageBox, "critical", lambda *_: None)
+        self.start_line(window)
+        assert not window.save_project_to(tmp_path / "nowhere" / "cube.cubenet")
+        assert window.is_dirty
+        assert window.isWindowModified()
+
+    # --- New ---------------------------------------------------------------------------------------------------------
+
+    def test_new_with_nothing_to_lose_does_not_ask(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        window = self.make(qtbot, tmp_path)
+        asked = self.answer(monkeypatch)
+        window.new_action.trigger()
+        assert asked == []
+
+    def test_new_starts_all_over(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from fractions import Fraction
+
+        from cube_net.core.project_settings import DEFAULT_AREA_THRESHOLD, ProjectSettings
+
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        window.sheet_view.left_pressed.emit(11.75, 10 + self.hitbox(window))
+        window.approve_action.trigger()
+        window.project_settings = ProjectSettings(Fraction(5))
+        window.save_project_to(tmp_path / "cube.cubenet")
+        names_before = window.point_labels.saved()[0]
+        assert names_before
+        window.new_action.trigger()
+        assert window.editor.state.value == "default"
+        assert window.editor.approved_cuts == 0
+        assert window.net is window.editor.net
+        assert window.bounding.label.text() == "Area\n12.000"
+        assert window.cut_tool.item.points() == ()
+        assert not window.undo_action.isEnabled() and not window.redo_action.isEnabled()
+        assert window.project_path is None
+        assert window.windowTitle().startswith("Untitled[*]")
+        assert not window.is_dirty and not window.isWindowModified()
+        assert window.project_settings.area_threshold == DEFAULT_AREA_THRESHOLD
+        assert window.point_labels.saved()[0] == {}
+
+    def test_new_cancel(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        asked = self.answer(monkeypatch, SaveChoice.CANCEL)
+        self.close_line(window)
+        window.new_action.trigger()
+        assert asked == ["Untitled"]
+        assert window.editor.state.value == "cut_editing"
+        assert window.is_dirty
+
+    def test_new_discard(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        path = tmp_path / "cube.cubenet"
+        window.save_project_to(path)
+        saved = path.read_bytes()
+        asked = self.answer(monkeypatch, SaveChoice.DISCARD)
+        self.close_line(window)
+        window.new_action.trigger()
+        assert asked == ["cube.cubenet"]
+        assert window.editor.state.value == "default"
+        assert path.read_bytes() == saved
+
+    def test_new_save(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.core.project import load_project
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        path = tmp_path / "cube.cubenet"
+        window.save_project_to(path)
+        self.answer(monkeypatch, SaveChoice.SAVE)
+        self.close_line(window)
+        window.new_action.trigger()
+        assert window.editor.state.value == "default"
+        assert window.project_path is None
+        assert load_project(path).state.points is not None
+
+    def test_new_save_but_the_name_is_cancelled(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, SaveChoice.SAVE)
+        shown = self.file_dialogs(monkeypatch)
+        self.close_line(window)
+        window.new_action.trigger()
+        assert shown == ["save"]
+        assert window.editor.state.value == "cut_editing"
+        assert window.is_dirty
+
+    def test_new_save_but_saving_fails(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        monkeypatch.setattr(QMessageBox, "critical", lambda *_: None)
+        self.answer(monkeypatch, SaveChoice.SAVE)
+        self.file_dialogs(monkeypatch, save=str(tmp_path / "nowhere" / "cube.cubenet"))
+        self.close_line(window)
+        window.new_action.trigger()
+        assert window.editor.state.value == "cut_editing"
+
+    def test_the_tools_work_after_new(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        window.new_action.trigger()
+        self.close_line(window)
+        assert window.editor.state.value == "cut_editing"
+        window.undo_action.trigger()
+        assert window.editor.state.value == "cutting"
+
+    # --- Open --------------------------------------------------------------------------------------------------------
+
+    def test_open_cancel_shows_no_file_dialog(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, SaveChoice.CANCEL)
+        shown = self.file_dialogs(monkeypatch)
+        self.close_line(window)
+        window.open_action.trigger()
+        assert shown == []
+        assert window.editor.state.value == "cut_editing"
+
+    def test_open_discard(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        path = tmp_path / "cube.cubenet"
+        window.save_project_to(path)
+        self.answer(monkeypatch, SaveChoice.DISCARD)
+        self.file_dialogs(monkeypatch, open_=str(path))
+        self.close_line(window)
+        window.open_action.trigger()
+        assert window.editor.state.value == "default"
+        assert not window.is_dirty
+
+    def test_open_dialog_cancelled_keeps_the_changes(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, SaveChoice.DISCARD)
+        self.file_dialogs(monkeypatch)
+        self.close_line(window)
+        window.open_action.trigger()
+        assert window.editor.state.value == "cut_editing"
+        assert window.is_dirty
+
+    def test_an_opened_project_has_no_changes(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        path = tmp_path / "cube.cubenet"
+        window.save_project_to(path)
+        window.open_project_from(path)
+        assert not window.is_dirty and not window.isWindowModified()
+        window.undo_action.trigger()
+        assert window.is_dirty and window.isWindowModified()
+
+    # --- Quit --------------------------------------------------------------------------------------------------------
+
+    def test_quit_with_nothing_to_lose_does_not_ask(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        window = self.make(qtbot, tmp_path)
+        asked = self.answer(monkeypatch)
+        window.quit_action.trigger()
+        assert asked == []
+        assert not window.isVisible()
+
+    def test_quit_cancel_stays(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, SaveChoice.CANCEL)
+        self.close_line(window)
+        window.quit_action.trigger()
+        assert window.isVisible()
+        assert window.is_dirty
+
+    def test_quit_discard_goes(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, SaveChoice.DISCARD)
+        self.close_line(window)
+        window.quit_action.trigger()
+        assert not window.isVisible()
+
+    def test_quit_save_goes(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.core.project import load_project
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        path = tmp_path / "cube.cubenet"
+        window.save_project_to(path)
+        self.answer(monkeypatch, SaveChoice.SAVE)
+        self.close_line(window)
+        window.quit_action.trigger()
+        assert not window.isVisible()
+        assert load_project(path).state.points is not None
+
+    def test_quit_save_cancelled_stays(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, SaveChoice.SAVE)
+        self.file_dialogs(monkeypatch)
+        self.close_line(window)
+        window.quit_action.trigger()
+        assert window.isVisible()
+
+    def test_closing_the_window_is_quitting(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        asked = self.answer(monkeypatch, SaveChoice.CANCEL, SaveChoice.DISCARD)
+        self.close_line(window)
+        assert not window.close()
+        assert window.isVisible()
+        assert window.close()
+        assert asked == ["Untitled", "Untitled"]
+
+    def test_closing_during_a_drag_forgets_it(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, SaveChoice.CANCEL)
+        self.close_line(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 13.5)
+        view.mouse_moved.emit(11.7, 13.7)
+        assert window.cut_tool.dragging
+        assert not window.close()
+        assert not window.cut_tool.dragging
+        assert window.undo_action.isEnabled()
+        line = window.editor.cut_line
+        assert line is not None and float(line.points[1].position.x) == 11.5
+        assert float(window.cut_tool.item.points()[1].position.x) == 11.5
+
+    # --- the rest ----------------------------------------------------------------------------------------------------
+
+    def test_not_while_dragging(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        actions = (
+            window.new_action,
+            window.open_action,
+            window.save_action,
+            window.save_as_action,
+            window.quit_action,
+        )
+        assert all(action.isEnabled() for action in actions)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 13.5)
+        assert not any(action.isEnabled() for action in actions)
+        view.left_released.emit(11.5, 13.5)
+        assert all(action.isEnabled() for action in actions)
+
+    def test_shortcuts_and_order(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert window.new_action.shortcut().toString() == "Ctrl+N"
+        assert window.save_action.shortcut().toString() == "Ctrl+S"
+        assert window.quit_action.shortcut().toString() == "Ctrl+Q"
+        menu = window.new_action.associatedObjects()[0]
+        texts = [a.text() for a in menu.actions() if not a.isSeparator()]  # type: ignore[union-attr]
+        assert texts == ["&New", "&Open...", "&Save", "Save &As...", "&Quit"]
+
+    def test_recorded(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = MainWindow(settings=settings_in(tmp_path, record=True), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        self.answer(monkeypatch, SaveChoice.DISCARD)
+        self.close_line(window)
+        window.new_action.trigger()
+        assert window.recorder is not None
+        lines = session_lines(window.recorder.log.path)
+        assert "project unsaved changes discard" in lines
+        assert "project new" in lines
+        assert "state project untitled" in lines[lines.index("project new") :]
         window.stop_recording("test over")

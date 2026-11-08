@@ -6,7 +6,14 @@ from pathlib import Path
 import pytest
 from project_checks import after_a_cut, approving, editor_of, named_labels, project_of, state_contents
 
-from cube_net.core.project import PROJECT_SUFFIX, ProjectFileError, encode_project, load_project, save_project
+from cube_net.core.project import (
+    PROJECT_SUFFIX,
+    ProjectFileError,
+    encode_project,
+    load_project,
+    new_project,
+    save_project,
+)
 
 
 def path_in(tmp_path: Path) -> Path:
@@ -120,3 +127,13 @@ def test_the_message_names_the_file(tmp_path: Path) -> None:
         load_project(path)
     assert str(path) in str(caught.value)
     assert "newer version" in str(caught.value)
+
+
+def test_a_new_project(tmp_path: Path) -> None:
+    project = new_project()
+    assert project.state.points is None and project.state.approved_cuts == 0
+    assert not project.history.can_undo and not project.history.can_redo
+    assert project.state.net.bounding_box().height == 4
+    path = path_in(tmp_path)
+    save_project(project, path)
+    assert state_contents(load_project(path).state) == state_contents(project.state)

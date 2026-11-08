@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from cube_net.core.editor import EditorSnapshot
 from cube_net.core.history import History
 from cube_net.core.labels import PointLabels
+from cube_net.core.net import default_net
 from cube_net.core.project_settings import ProjectSettings
 
 
@@ -24,3 +25,8 @@ class Project:
 
     # The names of the points created by cuts, so that they stay the same after reopening.
     labels: PointLabels
+
+
+def new_project() -> Project:
+    """A new project starts with the default net (docs/idea.txt)."""
+    return Project(EditorSnapshot(default_net(), None, None, 0), History(), ProjectSettings(), PointLabels())

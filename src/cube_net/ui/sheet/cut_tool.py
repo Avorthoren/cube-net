@@ -129,6 +129,16 @@ class CutTool(QObject):
         self.refresh()
         self.net_changed.emit()
 
+    def cancel_drag(self) -> None:
+        """Forget the point being dragged: it stays where it was."""
+        if self._drag_index is None:
+            return
+        self._drag_index, self._drag_target, self._drag_over_perimeter = None, None, False
+        self._delete_press = None
+        self._highlight_fold(None)
+        self._highlight_vertex(None)
+        self.refresh()
+
     def undo(self) -> None:
         """Undo the last action (not while a point is being dragged)."""
         if not self.dragging:

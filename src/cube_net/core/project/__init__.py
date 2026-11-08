@@ -2,7 +2,7 @@
 
 from cube_net.core.project.codec import FORMAT_VERSION, decode_project, encode_project
 from cube_net.core.project.file import PROJECT_SUFFIX, load_project, save_project
-from cube_net.core.project.project import Project, ProjectFileError
+from cube_net.core.project.project import Project, ProjectFileError, new_project
 
 __all__ = [
     "FORMAT_VERSION",
@@ -12,5 +12,6 @@ __all__ = [
     "decode_project",
     "encode_project",
     "load_project",
+    "new_project",
     "save_project",
 ]

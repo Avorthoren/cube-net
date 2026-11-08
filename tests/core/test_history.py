@@ -139,3 +139,30 @@ class TestRestored:
         history = History.restored(original.done_entries(), ())
         run(history, "p", start=1000)
         assert history.done_count == 1000
+
+
+class TestRevision:
+    def test_changes_with_every_action_undo_and_redo(self) -> None:
+        history: History[int] = History()
+        seen = {history.revision}
+        history.record(P, 0, 1)
+        seen.add(history.revision)
+        history.undo()
+        seen.add(history.revision)
+        history.redo()
+        seen.add(history.revision)
+        assert len(seen) == 4
+
+    def test_going_back_does_not_bring_the_old_revision_back(self) -> None:
+        history: History[int] = History()
+        history.record(P, 0, 1)
+        saved = history.revision
+        history.undo()
+        history.redo()
+        assert history.revision != saved
+
+    def test_nothing_to_undo_or_redo_changes_nothing(self) -> None:
+        history: History[int] = History()
+        history.undo()
+        history.redo()
+        assert history.revision == 0

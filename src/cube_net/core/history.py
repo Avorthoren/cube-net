@@ -42,6 +42,7 @@ class History[State]:
     def __init__(self, max_actions: int = MAX_ACTIONS) -> None:
         self._done: deque[HistoryEntry[State]] = deque(maxlen=max_actions)
         self._undone: list[HistoryEntry[State]] = []
+        self._revision = 0
 
     @classmethod
     def restored(
@@ -58,6 +59,11 @@ class History[State]:
 
     def undone_entries(self) -> tuple[HistoryEntry[State], ...]:
         return tuple(self._undone)
+
+    @property
+    def revision(self) -> int:
+        """Changes with every action, undo and redo: if it's the same, so is the history (and the state it leads to)."""
+        return self._revision
 
     @property
     def can_undo(self) -> bool:
@@ -78,11 +84,13 @@ class History[State]:
     def record(self, kind: ActionKind, before: State, after: State, forget_on_undo: bool = False) -> None:
         self._done.append(HistoryEntry(kind, before, after, forget_on_undo))
         self._undone.clear()
+        self._revision += 1
 
     def undo(self) -> State | None:
         """The state to go back to, or None if there's nothing to undo."""
         if not self._done:
             return None
+        self._revision += 1
         entry = self._undo_one()
         if entry.kind is ActionKind.APPROVE and self._done and self._done[-1].kind is ActionKind.REARRANGE:
             entry = self._undo_one()
@@ -92,6 +100,7 @@ class History[State]:
         """The state after the action just redone, or None if there's nothing to redo."""
         if not self._undone:
             return None
+        self._revision += 1
         entry = self._undone.pop()
         self._done.append(entry)
         return entry.after
