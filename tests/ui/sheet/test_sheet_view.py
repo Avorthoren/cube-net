@@ -216,3 +216,25 @@ class TestStaysInPlace:
         view.window().move(view.window().pos() + QPoint(40, 30))
         after = view.to_sheet(QPointF(100, 100))
         assert (after.x(), after.y()) == pytest.approx((before.x(), before.y()))
+
+
+class TestReleaseAndModifiers:
+    def test_left_released_on_the_net(self, view: SheetView, qtbot: QtBot) -> None:
+        pos = view.from_sheet(QPointF(11.5, 12.5)).toPoint()
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        with qtbot.waitSignal(view.left_released) as blocker:
+            qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        assert blocker.args == pytest.approx([11.5, 12.5], abs=2 / view.scale_factor())
+
+    def test_no_left_released_after_panning(self, view: SheetView, qtbot: QtBot) -> None:
+        pos = view.from_sheet(QPointF(7, 7)).toPoint()
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        with qtbot.assertNotEmitted(view.left_released):
+            qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+
+    def test_press_modifiers(self, view: SheetView, qtbot: QtBot) -> None:
+        pos = view.from_sheet(QPointF(11.5, 12.5)).toPoint()
+        qtbot.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, pos)
+        assert view.press_modifiers() & Qt.KeyboardModifier.ShiftModifier
+        qtbot.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        assert not view.press_modifiers() & Qt.KeyboardModifier.ShiftModifier

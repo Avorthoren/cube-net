@@ -37,3 +37,9 @@ VERTEX_HIGHLIGHT_PX = 3.0
 # Points of the cut line the user can't edit (crossings with cube edges, counterpart images of endpoints) are drawn
 # smaller than the user's points while the line is being drawn and edited: this many times the vertex radius.
 DERIVED_POINT_RADIUS_FACTOR = 0.5
+
+# The hollow circle in the middle of a cut-line segment (click: a new point there): this many times the vertex radius.
+MIDPOINT_RADIUS_FACTOR = 0.6
+
+# Total width of a fold line's hitbox, centered on the line (a click or a dragged point there lands on the fold).
+FOLD_HITBOX_PX = CUT_HITBOX_PX

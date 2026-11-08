@@ -21,6 +21,9 @@ class CutPoint:
     # cut that starts at that vertex.
     vertex: NetVertex | None = None
 
+    # Set if the point was placed on a fold line (exactly on it): only for points inside the net.
+    fold: HalfEdge | None = None
+
     @property
     def on_perimeter(self) -> bool:
         return self.edge is not None

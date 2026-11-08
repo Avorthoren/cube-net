@@ -75,3 +75,7 @@ def test_every_piece_between_vertices_stays_in_one_face(x1: F, y1: F, x2: F, y2:
         assert mid.kind in (SurfacePointKind.FACE, SurfacePointKind.EDGE)
         for p in (a, b):
             assert mid.faces <= surface_point_at(net, p).faces  # both ends lie on the piece's face
+
+
+def test_zero_length_segment_has_no_pieces(net: Net) -> None:
+    assert pieces(net, Vec(11, 12), Vec(11, 12)) == []

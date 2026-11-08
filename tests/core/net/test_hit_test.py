@@ -75,3 +75,35 @@ def test_edge_from_vertex(net: Net) -> None:
     assert c1 is not None
     he = boundary_edge_from(net, c1)
     assert he.origin is c1 and he.twin.region is None
+
+
+class TestFoldEdgeAt:
+    half_width = F(1, 20)
+
+    def names(self, net: Net, he: HalfEdge | None) -> set[Vec] | None:
+        return None if he is None else {he.origin.position, he.destination.position}
+
+    def test_strip_on_both_sides_of_the_fold(self, net: Net) -> None:
+        from cube_net.core.net import fold_edge_at
+
+        ch = {Vec(11, 13), Vec(11, 12)}  # the fold C_1-H_1 between faces 4 and 2
+        for x in (F(1097, 100), 11, F(1103, 100)):
+            assert self.names(net, fold_edge_at(net, Vec(x, F(25, 2)), self.half_width)) == ch
+
+    def test_outside_the_strip_and_beyond_the_ends(self, net: Net) -> None:
+        from cube_net.core.net import fold_edge_at
+
+        assert fold_edge_at(net, Vec(F(1107, 100), F(25, 2)), self.half_width) is None  # too far to the side
+        assert fold_edge_at(net, Vec(F(1097, 100), 11), self.half_width) is None  # past E_1, along the fold E_1-F_1
+        assert fold_edge_at(net, Vec(10, F(25, 2)), self.half_width) is None  # A_2-E_2 is a cut, not a fold
+
+    def test_closest_wins_but_preferred_stays(self, net: Net) -> None:
+        from cube_net.core.net import fold_edge_at
+
+        near_corner = Vec(F(1102, 100), F(1201, 100))  # near H_1: 0.02 from C_1-H_1, 0.01 from H_1-G_1
+        closest = fold_edge_at(net, near_corner, self.half_width)
+        assert self.names(net, closest) == {Vec(11, 12), Vec(12, 12)}
+        other = fold_edge_at(net, Vec(11, F(25, 2)), self.half_width)
+        assert other is not None
+        assert fold_edge_at(net, near_corner, self.half_width, prefer=other) is other
+        assert fold_edge_at(net, Vec(F(23, 2), F(25, 2)), self.half_width, prefer=other) is None  # left its hitbox

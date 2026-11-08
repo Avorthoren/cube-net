@@ -1,7 +1,15 @@
 from collections.abc import Callable
 from fractions import Fraction as F
 
-from cube_net.core.cutting import CutLine, CutPoint, project_onto, segment_allowed, strictly_inside
+from cube_net.core.cutting import (
+    CutLine,
+    CutPoint,
+    invalid_segments,
+    project_onto,
+    segment_allowed,
+    segment_valid,
+    strictly_inside,
+)
 from cube_net.core.geometry import Vec
 from cube_net.core.net import HalfEdge, Net
 
@@ -55,3 +63,20 @@ def test_end_on_the_start_is_rejected(net: Net, cut: Callable[[str], HalfEdge]) 
     line = line_from(top, v("11.5", "14"), v("11.5", "13.5"))
     assert not segment_allowed(net, line, CutPoint(v("11.5", "14"), top))
     assert segment_allowed(net, line, CutPoint(v("11.7", "14"), top))  # same cut, other point: fine
+
+
+def test_segment_valid_checks_any_segment_of_the_line(net: Net, cut: Callable[[str], HalfEdge]) -> None:
+    top = cut("B_1-A_1")
+    good = [CutPoint(v("11.5", "14"), top), CutPoint(v("11.5", "13.5")), CutPoint(v("11.7", "14"), top)]
+    assert all(segment_valid(net, good, i) for i in range(2))
+    assert invalid_segments(net, good, (0, 1)) == []
+    outside = [good[0], CutPoint(v("10.5", "13.5")), good[2]]  # the middle point is in the empty corner
+    assert invalid_segments(net, outside, (0, 1)) == [0, 1]
+    crossing = [
+        CutPoint(v("11.2", "14"), top),
+        CutPoint(v("11.8", "13.5")),
+        CutPoint(v("11.2", "13.5")),
+        CutPoint(v("11.8", "14"), top),
+    ]
+    assert invalid_segments(net, crossing, (0, 1, 2)) == [0, 2]  # the first and the last segments cross
+    assert invalid_segments(net, good, (-1, 2, 5)) == []  # indices outside the line are ignored

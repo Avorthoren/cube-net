@@ -48,7 +48,7 @@ def test_segment_has_face_colours_and_halo() -> None:
 
 def test_flash_is_black_on_top() -> None:
     item = item_with_line()
-    item.set_flash((Vec(F(23, 2), F(27, 2)), Vec(12, F(27, 2))))
+    item.set_flash(((Vec(F(23, 2), F(27, 2)), Vec(12, F(27, 2))),))
     image, world = render(item)
     assert image.pixelColor(world.map(QPointF(11.75, 13.5)).toPoint()) == palette.REJECTED
     item.set_flash(None)
@@ -106,3 +106,33 @@ def test_counterpart_images_are_small_black_dots_while_drawing() -> None:
     assert image.pixelColor(center.toPoint()) == palette.COUNTERPART_IMAGE
     r = net_style.VERTEX_RADIUS_PX * net_style.DERIVED_POINT_RADIUS_FACTOR
     assert image.pixelColor((center + QPointF(r + 2, -2)).toPoint()) != palette.COUNTERPART_IMAGE  # small dot only
+
+
+def test_midpoints_only_when_switched_on() -> None:
+    item = item_with_line()
+    assert item.midpoints() == []
+    item.set_show_midpoints(True)
+    assert item.midpoints() == [Vec(F(23, 2), F(53, 4))]
+
+
+def test_midpoint_circles_are_hollow() -> None:
+    """Only a thin outline: what's under the circle stays visible, and just outside the line nothing else changes."""
+    plain = item_with_line()
+    circled = item_with_line()
+    circled.set_show_midpoints(True)
+    without, world = render(plain)
+    with_circle, _ = render(circled)
+    center = world.map(QPointF(11.5, 13.25))
+    assert with_circle.pixelColor(center.toPoint()) == without.pixelColor(center.toPoint())
+    r = net_style.VERTEX_RADIUS_PX * net_style.MIDPOINT_RADIUS_FACTOR
+    across_the_outline = [(center + QPointF(dx, 0)).toPoint() for dx in range(1, round(r) + 3)]
+    assert any(with_circle.pixelColor(q) != without.pixelColor(q) for q in across_the_outline)
+
+
+def test_a_line_off_the_net_while_dragging_is_painted_without_colours() -> None:
+    item = CutLineItem(default_net())
+    item.set_area(QRectF(5, 5, 13, 14))
+    item.set_points([CutPoint(Vec(F(23, 2), F(27, 2))), CutPoint(Vec(9, 14)), CutPoint(Vec(9, 14))])
+    image, world = render(item)  # must not raise, even with a zero-length segment
+    assert image.pixelColor(world.map(QPointF(9, 14)).toPoint()) == palette.DERIVED_POINT
+    assert item.crossings() == []

@@ -3,6 +3,7 @@ from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QColor, QImage, QPainter, QTransform
 from PyQt6.QtWidgets import QApplication
 
+from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import default_net
 from cube_net.ui import palette
@@ -113,3 +114,25 @@ def test_single_face_circle_has_no_radius_line() -> None:
     painter.end()
     for y in range(14, 29):  # straight up from the center: all face colour, no outline pixels
         assert image.pixelColor(30, y) == palette.FACE_COLORS[2], y
+
+
+def test_highlighted_fold_is_centered_on_the_line() -> None:
+    """Fold C_1-H_1 at x = 11, between faces 4 and 2: highlighted, it covers both sides, unlike a cut."""
+    net = default_net()
+    item = NetItem(net)
+    fold = next(
+        he for he in net.fold_edges() if {he.origin.position, he.destination.position} == {Vec(11, 13), Vec(11, 12)}
+    )
+    item.set_highlight_fold(fold)
+    assert item.highlight_fold() is fold
+    image = QImage(500, 600, QImage.Format.Format_RGB32)
+    image.fill(QColor("black"))
+    world = QTransform().scale(SCALE, -SCALE).translate(-ORIGIN.x(), -ORIGIN.y())
+    painter = QPainter(image)
+    painter.setTransform(world)
+    item.paint(painter, None)
+    painter.end()
+    off_center = max(net_style.HIGHLIGHT_WIDTH_PX / 2 - 1.5, 0.5) / SCALE
+    expected = (palette.FACE_COLORS[2], palette.FACE_COLORS[4])
+    for side in (-off_center, off_center):
+        assert colour_at(image, world, 11 + side, 12.525) in expected

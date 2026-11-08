@@ -141,3 +141,199 @@ def test_projection_onto_the_end_of_a_cut_is_that_vertex(net: Net, cut: Callable
     start = editor.cut_line.points[0]
     assert start.position == Vec(11, 14)
     assert start.vertex is not None and start.vertex.position == Vec(11, 14)
+
+
+@pytest.fixture
+def editing(net: Net, cut: Callable[[str], HalfEdge]) -> Editor:
+    """The corner cut of docs/idea.txt, closed: x (11.5, 14), y (11.5, 13.5), z (12, 13.5)."""
+    editor = Editor(net)
+    editor.click(v("11.5", "14"), cut("B_1-A_1"))
+    editor.click(v("11.5", "13.5"), None)
+    editor.click(v("12", "13.5"), cut("D_1-B_1"))
+    return editor
+
+
+def test_insert_midpoint(editing: Editor) -> None:
+    assert editing.insert_midpoint(0) is None
+    assert positions(editing) == [v("11.5", "14"), v("11.5", "13.75"), v("11.5", "13.5"), v("12", "13.5")]
+    assert editing.state is EditorState.CUT_EDITING
+
+
+def test_insert_midpoint_respects_the_limit(editing: Editor) -> None:
+    for _ in range(MAX_POINTS_AFTER_FIRST - 2):
+        assert editing.insert_midpoint(0) is None
+    assert editing.insert_midpoint(0) is not None
+    assert len(positions(editing)) == MAX_POINTS_AFTER_FIRST + 1
+
+
+def test_delete_inner_point(editing: Editor) -> None:
+    assert editing.delete_point(1) is None  # x-z is a valid shortcut inside face 1
+    assert positions(editing) == [v("11.5", "14"), v("12", "13.5")]
+
+
+@pytest.mark.parametrize("i", [0, 2])
+def test_ends_cannot_be_deleted(editing: Editor, i: int) -> None:
+    with pytest.raises(ValueError, match="only inner points"):
+        editing.delete_point(i)
+
+
+def test_rejected_delete_previews_the_line_without_the_point(net: Net, cut: Callable[[str], HalfEdge]) -> None:
+    """A line bent around the reflex corner C_1: without its second point it would leave the net."""
+    editor = Editor(net)
+    editor.click(v("10.5", "13"), cut("C_1-A_2"))
+    editor.click(v("11.2", "12.8"), None)
+    editor.click(v("11.5", "13.5"), None)
+    editor.click(v("11.5", "14"), cut("B_1-A_1"))
+    before = positions(editor)
+    rejection = editor.delete_point(1)
+    assert rejection is not None
+    assert rejection.segments == ((v("10.5", "13"), v("11.5", "13.5")),)
+    assert rejection.preview is not None
+    assert [p.position for p in rejection.preview] == [before[0], before[2], before[3]]
+    assert positions(editor) == before  # nothing changed
+
+
+def test_move_inner_point(editing: Editor) -> None:
+    assert editing.move_point(1, editing.drag_target(1, v("11.3", "13.3"))) is None
+    assert positions(editing)[1] == v("11.3", "13.3")
+
+
+def test_rejected_move_changes_nothing_and_names_the_bad_segments(editing: Editor) -> None:
+    before = positions(editing)
+    rejection = editing.move_point(1, editing.drag_target(1, v("10.5", "13.5")))  # the empty corner
+    assert rejection is not None
+    target = v("10.5", "13.5")
+    assert rejection.segments == ((before[0], target), (target, before[2]))
+    assert positions(editing) == before
+
+
+def test_endpoint_slides_along_its_cut_and_stops_at_its_end(editing: Editor) -> None:
+    assert editing.drag_target(0, v("11.8", "14.3")).position == v("11.8", "14")  # projected onto the cut
+    at_end = editing.drag_target(0, v("15", "14"))  # far beyond B_1
+    assert at_end.position == Vec(12, 14)
+    assert at_end.vertex is not None and at_end.vertex.position == Vec(12, 14)
+    far_below = editing.drag_target(0, v("11.8", "5"))  # it never leaves its cut
+    assert far_below.position == v("11.8", "14")
+
+
+def test_endpoint_at_a_vertex_may_slide_along_either_cut(net: Net) -> None:
+    editor = Editor(net)
+    editor.click(Vec(11, 13), None, vertex_at(net, 11, 13))  # C_1: cuts C_1-A_1 and C_1-A_2 meet here
+    editor.click(v("11.5", "12.5"), None)
+    editor.click(Vec(12, 12), None, vertex_at(net, 12, 12))
+    assert editor.drag_target(0, v("10.5", "13.1")).position == v("10.5", "13")
+    assert editor.drag_target(0, v("11.1", "13.5")).position == v("11", "13.5")
+
+
+def test_moving_an_endpoint_validates_its_segment(editing: Editor) -> None:
+    assert editing.move_point(2, editing.drag_target(2, Vec(12, 14))) is None  # z up to the end of its cut: B_1
+    before = positions(editing)
+    assert before[2] == Vec(12, 14)
+    rejection = editing.move_point(0, editing.drag_target(0, Vec(12, 14)))  # x to B_1 too: both ends at one point
+    assert rejection is not None
+    assert positions(editing) == before
+
+
+def test_editing_only_in_cut_editing(net: Net, cut: Callable[[str], HalfEdge]) -> None:
+    editor = Editor(net)
+    with pytest.raises(RuntimeError, match="only be edited in CUT_EDITING"):
+        editor.insert_midpoint(0)
+    editor.click(v("11.5", "14"), cut("B_1-A_1"))
+    with pytest.raises(RuntimeError, match="only be edited in CUT_EDITING"):
+        editor.drag_target(0, v("11.8", "14"))
+
+
+def fold_named(net: Net, a: Vec, b: Vec) -> HalfEdge:
+    return next(he for he in net.fold_edges() if {he.origin.position, he.destination.position} == {a, b})
+
+
+class TestFolds:
+    def test_click_on_a_fold_puts_the_point_exactly_on_it(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        editor.click(v("11.5", "14"), cut("B_1-A_1"))
+        fold = fold_named(net, Vec(11, 13), Vec(12, 13))
+        assert editor.click(v("11.3", "13.02"), None, None, fold) is None
+        assert editor.cut_line is not None
+        point = editor.cut_line.points[1]
+        assert point.position == v("11.3", "13")
+        assert point.fold is fold and not point.on_perimeter
+
+    def test_dragging_an_inner_point_onto_a_fold(self, editing: Editor) -> None:
+        fold = fold_named(editing.net, Vec(11, 13), Vec(12, 13))
+        target = editing.drag_target(1, v("11.3", "13.03"), fold=fold)
+        assert target.position == v("11.3", "13") and target.fold is fold
+        assert editing.move_point(1, target) is None
+        assert editing.drag_target(1, v("11.3", "13.3")).fold is None  # out of the hitbox: free again
+
+    def test_end_of_a_fold_is_on_the_perimeter_so_rejected(self, editing: Editor) -> None:
+        fold = fold_named(editing.net, Vec(11, 13), Vec(12, 13))
+        target = editing.drag_target(1, v("10.9", "13.02"), fold=fold)  # beyond C_1: projected onto the end
+        assert target.position == Vec(11, 13)
+        assert editing.move_point(1, target) is not None
+
+
+class TestInnerPointsStayOffThePerimeter:
+    def test_release_over_a_perimeter_hitbox_is_rejected(self, editing: Editor) -> None:
+        before = positions(editing)
+        close = v("11.5", "13.98")  # strictly inside the net, but in the hitbox of the cut above
+        target = editing.drag_target(1, close)
+        rejection = editing.move_point(1, target, over_perimeter=True)
+        assert rejection is not None
+        assert rejection.segments == ((before[0], close), (close, before[2]))
+        assert positions(editing) == before
+
+    def test_the_same_position_is_fine_when_not_over_a_hitbox(self, editing: Editor) -> None:
+        assert editing.move_point(1, editing.drag_target(1, v("11.6", "13.8"))) is None
+
+    def test_endpoints_are_not_affected(self, editing: Editor) -> None:
+        assert editing.move_point(0, editing.drag_target(0, v("11.8", "14")), over_perimeter=True) is None
+
+
+class TestEndpointWalk:
+    """The bug from session-20261108-190056-647-18738.log: an end on H_1-E_1, dragged down, stopped at E_1."""
+
+    @pytest.fixture
+    def line_to_h1_e1(self, net: Net, cut: Callable[[str], HalfEdge]) -> Editor:
+        editor = Editor(net)
+        editor.click(Vec(12, 13), None, vertex_at(net, 12, 13))  # D_1
+        editor.click(v("11.047", "11.373"), cut("H_1-E_1"))
+        assert editor.state is EditorState.CUT_EDITING
+        return editor
+
+    def test_past_the_end_of_the_cut_in_one_drag(self, line_to_h1_e1: Editor) -> None:
+        target = line_to_h1_e1.drag_target(1, v("11.033", "10.713"))
+        assert target.position == v("11", "10.713")
+        assert target.vertex is None
+        assert target.edge is not None and target.edge.region is not None and target.edge.region.face == 5
+
+    def test_and_back_again(self, line_to_h1_e1: Editor) -> None:
+        down = line_to_h1_e1.drag_target(1, v("11.033", "10.713"))
+        back = line_to_h1_e1.drag_target(1, v("11.013", "11.293"), current=down)
+        assert back.position == v("11", "11.293")
+
+    def test_step_by_step_as_the_mouse_moves(self, line_to_h1_e1: Editor) -> None:
+        current = None
+        for y in ("11.2", "11.05", "11", "10.95", "10.8"):
+            current = line_to_h1_e1.drag_target(1, v("11.02", y), current=current)
+            assert current.position == v("11", y)
+
+    def test_the_image_goes_around_the_corner_with_it(self, line_to_h1_e1: Editor) -> None:
+        from cube_net.core.cutting import counterpart_image, endpoint_point
+
+        net = line_to_h1_e1.net
+        target = line_to_h1_e1.drag_target(1, v("11.033", "10.713"))
+        image = counterpart_image(net, target)
+        assert image is not None
+        assert image.point == endpoint_point(net, target)
+        assert image.position.x == 10 and F(12) < image.position.y < F(13)  # on E_2-A_2
+
+    def test_stops_where_it_gets_no_closer(self, line_to_h1_e1: Editor) -> None:
+        target = line_to_h1_e1.drag_target(1, v("9", "9"))  # towards the corner A_3 and no further
+        assert target.position == Vec(11, 10)
+
+    def test_snaps_to_a_vertex_in_whose_circle_the_mouse_is(self, line_to_h1_e1: Editor, net: Net) -> None:
+        e1 = vertex_at(net, 11, 11)
+        target = line_to_h1_e1.drag_target(1, v("11.02", "11.02"), vertex=e1)
+        assert target.position == Vec(11, 11) and target.vertex is e1
+        assert line_to_h1_e1.move_point(1, target) is None
+        assert positions(line_to_h1_e1)[1] == Vec(11, 11)

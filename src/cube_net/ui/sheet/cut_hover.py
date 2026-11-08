@@ -5,7 +5,7 @@ from fractions import Fraction
 from PyQt6.QtCore import QObject
 
 from cube_net.core.geometry import quantize
-from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_edge_at, boundary_vertex_at
+from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_edge_at, boundary_vertex_at, fold_edge_at
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.sheet_view import SheetView
 
@@ -28,6 +28,12 @@ def perimeter_target(view: SheetView, net: Net, x: float, y: float) -> tuple[Net
     if vertex is not None:
         return vertex, None
     return None, boundary_edge_at(net, p, cut_hitbox(view))
+
+
+def fold_target(view: SheetView, net: Net, x: float, y: float, prefer: HalfEdge | None = None) -> HalfEdge | None:
+    """The fold line whose hitbox contains sheet point (x, y), if any; `prefer` wins while (x, y) is in its hitbox."""
+    half_width = Fraction(net_style.FOLD_HITBOX_PX / 2 / view.scale_factor()).limit_denominator(100_000)
+    return fold_edge_at(net, quantize(x, y), half_width, prefer)
 
 
 class CutHover(QObject):

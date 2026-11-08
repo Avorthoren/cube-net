@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 from PyQt6.QtCore import QSettings, Qt
+from PyQt6.QtWidgets import QToolBar
 from pytestqt.qtbot import QtBot
 
 from cube_net.ui.app_settings import AppSettings
@@ -310,3 +311,75 @@ def test_cut_line_labels_follow_the_line_and_the_setting(qtbot: QtBot, tmp_path:
     assert window.cut_tool.item.labels() == ()
     window.show_labels_action.setChecked(True)
     assert len(window.cut_tool.item.labels()) == 2
+
+
+def test_cut_line_edits_recorded_and_labels_follow(qtbot: QtBot, tmp_path: Path) -> None:
+    from cube_net.ui.sheet import net_style
+
+    window = MainWindow(settings=settings_in(tmp_path, record=True), session_dir=tmp_path)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    view = window.sheet_view
+    inside = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+    view.left_pressed.emit(11.5, 14 - inside)
+    view.left_pressed.emit(11.5, 13.5)
+    view.left_pressed.emit(12 - inside, 13.5)
+    view.left_pressed.emit(11.5, 13.75)  # a midpoint: insert
+    view.left_pressed.emit(11.5, 13.75)  # that new point: drag it
+    view.mouse_moved.emit(11.25, 13.75)
+    view.left_released.emit(11.25, 13.75)
+    view.left_pressed.emit(11.25, 13.75)  # drag it off the net: the labels of the line step aside
+    view.mouse_moved.emit(9.0, 14.5)
+    assert window.cut_tool.item.labels() == ()
+    view.left_released.emit(9.0, 14.5)  # rejected: back in place, labels back
+    assert len(window.cut_tool.item.labels()) == 6
+    assert window.recorder is not None
+    lines = session_lines(window.recorder.log.path)
+    assert lines[-3:] == ["cut insert 1 11.500,13.750", "cut move 1 11.250,13.750", "cut rejected 9.000,14.500"]
+    window.stop_recording("test over")
+
+
+def test_no_panning_from_a_cut_line_point_off_the_net(qtbot: QtBot, tmp_path: Path) -> None:
+    from PyQt6.QtCore import QPointF
+
+    from cube_net.ui.sheet import net_style
+
+    window = MainWindow(settings=settings_in(tmp_path, record=False))
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    view = window.sheet_view
+    inside = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+    view.left_pressed.emit(11.5, 14 - inside)
+    view.left_pressed.emit(11.5, 13.5)
+    view.left_pressed.emit(12 - inside, 13.5)
+    above = 14 + net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()  # in the start point's circle, off the net
+    pos = view.from_sheet(QPointF(11.5, above)).toPoint()
+    qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+    assert not view.is_panning()
+    qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+
+
+def test_logs_button_at_the_bottom_of_the_panel(qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    opened: list[object] = []
+
+    def fake_open(directory: Path | None) -> bool:
+        opened.append(directory)
+        return False
+
+    monkeypatch.setattr("cube_net.ui.main_window.open_session_log_folder", fake_open)
+    window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+    qtbot.addWidget(window)
+    window.resize(800, 700)
+    window.show()
+    qtbot.waitExposed(window)
+    toolbar = window.findChild(QToolBar, "instruments")
+    assert toolbar is not None
+    button = toolbar.widgetForAction(window.open_logs_action)
+    bounds = toolbar.widgetForAction(window.bounding.action)
+    assert button is not None and bounds is not None
+    assert button.y() > toolbar.height() / 2 > bounds.y()  # at the bottom, with the rest at the top
+    window.open_logs_action.trigger()
+    assert opened == [tmp_path]
+    assert "Could not open" in window.statusBar().currentMessage()

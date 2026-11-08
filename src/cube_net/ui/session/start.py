@@ -10,7 +10,8 @@ import platform
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QT_VERSION_STR, QStandardPaths
+from PyQt6.QtCore import QT_VERSION_STR, QStandardPaths, QUrl
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QApplication
 
 from cube_net import __version__
@@ -28,6 +29,13 @@ def session_log_directory() -> Path:
     """Where session logs go, e.g. ~/.local/share/cube_net/Cube Net/sessions on Linux."""
     base = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.AppDataLocation)
     return Path(base) / "sessions"
+
+
+def open_session_log_folder(directory: Path | None = None) -> bool:
+    """Open the folder with the session logs in the system's file manager. Returns False if that failed."""
+    folder = directory or session_log_directory()
+    folder.mkdir(parents=True, exist_ok=True)
+    return QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
 
 def start_session_recording(app: QApplication, reason: str, directory: Path | None = None) -> SessionRecorder:

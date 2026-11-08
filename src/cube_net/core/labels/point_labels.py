@@ -23,6 +23,10 @@ class PointLabels:
             self._next += 1
         return name
 
+    def upcoming(self, offset: int = 0) -> str:
+        """The name `register` would give after `offset` more registrations (nothing is registered)."""
+        return excel_label(self._next + offset)
+
     def name(self, point: SurfacePoint) -> str | None:
         """The name of `point`, or None if it was never registered."""
         return self._names.get(point)

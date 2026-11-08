@@ -1,4 +1,4 @@
-"""Finding the cut or the perimeter vertex under the mouse (docs/plan.md, section 4.1).
+"""Finding the cut, the perimeter vertex or the fold line under the mouse (docs/plan.md, section 4.1).
 
 A cut's hitbox lies inside the region it bounds (docs/idea.txt, note 4): a strip of width `max_distance` along the
 inner side of the cut. So when two parts of the net touch along a segment, each side reaches only its own cut.
@@ -61,3 +61,29 @@ def boundary_edge_from(net: Net, vertex: NetVertex) -> HalfEdge:
         if he.origin is vertex:
             return he
     raise ValueError(f"{vertex} is not on the perimeter")
+
+
+def fold_edge_at(net: Net, p: Vec, half_width: Fraction, prefer: HalfEdge | None = None) -> HalfEdge | None:
+    """The fold whose hitbox contains `p`, or None. A fold's hitbox is a strip centered on it, like the line drawn for
+    it: `half_width` to each side, and not beyond its ends. The closest fold wins (ties: the lower id), except that
+    `prefer` keeps winning for as long as `p` is in its hitbox: a point on a fold stays there until it leaves it.
+    """
+    best: tuple[Fraction, int, HalfEdge] | None = None
+    limit = half_width * half_width
+    for he in net.fold_edges():
+        a, b = he.origin.position, he.destination.position
+        d = b - a
+        length2 = d.length_squared()
+        offset = p - a
+        t = offset.dot(d)
+        if t < 0 or t > length2:
+            continue
+        side = d.cross(offset)
+        distance2 = side * side / length2
+        if distance2 > limit:
+            continue
+        if he is prefer:
+            return he
+        if best is None or (distance2, he.id) < best[:2]:
+            best = (distance2, he.id, he)
+    return None if best is None else best[2]

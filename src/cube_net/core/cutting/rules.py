@@ -5,7 +5,9 @@ new segment a-b may touch the perimeter only at a or b, and only if that end is 
 cut line only at a, where it continues the previous segment.
 """
 
+from collections.abc import Iterable, Sequence
 from fractions import Fraction
+from itertools import pairwise
 
 from cube_net.core.cutting.cut_line import CutLine, CutPoint
 from cube_net.core.geometry import IntersectionKind, Vec, classify_segments, on_segment
@@ -30,15 +32,21 @@ def strictly_inside(net: Net, p: Vec) -> bool:
     return not any(on_segment(p, he.origin.position, he.destination.position) for he in net.boundary_edges())
 
 
-def segment_allowed(net: Net, line: CutLine, end: CutPoint) -> bool:
-    """May the segment from the line's last point to `end` be added?"""
-    a, b = line.last, end
+def segment_valid(net: Net, points: Sequence[CutPoint], i: int) -> bool:
+    """Is segment i (from points[i] to points[i + 1]) of the polyline `points` valid?
+
+    It must lie strictly inside the net except for ends on the perimeter, touch the perimeter only at such ends, and
+    touch the rest of the polyline only where it continues it: at its own ends, and only with the neighbouring
+    segments (no overlap, no going back along them).
+    """
+    a, b = points[i], points[i + 1]
     if a.position == b.position:
         return False
-    if not b.on_perimeter and not strictly_inside(net, b.position):
-        return False
+    for p in (a, b):
+        if not p.on_perimeter and not strictly_inside(net, p.position):
+            return False
     if not strictly_inside(net, (a.position + b.position) / 2):
-        return False  # e.g. leaving the net straight from the starting point
+        return False  # e.g. leaving the net straight from a point on the perimeter
     for he in net.boundary_edges():
         hit = classify_segments(a.position, b.position, he.origin.position, he.destination.position)
         if hit.kind is IntersectionKind.DISJOINT:
@@ -48,12 +56,24 @@ def segment_allowed(net: Net, line: CutLine, end: CutPoint) -> bool:
         touch = hit.point
         if not ((touch == a.position and a.on_perimeter) or (touch == b.position and b.on_perimeter)):
             return False
-    segments = line.segments()
-    for i, (c, d) in enumerate(segments):
+    for j, (c, d) in enumerate(pairwise(p.position for p in points)):
+        if j == i:
+            continue
         hit = classify_segments(a.position, b.position, c, d)
         if hit.kind is IntersectionKind.DISJOINT:
             continue
-        continues_previous = i == len(segments) - 1 and hit.kind is IntersectionKind.TOUCH and hit.point == a.position
-        if not continues_previous:
+        shared = a.position if j == i - 1 else b.position if j == i + 1 else None
+        if not (hit.kind is IntersectionKind.TOUCH and hit.point == shared):
             return False
     return True
+
+
+def invalid_segments(net: Net, points: Sequence[CutPoint], indices: Iterable[int]) -> list[int]:
+    """Which of the segments `indices` of the polyline `points` are invalid."""
+    return [i for i in indices if 0 <= i < len(points) - 1 and not segment_valid(net, points, i)]
+
+
+def segment_allowed(net: Net, line: CutLine, end: CutPoint) -> bool:
+    """May the segment from the line's last point to `end` be added?"""
+    points = [*line.points, end]
+    return segment_valid(net, points, len(points) - 2)

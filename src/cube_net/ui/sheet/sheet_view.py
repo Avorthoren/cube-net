@@ -36,6 +36,9 @@ class SheetView(QGraphicsView):
     # Left button pressed at a sheet point (x, y) that doesn't start panning.
     left_pressed = pyqtSignal(float, float)
 
+    # Left button released at a sheet point (x, y), unless it ended panning.
+    left_released = pyqtSignal(float, float)
+
     # The zoom changed: new scale in pixels per unit.
     zoom_changed = pyqtSignal(float)
 
@@ -60,6 +63,7 @@ class SheetView(QGraphicsView):
         self._on_net: HitTest = lambda _x, _y: False
         self._pan_last: QPoint | None = None
         self._panning_enabled = True
+        self._press_modifiers = Qt.KeyboardModifier.NoModifier
         self._pending_initial_view: Box | None = None
         # Where the viewport's top-left corner was in the window, so the sheet can be kept in place when it moves.
         self._viewport_origin: QPoint | None = None
@@ -117,6 +121,10 @@ class SheetView(QGraphicsView):
 
     def sheet_rect(self) -> QRectF:
         return QRectF(self._sheet)
+
+    def press_modifiers(self) -> Qt.KeyboardModifier:
+        """The modifier keys held during the latest mouse press."""
+        return self._press_modifiers
 
     def is_panning(self) -> bool:
         """Whether the user is dragging the sheet right now."""
@@ -177,6 +185,7 @@ class SheetView(QGraphicsView):
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
             return
+        self._press_modifiers = event.modifiers()
         if event.button() == Qt.MouseButton.LeftButton:
             p = self.to_sheet(event.position())
             if self._panning_enabled and not self.is_on_net(p.x(), p.y()):
@@ -201,9 +210,13 @@ class SheetView(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent | None) -> None:
-        if event is not None and event.button() == Qt.MouseButton.LeftButton and self._pan_last is not None:
-            self._pan_last = None
-            self.viewport().unsetCursor()
+        if event is not None and event.button() == Qt.MouseButton.LeftButton:
+            if self._pan_last is not None:
+                self._pan_last = None
+                self.viewport().unsetCursor()
+            else:
+                p = self.to_sheet(event.position())
+                self.left_released.emit(p.x(), p.y())
             event.accept()
             return
         super().mouseReleaseEvent(event)

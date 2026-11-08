@@ -4,9 +4,10 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QToolBar, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QSizePolicy, QToolBar, QWidget
 
 from cube_net.core.bounding import min_area_rectangle
+from cube_net.core.cutting import CutLine
 from cube_net.core.editor import Editor
 from cube_net.core.geometry import Vec, quantize
 from cube_net.core.labels import PointLabels, cut_line_labels, vertex_labels
@@ -21,6 +22,7 @@ from cube_net.ui.session.start import (
     STARTED_BY_USER,
     STOPPED_BY_USER,
     WINDOW_CLOSED,
+    open_session_log_folder,
     start_session_recording,
     stop_session_recording,
 )
@@ -75,7 +77,8 @@ class MainWindow(QMainWindow):
         self.editor = Editor(self.net)
         self.cut_tool = CutTool(self.sheet_view, self.editor, self.ruler_tool)
         self.cut_tool.point_added.connect(self._on_cut_point)
-        self.cut_tool.point_added.connect(lambda _point: self._update_vertex_labels())
+        self.cut_tool.edited.connect(self._on_cut_edited)
+        self.cut_tool.line_changed.connect(self._update_vertex_labels)
         self.cut_tool.rejected.connect(self._on_cut_rejected)
         self.sheet_view.set_net_hit_test(self._is_on_net)
         self.sheet_view.show_initial_view(net_box)
@@ -143,7 +146,11 @@ class MainWindow(QMainWindow):
     def _is_on_net(self, x: float, y: float) -> bool:
         """On the net, or inside a perimeter vertex's circle (which sticks out of the net): no panning there."""
         p = quantize(x, y)
-        return self.net.contains(p) or boundary_vertex_at(self.net, p, vertex_radius(self.sheet_view)) is not None
+        return (
+            self.net.contains(p)
+            or boundary_vertex_at(self.net, p, vertex_radius(self.sheet_view)) is not None
+            or self.cut_tool.claims(x, y)
+        )
 
     def _create_instruments(self) -> None:
         toolbar = QToolBar("Instruments", self)
@@ -171,10 +178,22 @@ class MainWindow(QMainWindow):
         self.bounding.toggled.connect(self._on_bounding_toggled)
         self._update_bounding()
 
+        spacer = QWidget(toolbar)  # pushes what follows to the bottom of the panel
+        spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        toolbar.addWidget(spacer)
+        self.open_logs_action = QAction("Logs", self)
+        self.open_logs_action.setToolTip("Open the folder with session logs")
+        self.open_logs_action.triggered.connect(self._on_open_logs)
+        toolbar.addAction(self.open_logs_action)
+
     def _update_bounding(self) -> None:
         """Recompute the minimum-area bounding rectangle of the current net."""
         rectangle = min_area_rectangle(v.position for v in self.net.vertices)
         self.bounding.update(rectangle, self.project_settings.area_threshold)
+
+    def _on_open_logs(self) -> None:
+        if not open_session_log_folder(self._session_dir):
+            self.statusBar().showMessage("Could not open the folder with session logs", 5000)
 
     def _on_bounding_toggled(self, checked: bool) -> None:
         if self.recorder is not None:
@@ -194,6 +213,10 @@ class MainWindow(QMainWindow):
     def _on_cut_point(self, point: Vec) -> None:
         if self.recorder is not None:
             self.recorder.note("cut", self.editor.state.value, format_point(point))
+
+    def _on_cut_edited(self, action: str, index: int, point: Vec) -> None:
+        if self.recorder is not None:
+            self.recorder.note("cut", action, index, format_point(point))
 
     def _on_cut_rejected(self, point: Vec) -> None:
         if self.recorder is not None:
@@ -237,8 +260,11 @@ class MainWindow(QMainWindow):
         """Debug labels of the net's vertices and of the cut line's new points and images (if switched on)."""
         show = self.settings.show_vertex_labels
         self.sheet_view.set_vertex_labels(vertex_labels(self.net, self.point_labels) if show else None)
-        line = self.editor.cut_line
-        cut_labels = cut_line_labels(self.net, line, self.point_labels) if show and line is not None else []
+        points = self.cut_tool.item.points()
+        try:
+            cut_labels = cut_line_labels(self.net, CutLine(list(points)), self.point_labels) if show else []
+        except ValueError:  # a point is being dragged off the net: it has no cube point to name for now
+            cut_labels = []
         self.cut_tool.item.set_labels(cut_labels)
 
     def _resize_to_screen(self, fraction: float = 0.8) -> None:

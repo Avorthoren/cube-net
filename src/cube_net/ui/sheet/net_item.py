@@ -3,7 +3,7 @@
 Painted bottom to top:
 1. Hatch: each region is white with coloured triangles in its face's own frame (so the pattern rotates with it).
 2. Fold edges: two-colour dashes centred on the cube edge.
-3. Cuts (the perimeter): dashes drawn fully inside their region; a highlighted cut is drawn wider.
+3. Cuts (the perimeter): dashes drawn fully inside their region; a highlighted cut or fold edge is drawn wider.
 4. Vertex circles on the perimeter, one equal sector per face of the vertex; a highlighted vertex gets a ring.
 5. Optional debug labels (A_1, B_2, ...) next to all vertices, placed outside the net.
 Hatch is drawn in sheet units; lines and circles have constant pixel sizes, so they are drawn in device pixels.
@@ -45,6 +45,7 @@ class NetItem(QGraphicsItem):
         self._labels: dict[NetVertex, VertexLabel] | None = None
         self._highlight: HalfEdge | None = None
         self._highlight_vertex: NetVertex | None = None
+        self._highlight_fold: HalfEdge | None = None
 
     def set_net(self, net: Net) -> None:
         self.prepareGeometryChange()
@@ -52,6 +53,7 @@ class NetItem(QGraphicsItem):
         self._labels = None
         self._highlight = None
         self._highlight_vertex = None
+        self._highlight_fold = None
         self.update()
 
     def set_highlight(self, cut: HalfEdge | None) -> None:
@@ -62,6 +64,15 @@ class NetItem(QGraphicsItem):
 
     def highlight(self) -> HalfEdge | None:
         return self._highlight
+
+    def set_highlight_fold(self, fold: HalfEdge | None) -> None:
+        """Draw this fold edge highlighted (None: no highlight)."""
+        if fold is not self._highlight_fold:
+            self._highlight_fold = fold
+            self.update()
+
+    def highlight_fold(self) -> HalfEdge | None:
+        return self._highlight_fold
 
     def set_highlight_vertex(self, vertex: NetVertex | None) -> None:
         """Draw this perimeter vertex highlighted (None: no highlight)."""
@@ -103,6 +114,8 @@ class NetItem(QGraphicsItem):
         if self._highlight is not None:
             width = net_style.HIGHLIGHT_WIDTH_PX
             self._paint_dashed(painter, world, self._highlight, inset=width / 2 * units_per_px, width=width)
+        if self._highlight_fold is not None:  # as wide as a highlighted cut, but centered like every fold edge
+            self._paint_dashed(painter, world, self._highlight_fold, inset=0.0, width=net_style.HIGHLIGHT_WIDTH_PX)
         self._paint_vertices(painter, world)
         if self._highlight_vertex is not None:
             center = world.map(to_qpointf(self._highlight_vertex.position))

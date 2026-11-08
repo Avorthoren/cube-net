@@ -36,6 +36,8 @@ def surface_point_at(net: Net, p: Vec, region: Region | None = None) -> SurfaceP
 
 def pieces(net: Net, a: Vec, b: Vec) -> list[Piece]:
     """Segment a-b (lying on the net) split at every point where it meets a fold edge."""
+    if a == b:
+        return []
     d = b - a
     length2 = d.length_squared()
     cuts = {a, b}

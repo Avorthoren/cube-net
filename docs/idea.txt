@@ -288,25 +288,38 @@ As soon as first point of a new cut line created, we are in a slightly different
    - Cut line MAY start and end at two different images of the same point of the cube's surface (for example, A_1 and
      A_3). Such cut makes it impossible to glue anything (every candidate segment has its counterpart in the same half),
      but we don't forbid it: user will see why it doesn't work and will revert it.
+   Helping user to hit exact places (a click counts as being "on" something inside its hitbox, in this order):
+   - inside the circle of a vertex of the outer perimeter: the cut line starts/ends exactly at that vertex;
+   - inside the hitbox of a segment of the outer perimeter: it starts/ends at the point of that segment closest to the
+     click;
+   - inside the hitbox of a fold line (same total width as the hitbox of a segment of the outer perimeter, but centered
+     on the line, as the line itself is drawn): the new point of the cut line is the point of that fold line closest to
+     the click. Doesn't apply to the very first point of the cut line, which has to be on the outer perimeter.
+     The fold line highlights while the mouse is in its hitbox, like a segment of the outer perimeter does, whenever
+     that means a new or a moved point would land on it.
 As it was said earlier, as soon as we create another point on the outer perimeter of the cube net (in addition to the
 very first one, from which this new cut started) - we transition to the next state (CUT_EDITING).
-1. Here in the middle of every segment of the new cut line should be a small hollow circle, click on which should create
-   new point of the new cut line.
+1. Here in the middle of every segment of the new cut line should be a small hollow circle (just a thin outline, with
+   transparent inside), click on which should create new point of the new cut line.
 2. SHIFT+click on any point of the new cut line (except for first and last one) should delete that point. But there is
    a catch: consider 2 consecutive segments P1 - P2 and P2 - P3 of the new cut line, and user tries to delete P2.
    If segment P1-P3 intersects any other segment of the new cut line or the outer perimeter (i.e. violates the rule
    "new cut line should be strictly inside the cube net"), then for 200 ms we hide segments P1 - P2, P2 - P3 and show
    segment P1 - P3 in black. And, obviously, we don't delete the P2.
 3. User should be able to click-and-drag any point of the new cut line. The first and the last point should move only
-   inside respective outer perimeter segment they were created in, and its position should be defined by the point
-   the segment that is closest to the current mouse location). As soon as user releases the mouse click application
+   along the outer perimeter: their position is defined by the point closest to the current mouse location, and they
+   walk from segment to segment when they pass a vertex (without releasing the mouse). If the mouse is inside the circle
+   of a vertex of the outer perimeter, they go to that vertex. Other points of the new cut line should never be on the
+   outer perimeter: if such point is released while the mouse is inside a hitbox of the outer perimeter (a segment or a
+   vertex), the movement is rejected. If such point gets inside the hitbox of a fold line, it goes to the point of that
+   fold line closest to the mouse, and it stays on that fold line (moving along it) until the mouse leaves that hitbox.
+   As soon as user releases the mouse click application
    should check if any segment of the new cut line that has moved point (two segments if that's an inner point of the
    cut line, or one if that's the first/last point) has intersection with any other segment of the new cut line or
    the outer perimeter. If so - moved segment that breaks the rules should become black for 200 ms and moved point
    should reverse its position back.
    When the first/last point is dragged, its counterpart image (see z_3 case) moves accordingly along the counterpart
    segment, so that both images always represent the same point of the cube's surface.
-   Dragged first/last point can reach the ends of the segment it moves along.
 4. If user clicks on any segment of the outer perimeter (not including its vertices) that should indicate the intent
    of rearranging two parts cube net was divided in such a way, that this chosen segment is glued with its counterpart.
    Because of the way we defined the cut if there is segment of outer perimeter Xi - Yj, then there always is exactly
