@@ -1,6 +1,7 @@
 from collections.abc import Callable
 
 import pytest
+from net_checks import assert_consistent
 
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import HalfEdge, Net, default_net
@@ -24,3 +25,8 @@ def cut(net: Net) -> Callable[[str], HalfEdge]:
         return by_name[name]
 
     return find
+
+
+@pytest.fixture
+def consistent() -> Callable[[Net], None]:
+    return assert_consistent

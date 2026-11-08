@@ -337,3 +337,47 @@ class TestEndpointWalk:
         assert target.position == Vec(11, 11) and target.vertex is e1
         assert line_to_h1_e1.move_point(1, target) is None
         assert positions(line_to_h1_e1)[1] == Vec(11, 11)
+
+
+class TestGlue:
+    def cut_at(self, editor: Editor, a: Vec, b: Vec) -> HalfEdge:
+        return next(
+            he
+            for he in editor.split().net.boundary_edges()
+            if {he.origin.position, he.destination.position} == {a, b} and he not in editor.split().line_edges
+        )
+
+    def test_click_moves_the_other_half_and_goes_to_approving(self, editing: Editor) -> None:
+        assert editing.display_net is editing.net
+        assert editing.glue(self.cut_at(editing, v("11.5", "10"), Vec(12, 10))) is None
+        assert editing.state is EditorState.CUT_APPROVING
+        assert editing.display_net is not editing.net
+        assert editing.rearranged is not None
+        assert editing.rearranged.motion.t == Vec(0, -4)
+
+    def test_counterpart_in_the_same_half_is_rejected_with_that_segment(self, editing: Editor) -> None:
+        rejection = editing.glue(self.cut_at(editing, Vec(10, 12), Vec(11, 12)))
+        assert rejection is not None
+        assert set(rejection.segment) == {Vec(10, 12), Vec(11, 12)}
+        assert editing.state is EditorState.CUT_EDITING
+
+    def test_the_new_line_itself_means_nothing(self, editing: Editor) -> None:
+        line_edge = next(iter(editing.split().line_edges))
+        assert editing.glue(line_edge) is None
+        assert editing.state is EditorState.CUT_EDITING
+
+    def test_cancel_goes_back_with_the_line_intact(self, editing: Editor) -> None:
+        before = positions(editing)
+        editing.glue(self.cut_at(editing, v("11.5", "10"), Vec(12, 10)))
+        editing.cancel_rearrangement()
+        assert editing.state is EditorState.CUT_EDITING
+        assert positions(editing) == before
+        assert editing.display_net is editing.net
+
+    def test_split_follows_the_line(self, editing: Editor) -> None:
+        first = editing.split()
+        assert editing.split() is first  # computed once
+        assert editing.insert_midpoint(0) is None
+        second = editing.split()
+        assert second is not first
+        assert any(w.position == v("11.5", "13.75") for w in second.net.vertices)

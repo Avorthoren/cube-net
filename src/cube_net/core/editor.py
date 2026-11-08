@@ -7,7 +7,9 @@ CUT_EDITING   click a segment's middle      -> a new point there
               delete an inner point         -> (if the shortcut segment is valid)
               move a point                  -> (if its segments stay valid; endpoints walk along the perimeter;
                                                  inner points snap to fold lines and may not go near the perimeter)
-              (choosing the segment to glue: M6)
+              click a cut                   -> the half with its counterpart moves onto it -> CUT_APPROVING
+                                               (rejected if the counterpart is in the same half)
+CUT_APPROVING (overlap check and approval: next steps of M6)
 
 The UI decides where a click lands: on a perimeter vertex (inside its circle), on a cut (inside its hitbox), on a fold
 line (inside its hitbox), or elsewhere; in that order of priority. A rejected click
@@ -23,10 +25,14 @@ from cube_net.core.cutting import (
     MAX_POINTS_AFTER_FIRST,
     CutLine,
     CutPoint,
+    Rearranged,
+    SplitNet,
     invalid_segments,
     project_onto,
+    rearrange,
     segment_allowed,
     segment_valid,
+    split_net,
 )
 from cube_net.core.geometry import Vec
 from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_edge_from
@@ -56,12 +62,21 @@ class Editor:
     def __init__(self, net: Net) -> None:
         self.net = net
         self.cut_line: CutLine | None = None
+        self.rearranged: Rearranged | None = None
+        self._split: tuple[tuple[CutPoint, ...], SplitNet] | None = None
 
     @property
     def state(self) -> EditorState:
+        if self.rearranged is not None:
+            return EditorState.CUT_APPROVING
         if self.cut_line is None:
             return EditorState.DEFAULT
         return EditorState.CUT_EDITING if self.cut_line.closed else EditorState.CUTTING
+
+    @property
+    def display_net(self) -> Net:
+        """The net to show: the rearranged one in CUT_APPROVING, otherwise the current one."""
+        return self.rearranged.net if self.rearranged is not None else self.net
 
     def candidate(
         self, p: Vec, cut: HalfEdge | None, vertex: NetVertex | None = None, fold: HalfEdge | None = None
@@ -171,6 +186,30 @@ class Editor:
             return Rejection(tuple((moved[j].position, moved[j + 1].position) for j in bad))
         line.points[:] = moved
         return None
+
+    def split(self) -> SplitNet:
+        """The net as it would be with the closed cut line turned into cuts (computed when the line has changed)."""
+        line = self._editing_line()
+        points = tuple(line.points)
+        if self._split is None or self._split[0] != points:
+            self._split = (points, split_net(self.net, line))
+        return self._split[1]
+
+    def glue(self, clicked: HalfEdge) -> Rejection | None:
+        """The user chose the cut `clicked` of `split().net`: rearrange the halves so that it's glued with its
+        counterpart. Rejected if the counterpart is in the same half. Cuts of the new line itself mean nothing."""
+        split = self.split()
+        if clicked in split.line_edges:
+            return None
+        rearranged = rearrange(split, clicked)
+        if rearranged is None:
+            return Rejection(((clicked.origin.position, clicked.destination.position),))
+        self.rearranged = rearranged
+        return None
+
+    def cancel_rearrangement(self) -> None:
+        """Back from CUT_APPROVING to CUT_EDITING."""
+        self.rearranged = None
 
     # --- internals --------------------------------------------------------------------------------------------------
 

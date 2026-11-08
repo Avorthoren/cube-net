@@ -72,11 +72,16 @@ class SheetView(QGraphicsView):
     # --- setup ------------------------------------------------------------------------------------------------------
 
     def set_sheet(self, sheet: Box) -> None:
-        """Set the sheet rectangle (in units). The current zoom is clamped to the new limits."""
+        """Set the sheet rectangle (in units). The current zoom is clamped to the new limits. What's on screen stays
+        where it is, as far as the zoom allows."""
+        anchor = self.to_sheet(QPointF(0, 0))
         self._sheet = _to_rect(sheet)
         self._sheet_item.set_rect(self._sheet)
         self._scale = zoom.clamp_scale(self._scale, self.zoom_limits())
         self._apply_transform()
+        if self.isVisible():
+            drift = self.from_sheet(anchor)
+            self.pan_by(drift.x(), drift.y())
 
     def set_net(self, net: Net) -> None:
         """Show `net` on the sheet (replacing the previous one)."""

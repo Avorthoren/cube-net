@@ -238,3 +238,10 @@ class TestReleaseAndModifiers:
         assert view.press_modifiers() & Qt.KeyboardModifier.ShiftModifier
         qtbot.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
         assert not view.press_modifiers() & Qt.KeyboardModifier.ShiftModifier
+
+
+def test_changing_the_sheet_keeps_what_is_on_screen(view: SheetView) -> None:
+    before = view.from_sheet(QPointF(11, 12))
+    view.set_sheet(Box(Vec(1, 2), Vec(25, 22)))
+    after = view.from_sheet(QPointF(11, 12))
+    assert (after.x(), after.y()) == pytest.approx((before.x(), before.y()), abs=1.5)

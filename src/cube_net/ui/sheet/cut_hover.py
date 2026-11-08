@@ -43,11 +43,14 @@ class CutHover(QObject):
         super().__init__(view)
         self._view = view
         self._net = net
+        self._ignored: frozenset[HalfEdge] = frozenset()
         view.mouse_moved.connect(self._on_mouse_moved)
         view.mouse_left.connect(self.clear)
 
-    def set_net(self, net: Net) -> None:
+    def set_net(self, net: Net, ignored: frozenset[HalfEdge] = frozenset()) -> None:
+        """Follow the cuts of `net`; those in `ignored` mean nothing, and don't highlight."""
         self._net = net
+        self._ignored = ignored
         self.clear()
 
     def hovered(self) -> HalfEdge | None:
@@ -66,7 +69,8 @@ class CutHover(QObject):
         if self._view.is_panning():
             self._set(None, None)
             return
-        self._set(*perimeter_target(self._view, self._net, x, y))
+        vertex, cut = perimeter_target(self._view, self._net, x, y)
+        self._set(vertex, None if cut in self._ignored else cut)
 
     def _on_mouse_moved(self, x: float, y: float) -> None:
         self.update_at(x, y)

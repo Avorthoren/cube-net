@@ -96,3 +96,13 @@ def test_vertex_is_highlighted_instead_of_its_cuts(setup: tuple[SheetView, CutHo
     assert hover.hovered() is None
     hover.update_at(11.5, 12.5)
     assert hover.hovered_vertex() is None
+
+
+def test_ignored_cuts_do_not_highlight(setup: tuple[SheetView, CutHover, Net]) -> None:
+    view, hover, net = setup
+    hover.update_at(near_cut(view), 12.5)
+    cut = hover.hovered()
+    assert cut is not None
+    hover.set_net(net, frozenset({cut}))
+    hover.update_at(near_cut(view), 12.5)
+    assert hover.hovered() is None

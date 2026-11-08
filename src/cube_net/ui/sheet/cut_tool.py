@@ -9,6 +9,8 @@
   snaps to perimeter vertices. An inner point snaps to fold lines, and may not be released in a hitbox of the perimeter.
 - A fold line is highlighted while the mouse is in its hitbox, whenever that means a point would land on it: while
   cutting, and while dragging an inner point.
+- In CUT_EDITING, a click on a cut of the perimeter (not on a vertex, not on the new line) moves the half with its
+  counterpart onto it: CUT_APPROVING.
 - Anything that breaks the rules shows the offending segments in black for 200 ms and changes nothing.
 """
 
@@ -42,6 +44,9 @@ class CutTool(QObject):
     # The line was edited: "insert", "delete" or "move", the point's index, its position.
     edited = pyqtSignal(str, int, Vec)
 
+    # The halves were rearranged, or that was cancelled: the net to show has changed.
+    net_changed = pyqtSignal()
+
     # The line on display changed in any way, including while a point is being dragged.
     line_changed = pyqtSignal()
 
@@ -74,10 +79,21 @@ class CutTool(QObject):
     def editor(self) -> Editor:
         return self._editor
 
+    @property
+    def dragging(self) -> bool:
+        return self._drag_index is not None
+
+    def cancel_rearrangement(self) -> None:
+        """Back from CUT_APPROVING to CUT_EDITING."""
+        self._editor.cancel_rearrangement()
+        self.refresh()
+        self.net_changed.emit()
+
     def refresh(self) -> None:
         """Show the editor's current cut line (with the point being dragged at its current place)."""
         line = self._editor.cut_line
-        points = list(line.points) if line is not None else []
+        approving = self._editor.state is EditorState.CUT_APPROVING  # the line is part of the shown net by then
+        points = list(line.points) if line is not None and not approving else []
         if self._drag_index is not None and self._drag_target is not None:
             points[self._drag_index] = self._drag_target
         self.item.set_points(points)
@@ -144,6 +160,20 @@ class CutTool(QObject):
             else:
                 self.refresh()
                 self.edited.emit("insert", segment + 1, line.points[segment + 1].position)
+            return
+        self._press_on_cut(x, y)
+
+    def _press_on_cut(self, x: float, y: float) -> None:
+        split = self._editor.split()
+        vertex, cut = perimeter_target(self._view, split.net, x, y)
+        if vertex is not None or cut is None:
+            return
+        rejection = self._editor.glue(cut)
+        if rejection is not None:
+            self._reject(rejection, (rejection.segment[0] + rejection.segment[1]) / 2)
+        elif self._editor.state is EditorState.CUT_APPROVING:
+            self.refresh()
+            self.net_changed.emit()
 
     def _on_left_released(self, x: float, y: float) -> None:
         i, target = self._drag_index, self._drag_target
@@ -238,5 +268,5 @@ class CutTool(QObject):
 
     def _update_area(self, *_: object) -> None:
         # The sheet margin is always enough for the pixel-sized decorations at the allowed zoom levels.
-        box = self._editor.net.bounding_box().expanded(SHEET_MARGIN)
+        box = self._editor.display_net.bounding_box().expanded(SHEET_MARGIN)
         self.item.set_area(QRectF(float(box.lo.x), float(box.lo.y), float(box.width), float(box.height)))

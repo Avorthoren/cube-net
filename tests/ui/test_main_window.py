@@ -383,3 +383,97 @@ def test_logs_button_at_the_bottom_of_the_panel(qtbot: QtBot, tmp_path: Path, mo
     window.open_logs_action.trigger()
     assert opened == [tmp_path]
     assert "Could not open" in window.statusBar().currentMessage()
+
+
+class TestRearrangement:
+    def closed_corner_cut(self, window: MainWindow) -> None:
+        from cube_net.ui.sheet import net_style
+
+        view = window.sheet_view
+        inside = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        view.left_pressed.emit(11.5, 14 - inside)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - inside, 13.5)
+
+    def bottom_of_face_5(self, window: MainWindow) -> tuple[float, float]:
+        """On the part x_2-B_3 of the cut A_3-B_3."""
+        from cube_net.ui.sheet import net_style
+
+        return 11.75, 10 + net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def test_click_on_a_part_of_a_cut_rearranges_and_everything_follows(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from PyQt6.QtCore import QPointF
+
+        window = self.make(qtbot, tmp_path)
+        self.closed_corner_cut(window)
+        view = window.sheet_view
+        h1_before = view.from_sheet(QPointF(11, 12))
+        assert window.bounding.label.text() == "Area\n12.000"
+        view.left_pressed.emit(*self.bottom_of_face_5(window))
+        assert window.editor.state.value == "cut_approving"
+        assert window.net is window.editor.display_net
+        item = view.net_item()
+        assert item is not None and len(item.glue()) == 2
+        assert window.cut_tool.item.points() == ()  # the line is part of the net now
+        assert window.cut_tool.item.midpoints() == []
+        assert window.bounding.label.text() != "Area\n12.000"  # the area follows
+        r = view.sheet_rect()
+        assert r.top() == 4.5  # the sheet follows: y_2 is at 9.5, plus the margin of 5
+        h1_after = view.from_sheet(QPointF(11, 12))
+        assert (h1_after.x(), h1_after.y()) == pytest.approx((h1_before.x(), h1_before.y()), abs=1.5)  # nothing jumps
+
+    def test_undo_goes_back_to_editing(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, record=True)
+        self.closed_corner_cut(window)
+        assert not window.undo_rearrangement_action.isEnabled()
+        window.sheet_view.left_pressed.emit(*self.bottom_of_face_5(window))
+        assert window.undo_rearrangement_action.isEnabled()
+        window.undo_rearrangement_action.trigger()
+        assert window.editor.state.value == "cut_editing"
+        assert window.bounding.label.text() == "Area\n12.000"
+        assert len(window.cut_tool.item.points()) == 3
+        assert window.recorder is not None
+        lines = session_lines(window.recorder.log.path)
+        assert lines[-2:] == ["cut glue 11.500,10.000 12.000,10.000", "cut unglue"]
+        window.stop_recording("test over")
+
+    def test_labels_keep_the_previewed_names_after_rearranging(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.closed_corner_cut(window)
+        before = {label.name for _, label in window.cut_tool.item.labels()}
+        window.sheet_view.left_pressed.emit(*self.bottom_of_face_5(window))
+        item = window.sheet_view.net_item()
+        assert item is not None
+        labels = item.labels()
+        assert labels is not None
+        assert before == {"I", "J", "K"}
+        assert before <= {label.name for label in labels.values()}
+        assert sorted(label.index for label in labels.values() if label.name == "I") == [1, 2, 3]  # x_1, x_2, x's copy
+
+    def test_hover_follows_the_divided_cut_in_editing(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.closed_corner_cut(window)
+        x, y = self.bottom_of_face_5(window)
+        window.cut_hover.update_at(x, y)
+        cut = window.cut_hover.hovered()
+        assert cut is not None
+        ends = {float(p.x) for p in (cut.origin.position, cut.destination.position)}
+        assert ends == {11.5, 12.0}  # only the part x_2-B_3 of A_3-B_3
+
+    def test_state_snapshot_has_the_glue(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.closed_corner_cut(window)
+        window.sheet_view.left_pressed.emit(*self.bottom_of_face_5(window))
+        window.record_session_action.setChecked(True)
+        assert window.recorder is not None
+        lines = session_lines(window.recorder.log.path)
+        assert "state glue 11.500,10.000 12.000,10.000" in lines
+        assert any(line.startswith("state cut cut_approving ") for line in lines)
+        window.stop_recording("test over")

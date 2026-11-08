@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QSizePolicy, QToo
 
 from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.cutting import CutLine
-from cube_net.core.editor import Editor
+from cube_net.core.editor import Editor, EditorState
 from cube_net.core.geometry import Vec, quantize
 from cube_net.core.labels import PointLabels, cut_line_labels, vertex_labels
 from cube_net.core.net import Net, boundary_vertex_at, default_net
@@ -79,6 +79,8 @@ class MainWindow(QMainWindow):
         self.cut_tool.point_added.connect(self._on_cut_point)
         self.cut_tool.edited.connect(self._on_cut_edited)
         self.cut_tool.line_changed.connect(self._update_vertex_labels)
+        self.cut_tool.line_changed.connect(self._update_hover_net)
+        self.cut_tool.net_changed.connect(self._on_net_changed)
         self.cut_tool.rejected.connect(self._on_cut_rejected)
         self.sheet_view.set_net_hit_test(self._is_on_net)
         self.sheet_view.show_initial_view(net_box)
@@ -141,6 +143,9 @@ class MainWindow(QMainWindow):
         line = self.editor.cut_line
         cut_points = [format_point(p.position) + ("p" if p.on_perimeter else "") for p in line.points] if line else []
         recorder.note("state", "cut", self.editor.state.value, *cut_points)  # "p": on the perimeter
+        if self.editor.rearranged is not None:
+            kept = self.editor.rearranged.kept
+            recorder.note("state", "glue", format_point(kept.origin.position), format_point(kept.destination.position))
         recorder.schedule_view_record()  # zoom and position, once the view has been laid out
 
     def _is_on_net(self, x: float, y: float) -> bool:
@@ -243,6 +248,47 @@ class MainWindow(QMainWindow):
         self.record_session_action.toggled.connect(self._on_record_session_toggled)
         view_menu.addAction(self.record_session_action)
 
+        edit_menu = menu_bar.addMenu("&Edit")
+        assert edit_menu is not None
+        # Temporary, until the real undo/redo (M8): the only way back from CUT_APPROVING.
+        self.undo_rearrangement_action = QAction("&Undo rearrangement", self)
+        self.undo_rearrangement_action.setShortcut("Ctrl+Z")
+        self.undo_rearrangement_action.setEnabled(False)
+        self.undo_rearrangement_action.triggered.connect(self.cut_tool.cancel_rearrangement)
+        edit_menu.addAction(self.undo_rearrangement_action)
+
+    def _on_net_changed(self) -> None:
+        """Show the net the editor has now (the rearranged one in CUT_APPROVING): the sheet, the bounding rectangle
+        and the labels follow it, and what's on screen stays where it was."""
+        self.net = self.editor.display_net
+        self.sheet_view.set_sheet(sheet_box(v.position for v in self.net.vertices))
+        self.sheet_view.set_net(self.net)
+        rearranged = self.editor.rearranged
+        item = self.sheet_view.net_item()
+        assert item is not None
+        item.set_glue((rearranged.kept, rearranged.moved) if rearranged is not None else ())
+        self._update_bounding()
+        self._update_hover_net()
+        self._update_vertex_labels()
+        self.undo_rearrangement_action.setEnabled(rearranged is not None)
+        if self.recorder is not None:
+            if rearranged is not None:
+                kept = rearranged.kept
+                ends = format_point(kept.origin.position), format_point(kept.destination.position)
+                self.recorder.note("cut", "glue", *ends)
+            else:
+                self.recorder.note("cut", "unglue")
+
+    def _update_hover_net(self) -> None:
+        """Which cuts follow the mouse: in CUT_EDITING the parts of the net as divided by the line, because that's what
+        a click chooses (the line itself means nothing there)."""
+        if self.editor.state is EditorState.CUT_EDITING:
+            if not self.cut_tool.dragging:
+                split = self.editor.split()
+                self.cut_hover.set_net(split.net, split.line_edges)
+        else:
+            self.cut_hover.set_net(self.net)
+
     def _on_show_labels_toggled(self, checked: bool) -> None:
         self.settings.show_vertex_labels = checked
         self._update_vertex_labels()
@@ -259,10 +305,11 @@ class MainWindow(QMainWindow):
     def _update_vertex_labels(self) -> None:
         """Debug labels of the net's vertices and of the cut line's new points and images (if switched on)."""
         show = self.settings.show_vertex_labels
-        self.sheet_view.set_vertex_labels(vertex_labels(self.net, self.point_labels) if show else None)
+        shown = self.editor.display_net
+        self.sheet_view.set_vertex_labels(vertex_labels(shown, self.point_labels) if show else None)
         points = self.cut_tool.item.points()
         try:
-            cut_labels = cut_line_labels(self.net, CutLine(list(points)), self.point_labels) if show else []
+            cut_labels = cut_line_labels(self.editor.net, CutLine(list(points)), self.point_labels) if show else []
         except ValueError:  # a point is being dragged off the net: it has no cube point to name for now
             cut_labels = []
         self.cut_tool.item.set_labels(cut_labels)

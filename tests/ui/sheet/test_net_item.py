@@ -136,3 +136,22 @@ def test_highlighted_fold_is_centered_on_the_line() -> None:
     expected = (palette.FACE_COLORS[2], palette.FACE_COLORS[4])
     for side in (-off_center, off_center):
         assert colour_at(image, world, 11 + side, 12.525) in expected
+
+
+def test_glue_pair_is_shown_highlighted() -> None:
+    net = default_net()
+    item = NetItem(net)
+    cut = next(he for he in net.boundary_edges() if he.origin.position.x == he.destination.position.x == 10)
+    item.set_glue((cut,))
+    assert item.glue() == (cut,)
+    image = QImage(500, 600, QImage.Format.Format_RGB32)
+    image.fill(QColor("black"))
+    world = QTransform().scale(SCALE, -SCALE).translate(-ORIGIN.x(), -ORIGIN.y())
+    painter = QPainter(image)
+    painter.setTransform(world)
+    item.paint(painter, None)
+    painter.end()
+    near_inner_edge = 10 + max(net_style.HIGHLIGHT_WIDTH_PX - 1.5, 0.5) / SCALE
+    assert colour_at(image, world, near_inner_edge, 12.525) in (palette.FACE_COLORS[4], palette.FACE_COLORS[5])
+    item.set_net(net)
+    assert item.glue() == ()

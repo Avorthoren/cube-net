@@ -381,3 +381,39 @@ def test_ending_the_line_clears_the_fold_highlight(setup: tuple[SheetView, CutTo
     assert highlighted_fold_ends(view) == C_D
     view.left_pressed.emit(12 - net_style.CUT_HITBOX_PX / 2 / view.scale_factor(), 13.5)
     assert highlighted_fold_ends(view) is None
+
+
+def test_press_on_a_vertex_or_the_line_does_not_glue(setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+    view, tool, _ = setup
+    corner_cut(view)
+    near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
+    view.left_pressed.emit(11 + near, 10 + near)  # A_3's circle
+    assert tool.editor.state is EditorState.CUT_EDITING
+    view.left_pressed.emit(11.5 + net_style.CUT_HITBOX_PX / 2 / view.scale_factor(), 13.8)  # beside the new line
+    assert tool.editor.state is EditorState.CUT_EDITING
+
+
+def test_press_on_a_cut_whose_counterpart_is_in_the_same_half_flashes(
+    setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
+) -> None:
+    view, tool, _ = setup
+    corner_cut(view)
+    with qtbot.waitSignal(tool.rejected):
+        view.left_pressed.emit(10.5, 12 + net_style.CUT_HITBOX_PX / 2 / view.scale_factor())  # E_2-H_1
+    assert tool.editor.state is EditorState.CUT_EDITING
+    assert tool.item.flash() == ((Vec(10, 12), Vec(11, 12)),) or tool.item.flash() == ((Vec(11, 12), Vec(10, 12)),)
+
+
+def test_press_on_a_cut_rearranges(setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+    view, tool, _ = setup
+    corner_cut(view)
+    with qtbot.waitSignal(tool.net_changed):
+        view.left_pressed.emit(11.75, 10 + net_style.CUT_HITBOX_PX / 2 / view.scale_factor())
+    assert tool.editor.state is EditorState.CUT_APPROVING
+    assert tool.item.points() == ()
+    view.left_pressed.emit(11.5, 12.5)  # further clicks mean nothing for now
+    assert tool.editor.state is EditorState.CUT_APPROVING
+    with qtbot.waitSignal(tool.net_changed):
+        tool.cancel_rearrangement()
+    assert tool.editor.state is EditorState.CUT_EDITING
+    assert len(tool.item.points()) == 3

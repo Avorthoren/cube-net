@@ -6,7 +6,8 @@ Build one with `build_net()` (or `default_net()`). Queries return fresh lists; l
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 
 from cube_net.core.cube import SurfacePoint
 from cube_net.core.geometry import Box, Vec, polygon_contains
@@ -15,6 +16,16 @@ from cube_net.core.net.elements import EdgeKind, HalfEdge, NetVertex, Region
 
 class NetInvariantError(RuntimeError):
     """The net's structure is inconsistent. Always a bug in the code that built or changed the net."""
+
+
+@dataclass(frozen=True, slots=True)
+class NetCopy:
+    """A copy of a net and where each original element went."""
+
+    net: Net
+    vertices: Mapping[NetVertex, NetVertex]
+    edges: Mapping[HalfEdge, HalfEdge]
+    regions: Mapping[Region, Region]
 
 
 class Net:
@@ -43,6 +54,22 @@ class Net:
             if (b, a) not in self._boundary_by_points:
                 raise NetInvariantError(f"boundary segment {he} has no counterpart")
 
+    def copy(self) -> NetCopy:
+        """An independent copy of the whole structure (same ids), with the maps from the originals to their copies."""
+        vertices = {v: NetVertex(v.id, v.position, v.point) for v in self.vertices}
+        regions = {r: Region(r.id, r.face, r.placement) for r in self.regions}
+        edges = {
+            he: HalfEdge(he.id, vertices[he.origin], he.kind, None if he.region is None else regions[he.region])
+            for he in self.half_edges
+        }
+        for he, new in edges.items():
+            new.twin, new.next, new.prev = edges[he.twin], edges[he.next], edges[he.prev]
+        for v, new_v in vertices.items():
+            new_v.edge = edges[v.edge]
+        for r, new_r in regions.items():
+            new_r.edge = edges[r.edge]
+        return NetCopy(Net(vertices.values(), edges.values(), regions.values()), vertices, edges, regions)
+
     # --- regions ----------------------------------------------------------------------------------------------------
 
     @staticmethod
@@ -56,10 +83,21 @@ class Net:
 
     # --- edges ------------------------------------------------------------------------------------------------------
 
+    def perimeters(self) -> list[list[HalfEdge]]:
+        """The outside half-edges, cycle by cycle (each clockwise around its part of the net). A net has one cycle; a
+        net that has just been split along a cut line has two, until the parts are glued."""
+        cycles: list[list[HalfEdge]] = []
+        seen: set[HalfEdge] = set()
+        for he in self.half_edges:
+            if he.region is None and he not in seen:
+                cycle = _cycle(he)
+                seen.update(cycle)
+                cycles.append(cycle)
+        return cycles
+
     def perimeter(self) -> list[HalfEdge]:
-        """The outside half-edges, in order along the perimeter (clockwise around the net)."""
-        start = next(he for he in self.half_edges if he.region is None)
-        return _cycle(start)
+        """The outside half-edges of the (first) perimeter cycle, in order along it."""
+        return self.perimeters()[0]
 
     def boundary_edges(self) -> list[HalfEdge]:
         """The cuts: for every perimeter segment, its half-edge on the inside of the net."""
@@ -76,8 +114,8 @@ class Net:
     # --- vertices ---------------------------------------------------------------------------------------------------
 
     def boundary_vertices(self) -> list[NetVertex]:
-        """Vertices on the perimeter, in perimeter order."""
-        return [he.origin for he in self.perimeter()]
+        """Vertices on the perimeter, in order along each perimeter cycle."""
+        return [he.origin for cycle in self.perimeters() for he in cycle]
 
     def images(self, point: SurfacePoint) -> list[NetVertex]:
         """All vertices of the net that are images of `point`."""

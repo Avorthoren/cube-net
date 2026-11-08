@@ -46,6 +46,7 @@ class NetItem(QGraphicsItem):
         self._highlight: HalfEdge | None = None
         self._highlight_vertex: NetVertex | None = None
         self._highlight_fold: HalfEdge | None = None
+        self._glue: tuple[HalfEdge, ...] = ()
 
     def set_net(self, net: Net) -> None:
         self.prepareGeometryChange()
@@ -54,6 +55,7 @@ class NetItem(QGraphicsItem):
         self._highlight = None
         self._highlight_vertex = None
         self._highlight_fold = None
+        self._glue = ()
         self.update()
 
     def set_highlight(self, cut: HalfEdge | None) -> None:
@@ -64,6 +66,14 @@ class NetItem(QGraphicsItem):
 
     def highlight(self) -> HalfEdge | None:
         return self._highlight
+
+    def set_glue(self, cuts: tuple[HalfEdge, ...]) -> None:
+        """The cuts about to be glued, shown highlighted in CUT_APPROVING (empty: none)."""
+        self._glue = cuts
+        self.update()
+
+    def glue(self) -> tuple[HalfEdge, ...]:
+        return self._glue
 
     def set_highlight_fold(self, fold: HalfEdge | None) -> None:
         """Draw this fold edge highlighted (None: no highlight)."""
@@ -111,6 +121,9 @@ class NetItem(QGraphicsItem):
             self._paint_dashed(painter, world, he, inset=0.0)
         for he in self._net.boundary_edges():
             self._paint_dashed(painter, world, he, inset=net_style.EDGE_WIDTH_PX / 2 * units_per_px)
+        for he in self._glue:
+            width = net_style.HIGHLIGHT_WIDTH_PX
+            self._paint_dashed(painter, world, he, inset=width / 2 * units_per_px, width=width)
         if self._highlight is not None:
             width = net_style.HIGHLIGHT_WIDTH_PX
             self._paint_dashed(painter, world, self._highlight, inset=width / 2 * units_per_px, width=width)
@@ -163,16 +176,16 @@ class NetItem(QGraphicsItem):
     def _outward_directions(self, world: QTransform) -> dict[NetVertex, QPointF]:
         """Unit vectors in device pixels pointing away from the net at every perimeter vertex (bisector of the outer
         angle). The perimeter goes clockwise around the net, so the outside is on the left of each of its segments."""
-        perimeter = self._net.perimeter()
         directions: dict[NetVertex, QPointF] = {}
-        for incoming, outgoing in zip(perimeter[-1:] + perimeter[:-1], perimeter, strict=True):
-            total = QPointF(0, 0)
-            for he in (incoming, outgoing):
-                a, b = world.map(to_qpointf(he.origin.position)), world.map(to_qpointf(he.destination.position))
-                d = b - a
-                length = math.hypot(d.x(), d.y())
-                total += QPointF(d.y(), -d.x()) / length  # left in sheet = right in device (Y is flipped)
-            length = math.hypot(total.x(), total.y())
-            if length > 1e-9:
-                directions[outgoing.origin] = total / length
+        for perimeter in self._net.perimeters():
+            for incoming, outgoing in zip(perimeter[-1:] + perimeter[:-1], perimeter, strict=True):
+                total = QPointF(0, 0)
+                for he in (incoming, outgoing):
+                    a, b = world.map(to_qpointf(he.origin.position)), world.map(to_qpointf(he.destination.position))
+                    d = b - a
+                    length = math.hypot(d.x(), d.y())
+                    total += QPointF(d.y(), -d.x()) / length  # left in sheet = right in device (Y is flipped)
+                length = math.hypot(total.x(), total.y())
+                if length > 1e-9:
+                    directions[outgoing.origin] = total / length
         return directions
