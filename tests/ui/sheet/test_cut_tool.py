@@ -1,7 +1,9 @@
 from fractions import Fraction as F
 
 import pytest
-from PyQt6.QtCore import QPointF, Qt
+from PyQt6.QtCore import QEvent, QPointF, Qt
+from PyQt6.QtGui import QMouseEvent
+from PyQt6.QtWidgets import QApplication
 from pytestqt.qtbot import QtBot
 
 from cube_net.core.editor import Editor, EditorState
@@ -558,3 +560,197 @@ class TestUndoRedo:
         with qtbot.assertNotEmitted(tool.glued):
             tool.undo()
             tool.redo()
+
+
+def send_drag(view: SheetView, x: float, y: float, shift: bool) -> None:
+    """A real mouse move with the left button held (QTest moves carry neither buttons nor modifiers)."""
+    pos = QPointF(view.from_sheet(QPointF(x, y)))
+    modifier = Qt.KeyboardModifier.ShiftModifier if shift else Qt.KeyboardModifier.NoModifier
+    event = QMouseEvent(
+        QEvent.Type.MouseMove,
+        pos,
+        view.viewport().mapToGlobal(pos),
+        Qt.MouseButton.NoButton,
+        Qt.MouseButton.LeftButton,
+        modifier,
+    )
+    QApplication.sendEvent(view.viewport(), event)
+
+
+class TestShift:
+    Y = Vec(F(23, 2), F(27, 2))
+
+    def cutting(self, view: SheetView) -> None:
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        view.left_pressed.emit(11.5, 13.5)
+
+    def test_rubber_band_goes_straight(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        self.cutting(view)
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        view.mouse_moved.emit(11.7, 13.4)
+        assert tool.item.rubber_band() == (self.Y, Vec(F(117, 10), F(27, 2)))
+        view.mouse_moved.emit(11.6, 13.2)
+        assert tool.item.rubber_band() == (self.Y, Vec(F(23, 2), F(132, 10)))
+
+    def test_it_changes_at_once(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        self.cutting(view)
+        view.mouse_moved.emit(11.7, 13.4)
+        free = tool.item.rubber_band()
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        band = tool.item.rubber_band()
+        assert band is not None and band != free and band[1].y == self.Y.y
+        qtbot.keyRelease(view, Qt.Key.Key_Shift)
+        assert tool.item.rubber_band() == free
+
+    def test_click_adds_where_the_band_ends(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        self.cutting(view)
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        view.mouse_moved.emit(11.7, 13.4)
+        view.left_pressed.emit(11.7, 13.4)
+        assert tool.item.points()[-1].position == Vec(F(117, 10), F(27, 2))
+
+    def test_ends_on_a_cut_on_its_line(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        self.cutting(view)
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        view.left_pressed.emit(12 - h, 13.45)
+        assert tool.editor.state is EditorState.CUT_EDITING
+        assert tool.item.points()[-1].position == Vec(12, F(27, 2))
+
+    def test_what_the_band_points_at_decides_not_the_mouse(
+        self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
+    ) -> None:
+        """The mouse is in the hitbox of a cut, but the straight segment goes elsewhere."""
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        view.left_pressed.emit(11.7, 13.5)
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        view.left_pressed.emit(12 - h, 13.2)
+        assert tool.editor.state is EditorState.CUTTING
+        assert tool.item.points()[-1].position == Vec(F(117, 10), F(132, 10))
+
+    def test_hover_target(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        assert tool.hover_target(11.5, 12.5) is None  # not cutting
+        self.cutting(view)
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        assert tool.hover_target(12 - h, 13 + h / 2) is None  # no SHIFT
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        assert tool.hover_target(12 - h, 13 + h / 2) == (None, None)
+        target = tool.hover_target(12 - h, 13.45)
+        assert target is not None and target[1] is not None
+
+    def test_claims_where_the_band_points(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        view.left_pressed.emit(11.1, 13.5)
+        off_the_net = 10.95, 13.9
+        assert not tool.claims(*off_the_net)
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        assert tool.claims(*off_the_net)  # the band goes straight up, inside the net
+
+    def test_drag_inner_point(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(11.5, 13.5)
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        view.mouse_moved.emit(11.7, 13.2)
+        assert tool.item.points()[1].position == Vec(F(23, 2), F(132, 10))
+        view.left_released.emit(11.7, 13.2)
+        assert positions(tool)[1] == Vec(F(23, 2), F(132, 10))
+
+    def test_shift_during_a_drag_acts_at_once(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(11.5, 13.5)
+        view.mouse_moved.emit(11.7, 13.2)
+        free = tool.item.points()[1].position
+        assert free == Vec(F(117, 10), F(132, 10))
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        assert tool.item.points()[1].position == Vec(F(23, 2), F(132, 10))
+        qtbot.keyRelease(view, Qt.Key.Key_Shift)
+        assert tool.item.points()[1].position == free
+
+    def test_drag_first_point_is_not_restricted(
+        self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
+    ) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(11.5, 14.0)
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        view.mouse_moved.emit(11.3, 13.9)
+        assert tool.item.points()[0].position == Vec(F(113, 10), 14)
+
+    def test_drag_last_point_stays_on_the_perimeter(
+        self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
+    ) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(12.0, 13.5)
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        view.mouse_moved.emit(11.1, 13.4)
+        view.left_released.emit(11.1, 13.4)
+        assert positions(tool)[2] == Vec(11, F(27, 2))
+        assert tool.editor.cut_line is not None and tool.editor.cut_line.points[2].edge is not None
+
+    def test_inner_point_over_the_perimeter_is_rejected(
+        self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
+    ) -> None:
+        """Its segment goes straight from the first point, which is on the top of face 1: along that cut."""
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(11.5, 13.5)
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        view.mouse_moved.emit(11.2, 13.95)
+        with qtbot.waitSignal(tool.rejected):
+            view.left_released.emit(11.2, 13.95)
+        assert positions(tool)[1] == self.Y
+
+    def test_shift_click_on_an_inner_point_deletes_on_release(
+        self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
+    ) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        pos = view.from_sheet(QPointF(11.5, 13.5)).toPoint()
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, pos)
+        assert len(positions(tool)) == 3
+        assert tool.dragging
+        qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, pos)
+        assert len(positions(tool)) == 2
+        assert not tool.dragging
+
+    def test_a_tiny_slip_is_still_a_click(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        pos = view.from_sheet(QPointF(11.5, 13.5)).toPoint()
+        slip = (QApplication.startDragDistance() - 1) / view.scale_factor()
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, pos)
+        send_drag(view, 11.5, 13.5 - slip, True)
+        qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, pos)
+        assert len(positions(tool)) == 2
+
+    def test_shift_drag_moves_instead_of_deleting(
+        self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
+    ) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        modifier = Qt.KeyboardModifier.ShiftModifier
+        pos = view.from_sheet(QPointF(11.5, 13.5)).toPoint()
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, modifier, pos)
+        send_drag(view, 11.55, 13.2, True)
+        end = view.from_sheet(QPointF(11.55, 13.2)).toPoint()
+        qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, modifier, end)
+        line = positions(tool)
+        assert len(line) == 3
+        assert line[1].x == F(23, 2) and line[1].y != F(27, 2)
+
+    def test_no_shift_while_dragging_means_no_restriction(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        drag_to(view, (11.5, 13.5), (11.7, 13.2))
+        assert positions(tool)[1] == Vec(F(117, 10), F(132, 10))

@@ -3,7 +3,7 @@ from fractions import Fraction as F
 
 import pytest
 
-from cube_net.core.cutting import MAX_POINTS_AFTER_FIRST
+from cube_net.core.cutting import MAX_POINTS_AFTER_FIRST, CutLine, CutPoint
 from cube_net.core.editor import Editor, EditorState
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, vertex_labels
@@ -565,3 +565,152 @@ class TestUndoRedo:
         assert editor.move_point(1, editor.drag_target(1, Vec(13, 13))) is not None  # off the net
         assert editor.glue(on_cut_through(editor.split().net, Vec(10, 12), Vec(11, 12))) is not None  # the same half
         assert editor.history.done_count == 3
+
+
+class TestStraight:
+    """SHIFT: the segment from the previous point is horizontal or vertical, whatever it snaps to."""
+
+    Y = v("11.5", "13.5")
+
+    def cutting(self, net: Net, cut: Callable[[str], HalfEdge]) -> Editor:
+        editor = Editor(net)
+        editor.click(v("11.5", "14"), cut("B_1-A_1"))
+        editor.click(self.Y, None)
+        return editor
+
+    def test_free_point(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.cutting(net, cut)
+        assert editor.candidate(v("11.7", "13.4"), None, straight=True).position == v("11.7", "13.5")
+        assert editor.candidate(v("11.6", "13.2"), None, straight=True).position == v("11.5", "13.2")
+
+    def test_without_shift_nothing_changes(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.cutting(net, cut)
+        assert editor.candidate(v("11.7", "13.4"), None).position == v("11.7", "13.4")
+
+    def test_click_creates_it(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.cutting(net, cut)
+        assert editor.click(v("11.7", "13.4"), None, straight=True) is None
+        assert positions(editor)[-1] == v("11.7", "13.5")
+
+    def test_click_ends_the_line_on_a_cut(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.cutting(net, cut)
+        assert editor.click(v("11.98", "13.45"), cut("D_1-B_1"), straight=True) is None
+        assert editor.state is EditorState.CUT_EDITING
+        assert positions(editor)[-1] == self.Y + Vec(F(1, 2), 0)
+
+    def test_it_can_be_undone(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.cutting(net, cut)
+        editor.click(v("11.7", "13.4"), None, straight=True)
+        editor.undo()
+        assert positions(editor)[-1] == self.Y
+        editor.redo()
+        assert positions(editor)[-1] == v("11.7", "13.5")
+
+    def test_vertex_on_its_line(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        editor.click(v("11.5", "14"), cut("B_1-A_1"))
+        b_1 = vertex_at(net, 12, 14)
+        point = editor.candidate(v("11.99", "13.99"), None, b_1, straight=True)
+        assert point.vertex is b_1 and point.position == Vec(12, 14)
+
+    def test_vertex_off_its_line_is_ignored(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.cutting(net, cut)
+        point = editor.candidate(v("11.9", "13.45"), None, vertex_at(net, 12, 14), straight=True)
+        assert point.vertex is None and point.position == v("11.9", "13.5")
+
+    def test_vertex_off_its_line_leaves_the_cut_under_it(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.cutting(net, cut)
+        point = editor.candidate(v("11.99", "13.45"), cut("D_1-B_1"), None, straight=True)
+        assert point.edge is not None and point.position == v("12", "13.5")
+
+    def test_end_of_the_cut_is_its_vertex(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        editor.click(v("11.5", "14"), cut("B_1-A_1"))
+        editor.click(v("11.5", "13"), None, fold=fold_named(net, Vec(11, 13), Vec(12, 13)))
+        point = editor.candidate(v("11.99", "13.01"), cut("D_1-B_1"), straight=True)
+        assert point.position == Vec(12, 13) and point.vertex is not None
+
+    def test_fold_across_its_line(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.cutting(net, cut)
+        fold = fold_named(net, Vec(11, 13), Vec(12, 13))
+        point = editor.candidate(v("11.6", "13.01"), None, fold=fold, straight=True)
+        assert point.fold is fold and point.position == v("11.5", "13")
+
+    def test_fold_parallel_to_its_line_is_ignored(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.cutting(net, cut)
+        point = editor.candidate(
+            v("11.9", "13.45"), None, fold=fold_named(net, Vec(11, 13), Vec(12, 13)), straight=True
+        )
+        assert point.fold is None and point.position == v("11.9", "13.5")
+
+    def test_along_the_fold_it_stands_on(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        fold = fold_named(net, Vec(11, 13), Vec(12, 13))
+        editor.click(v("11.5", "14"), cut("B_1-A_1"))
+        editor.click(v("11.5", "13"), None, fold=fold)
+        point = editor.candidate(v("11.7", "13.01"), None, fold=fold, straight=True)
+        assert point.fold is fold and point.position == v("11.7", "13")
+
+    def test_slanted_cut_at_its_crossing_not_the_closest_point(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        editor.click(v("11.5", "14"), cut("B_1-A_1"))
+        editor.click(v("12", "13.5"), cut("D_1-B_1"))
+        edge = next(
+            he
+            for he in editor.split().net.boundary_edges()
+            if {he.origin.position, he.destination.position} == {v("11.5", "10"), Vec(12, 10)}
+        )
+        assert editor.glue(edge) is None
+        editor.approve()
+        slanted = next(
+            he
+            for he in editor.net.boundary_edges()
+            if he.origin.position.x != he.destination.position.x and he.origin.position.y != he.destination.position.y
+        )
+        a, b = slanted.origin.position, slanted.destination.position
+        middle = (a + b) / 2
+        anchor = middle - Vec(0, F(1, 2))
+        editor.cut_line = CutLine([CutPoint(anchor)])
+        point = editor.candidate(middle + Vec(F(1, 100), F(-1, 100)), slanted, straight=True)
+        assert point.position == middle and point.edge is slanted
+
+    class TestDragging:
+        def test_the_first_point_goes_as_usual(self, editing: Editor) -> None:
+            assert editing.drag_target(0, v("11.3", "14.2"), straight=True).position == v("11.3", "14")
+
+        def test_an_inner_point(self, editing: Editor) -> None:
+            assert editing.drag_target(1, v("11.7", "13.2"), straight=True).position == v("11.5", "13.2")
+            assert editing.drag_target(1, v("11.8", "13.9"), straight=True).position == v("11.8", "14")
+
+        def test_an_inner_point_on_a_fold(self, net: Net, editing: Editor) -> None:
+            fold = fold_named(net, Vec(11, 13), Vec(12, 13))
+            point = editing.drag_target(1, v("11.6", "13.01"), fold=fold, straight=True)
+            assert point.fold is fold and point.position == v("11.5", "13")
+
+        def test_the_segment_to_the_next_point_stays_free(self, editing: Editor) -> None:
+            target = editing.drag_target(1, v("11.7", "13.2"), straight=True)
+            assert editing.move_point(1, target) is None
+            line = positions(editing)
+            assert line[0].x == line[1].x
+            assert line[1].x != line[2].x and line[1].y != line[2].y
+
+        def test_the_last_point_stays_on_the_perimeter(self, editing: Editor) -> None:
+            point = editing.drag_target(2, v("11.1", "13.4"), straight=True)
+            assert point.position == v("11", "13.5") and point.edge is not None
+            assert editing.move_point(2, point) is None
+            assert positions(editing)[2] == v("11", "13.5")
+
+        def test_the_last_point_at_a_vertex(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+            editor = Editor(net)
+            editor.click(v("11.5", "14"), cut("B_1-A_1"))
+            editor.click(v("11.5", "13"), None, fold=fold_named(net, Vec(11, 13), Vec(12, 13)))
+            editor.click(Vec(12, 13), cut("D_1-B_1"))
+            point = editor.drag_target(2, v("12.9", "13.1"), straight=True)
+            assert point.position == Vec(13, 13) and point.vertex is not None
+
+        def test_a_move_that_breaks_the_rules_is_still_rejected(self, editing: Editor) -> None:
+            before = positions(editing)
+            point = editing.drag_target(2, v("11.6", "13.9"), straight=True)  # back to the start of the line
+            assert point.position == v("11.5", "14")
+            assert editing.move_point(2, point) is not None
+            assert positions(editing) == before

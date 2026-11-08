@@ -1,6 +1,6 @@
 import pytest
-from PyQt6.QtCore import QPoint, QPointF, Qt
-from PyQt6.QtGui import QWheelEvent
+from PyQt6.QtCore import QEvent, QPoint, QPointF, Qt
+from PyQt6.QtGui import QMouseEvent, QWheelEvent
 from PyQt6.QtWidgets import QApplication
 from pytestqt.qtbot import QtBot
 
@@ -245,3 +245,40 @@ def test_changing_the_sheet_keeps_what_is_on_screen(view: SheetView) -> None:
     view.set_sheet(Box(Vec(1, 2), Vec(25, 22)))
     after = view.from_sheet(QPointF(11, 12))
     assert (after.x(), after.y()) == pytest.approx((before.x(), before.y()), abs=1.5)
+
+
+class TestShift:
+    def send(self, view: SheetView, kind: QEvent.Type, button: Qt.MouseButton, shift: bool) -> None:
+        pos = QPointF(view.from_sheet(QPointF(7, 7)))
+        modifier = Qt.KeyboardModifier.ShiftModifier if shift else Qt.KeyboardModifier.NoModifier
+        QApplication.sendEvent(
+            view.viewport(), QMouseEvent(kind, pos, view.viewport().mapToGlobal(pos), button, button, modifier)
+        )
+
+    def test_key_press_and_release(self, view: SheetView, qtbot: QtBot) -> None:
+        assert not view.shift_held()
+        with qtbot.waitSignal(view.shift_changed):
+            qtbot.keyPress(view, Qt.Key.Key_Shift)
+        assert view.shift_held()
+        with qtbot.waitSignal(view.shift_changed):
+            qtbot.keyRelease(view, Qt.Key.Key_Shift)
+        assert not view.shift_held()
+
+    def test_other_keys_do_not_count(self, view: SheetView, qtbot: QtBot) -> None:
+        with qtbot.assertNotEmitted(view.shift_changed):
+            qtbot.keyPress(view, Qt.Key.Key_A)
+            qtbot.keyRelease(view, Qt.Key.Key_A)
+
+    def test_the_mouse_tells_too(self, view: SheetView) -> None:
+        """A key release can get lost (the window wasn't active then): the next mouse move puts it right."""
+        self.send(view, QEvent.Type.MouseMove, Qt.MouseButton.NoButton, True)
+        assert view.shift_held()
+        self.send(view, QEvent.Type.MouseMove, Qt.MouseButton.NoButton, False)
+        assert not view.shift_held()
+
+    def test_known_before_the_press_is_reported(self, view: SheetView, qtbot: QtBot) -> None:
+        seen: list[bool] = []
+        view.set_panning_enabled(False)
+        view.left_pressed.connect(lambda _x, _y: seen.append(view.shift_held()))
+        self.send(view, QEvent.Type.MouseButtonPress, Qt.MouseButton.LeftButton, True)
+        assert seen == [True]

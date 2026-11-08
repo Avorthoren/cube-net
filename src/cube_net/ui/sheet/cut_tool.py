@@ -5,7 +5,8 @@
 - While cutting, a click inside the net adds a point (on a fold line, if clicked in its hitbox); a thin line follows the
   mouse from the last point (hidden while the ruler is active, which then takes the clicks).
 - In CUT_EDITING, a click on a segment's hollow middle circle adds a point there; Shift+click on an inner point deletes
-  it; dragging a point moves it, and it's checked when the mouse is released. An endpoint walks along the perimeter and
+  it (on release, if the mouse has hardly moved: Shift+drag moves it); dragging a point moves it, and it's checked when
+  the mouse is released. An endpoint walks along the perimeter and
   snaps to perimeter vertices. An inner point snaps to fold lines, and may not be released in a hitbox of the perimeter.
 - A fold line is highlighted while the mouse is in its hitbox, whenever that means a point would land on it: while
   cutting, and while dragging an inner point.
@@ -15,6 +16,8 @@
   counterpart onto it: CUT_APPROVING.
 - In CUT_APPROVING, a round button in the middle of the chosen segment approves the rearrangement, if it's valid. If
   it isn't, the button undoes the rearrangement.
+- While SHIFT is held, the segment being made (while cutting) or the one from the previous point to the dragged point
+  (not for the first point) is horizontal or vertical. It takes effect at once, even if the mouse stays where it is.
 - Anything that breaks the rules shows the offending segments in black for 200 ms and changes nothing.
 """
 
@@ -22,16 +25,17 @@ import math
 from collections.abc import Callable
 
 from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtWidgets import QApplication
 
-from cube_net.core.cutting import CutPoint
+from cube_net.core.cutting import CutPoint, straighten
 from cube_net.core.editor import Editor, EditorState, Rejection
 from cube_net.core.geometry import Vec, quantize
-from cube_net.core.net import HalfEdge, NetVertex
+from cube_net.core.net import HalfEdge, NetVertex, boundary_edge_at
 from cube_net.core.sheet import SHEET_MARGIN
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.approve_button_item import ApproveButtonItem
-from cube_net.ui.sheet.cut_hover import fold_target, perimeter_target
+from cube_net.ui.sheet.cut_hover import cut_hitbox, fold_target, perimeter_target
 from cube_net.ui.sheet.cut_line_item import CutLineItem
 from cube_net.ui.sheet.ruler_tool import RulerTool
 from cube_net.ui.sheet.sheet_view import SheetView
@@ -84,12 +88,17 @@ class CutTool(QObject):
         self._drag_index: int | None = None
         self._drag_target: CutPoint | None = None
         self._drag_over_perimeter = False
+
+        # Where (in window pixels) Shift+press hit an inner point, until it's clear whether that's a click or a drag.
+        self._delete_press: QPointF | None = None
+        self._mouse: tuple[float, float] | None = None
         view.left_pressed.connect(self._on_left_pressed)
         view.left_released.connect(self._on_left_released)
         view.mouse_moved.connect(self._on_mouse_moved)
         view.mouse_left.connect(self._on_mouse_left)
         view.zoom_changed.connect(self._update_area)
         self.net_changed.connect(self._update_area)
+        view.shift_changed.connect(self._on_shift_changed)
         ruler.points_changed.connect(self._on_ruler_changed)
         self._update_area()
         self.refresh()
@@ -167,7 +176,8 @@ class CutTool(QObject):
         net = self._editor.net
         vertex, cut = perimeter_target(self._view, net, x, y)
         if state is EditorState.CUTTING:
-            return vertex is not None or net.contains(quantize(x, y))  # a click on the net adds a point
+            p, _, near, _ = self._hit(x, y)
+            return near is not None or net.contains(p)  # a click on the net adds a point
         return vertex is not None or cut is not None  # DEFAULT: only the perimeter can start a line
 
     def _on_approve_button(self, x: float, y: float) -> bool:
@@ -177,13 +187,43 @@ class CutTool(QObject):
         return self._closest(x, y, [position], net_style.APPROVE_BUTTON_RADIUS_PX) is not None
 
     def _hit(self, x: float, y: float) -> tuple[Vec, HalfEdge | None, NetVertex | None, HalfEdge | None]:
-        """What's under the mouse: the point, then a cut or a perimeter vertex, or else a fold line."""
+        """What's under the mouse: the point, then a cut or a perimeter vertex, or else a fold line. While cutting with
+        SHIFT held, that's about where the mouse brings the end of the straight segment."""
+        line = self._editor.cut_line
+        if self._view.shift_held() and line is not None and not line.closed:
+            return self._straight_hit(line.last.position, x, y)
         vertex, cut = perimeter_target(self._view, self._editor.net, x, y)
         on_perimeter = vertex is not None or cut is not None
         fold = None if on_perimeter else fold_target(self._view, self._editor.net, x, y)
         return quantize(x, y), cut, vertex, fold
 
+    def _straight_hit(
+        self, anchor: Vec, x: float, y: float, prefer: HalfEdge | None = None
+    ) -> tuple[Vec, HalfEdge | None, NetVertex | None, HalfEdge | None]:
+        """Like `_hit` for the end of a straight segment from `anchor`: a vertex counts only if it's on its line."""
+        net = self._editor.net
+        p = straighten(anchor, quantize(x, y))
+        px, py = float(p.x), float(p.y)
+        vertex, cut = perimeter_target(self._view, net, px, py)
+        fold = None if vertex is not None or cut is not None else fold_target(self._view, net, px, py, prefer)
+        if vertex is not None and (p - anchor).cross(vertex.position - anchor) != 0:
+            vertex, cut = None, boundary_edge_at(net, quantize(px, py), cut_hitbox(self._view))
+        return p, cut, vertex, fold
+
+    def hover_target(self, x: float, y: float) -> tuple[NetVertex | None, HalfEdge | None] | None:
+        """While cutting with SHIFT held, what highlights is what the straight segment would end on (see `CutHover`)."""
+        line = self._editor.cut_line
+        if self._ruler.active or not self._view.shift_held() or line is None or line.closed:
+            return None
+        _, cut, vertex, _ = self._hit(x, y)
+        return vertex, cut
+
+    def _on_shift_changed(self) -> None:
+        if self._mouse is not None:
+            self._on_mouse_moved(*self._mouse)
+
     def _on_left_pressed(self, x: float, y: float) -> None:
+        self._mouse = x, y
         if self._ruler.active:
             return  # the ruler takes the clicks
         if self._editor.state is EditorState.CUT_EDITING:
@@ -198,7 +238,8 @@ class CutTool(QObject):
             return
         p, cut, vertex, fold = self._hit(x, y)
         before = len(self._editor.cut_line.points) if self._editor.cut_line else 0
-        rejection = self._editor.click(p, cut, vertex, fold)
+        straight = self._view.shift_held() and self._editor.state is EditorState.CUTTING
+        rejection = self._editor.click(p, cut, vertex, fold, straight)
         if rejection is not None:
             self._reject(rejection, rejection.segment[1])
             return
@@ -212,17 +253,11 @@ class CutTool(QObject):
         assert line is not None
         i = self._point_at(x, y)
         if i is not None:
-            if not self._view.press_modifiers() & Qt.KeyboardModifier.ShiftModifier:
-                self._drag_index, self._drag_target, self._drag_over_perimeter = i, None, False
-                self.line_changed.emit()
-            elif 0 < i < len(line.points) - 1:
-                position = line.points[i].position
-                rejection = self._editor.delete_point(i)
-                if rejection is not None:
-                    self._reject(rejection, position)
-                else:
-                    self.refresh()
-                    self.edited.emit("delete", i, position)
+            self._drag_index, self._drag_target, self._drag_over_perimeter = i, None, False
+            inner = 0 < i < len(line.points) - 1
+            shift = self._view.press_modifiers() & Qt.KeyboardModifier.ShiftModifier
+            self._delete_press = self._view.from_sheet(QPointF(x, y)) if inner and shift else None
+            self.line_changed.emit()
             return
         segment = self._midpoint_at(x, y)
         if segment is not None:
@@ -261,6 +296,10 @@ class CutTool(QObject):
         self._highlight_vertex(None)
         if i is None:
             return
+        if self._delete_press is not None:
+            self._delete_press = None
+            self._delete_point(i)
+            return
         if target is None:  # pressed and released without moving
             self.line_changed.emit()
             return
@@ -270,6 +309,17 @@ class CutTool(QObject):
             self._reject(rejection, target.position)
         else:
             self.edited.emit("move", i, target.position)
+
+    def _delete_point(self, i: int) -> None:
+        line = self._editor.cut_line
+        assert line is not None
+        position = line.points[i].position
+        rejection = self._editor.delete_point(i)
+        self.refresh()
+        if rejection is not None:
+            self._reject(rejection, position)
+        else:
+            self.edited.emit("delete", i, position)
 
     def _reject(self, rejection: Rejection, position: Vec) -> None:
         """Show the offending segments in black for a moment (with the rejection's preview of the line, if any)."""
@@ -306,6 +356,7 @@ class CutTool(QObject):
         return None if best is None else best[1]
 
     def _on_mouse_moved(self, x: float, y: float) -> None:
+        self._mouse = x, y
         if self._drag_index is not None:
             self._drag_to(x, y)
             return
@@ -315,10 +366,13 @@ class CutTool(QObject):
             self._highlight_fold(None)
             return
         p, cut, vertex, fold = self._hit(x, y)
-        self.item.set_rubber_band((line.last.position, self._editor.candidate(p, cut, vertex, fold).position))
-        self._highlight_fold(fold)
+        target = self._editor.candidate(p, cut, vertex, fold, self._view.shift_held())
+        self.item.set_rubber_band((line.last.position, target.position))
+        self._highlight_fold(target.fold)
 
     def _on_mouse_left(self) -> None:
+        if self._drag_index is None:
+            self._mouse = None
         self.item.set_rubber_band(None)
         self._highlight_fold(None)
         if self._drag_index is not None:
@@ -343,18 +397,33 @@ class CutTool(QObject):
         i = self._drag_index
         line = self._editor.cut_line
         assert i is not None and line is not None
+        if self._delete_press is not None:
+            moved = self._view.from_sheet(QPointF(x, y)) - self._delete_press
+            if moved.manhattanLength() < QApplication.startDragDistance():
+                return  # still a click
+            self._delete_press = None
         net = self._editor.net
-        vertex, cut = perimeter_target(self._view, net, x, y)
         original = line.points[i]
+        straight = self._view.shift_held() and i > 0
         if original.on_perimeter:
-            self._drag_target = self._editor.drag_target(i, quantize(x, y), vertex=vertex, current=self._drag_target)
-            self._highlight_vertex(vertex)
+            vertex, _ = perimeter_target(self._view, net, x, y)
+            target = self._editor.drag_target(
+                i, quantize(x, y), vertex=vertex, current=self._drag_target, straight=straight
+            )
+            self._drag_target = target
+            self._highlight_vertex(vertex if target.vertex is vertex else None)
         else:
-            self._drag_over_perimeter = vertex is not None or cut is not None
             on_fold = (self._drag_target or original).fold
-            fold = fold_target(self._view, net, x, y, prefer=on_fold)
-            self._drag_target = self._editor.drag_target(i, quantize(x, y), fold=fold)
-            self._highlight_fold(None if self._drag_over_perimeter else fold)
+            if straight:
+                p, _, _, fold = self._straight_hit(line.points[i - 1].position, x, y, on_fold)
+                vertex, cut = perimeter_target(self._view, net, float(p.x), float(p.y))
+            else:
+                p = quantize(x, y)
+                vertex, cut = perimeter_target(self._view, net, x, y)
+                fold = fold_target(self._view, net, x, y, prefer=on_fold)
+            self._drag_over_perimeter = vertex is not None or cut is not None
+            self._drag_target = self._editor.drag_target(i, p, fold=fold, straight=straight)
+            self._highlight_fold(None if self._drag_over_perimeter else self._drag_target.fold)
         self.refresh()
 
     def _update_area(self, *_: object) -> None:

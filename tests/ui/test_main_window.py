@@ -1312,3 +1312,57 @@ class TestPanningFromInsideTheNet:
         assert not view.is_panning()
         assert window.cut_tool.dragging
         qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+
+
+class TestShiftInTheWindow:
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        window.activateWindow()
+        qtbot.waitUntil(window.isActiveWindow)
+        return window
+
+    def hitbox(self, window: MainWindow) -> float:
+        from cube_net.ui.sheet import net_style
+
+        return net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+
+    def test_the_sheet_has_the_focus_from_the_start(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert window.sheet_view.hasFocus()
+
+    def test_hover_shows_what_the_straight_segment_ends_on(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        view = window.sheet_view
+        h = self.hitbox(window)
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.7, 13.5)
+        in_a_cut = 12 - h, 13.2  # in the hitbox of a cut, while the straight segment goes down from the last point
+        view.mouse_moved.emit(*in_a_cut)
+        assert window.cut_hover.hovered() is not None
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        assert window.cut_hover.hovered() is None
+        view.mouse_moved.emit(12 - h, 13.45)  # now it goes right, into that cut
+        assert window.cut_hover.hovered() is not None
+        qtbot.keyRelease(view, Qt.Key.Key_Shift)
+        view.mouse_moved.emit(*in_a_cut)
+        assert window.cut_hover.hovered() is not None
+
+    def test_undo_is_back_after_a_shift_click(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from PyQt6.QtCore import QPointF
+
+        window = self.make(qtbot, tmp_path)
+        view = window.sheet_view
+        h = self.hitbox(window)
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+        pos = view.from_sheet(QPointF(11.5, 13.5)).toPoint()
+        modifier = Qt.KeyboardModifier.ShiftModifier
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, modifier, pos)
+        assert not window.undo_action.isEnabled()  # it may still become a drag
+        qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, modifier, pos)
+        assert window.undo_action.isEnabled()
+        window.undo_action.trigger()
+        assert window.editor.cut_line is not None and len(window.editor.cut_line.points) == 3

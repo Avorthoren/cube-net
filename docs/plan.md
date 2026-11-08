@@ -363,6 +363,9 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
 - Hover: the nearest boundary segment within the inside-hitbox is highlighted, in DEFAULT, CUTTING (when about to
   end) and CUT_EDITING.
 - Dragging cut-line points shows the live position; the result is validated on release (§4.2).
+- SHIFT restricts the segment being made, or the one from the previous point to the dragged point, to horizontal or
+  vertical (`core/cutting/straight.py`). `SheetView` tracks SHIFT, from the keyboard and from mouse events, so that it
+  acts at once. Shift+press on an inner point deletes it on release, unless the mouse has moved: then it's a move.
 
 ### 6.5 Blinking and colours (`palette.py`)
 - Face colours come from `QSettings`, with the defaults from `idea.txt`. Each colour also has a derived

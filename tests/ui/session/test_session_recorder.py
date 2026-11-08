@@ -117,3 +117,20 @@ def test_format_modifiers() -> None:
     assert format_modifiers(Qt.KeyboardModifier.NoModifier) == []
     mods = Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier
     assert format_modifiers(mods) == ["[CS]"]
+
+
+def test_shift_is_on_the_drag_lines(view: SheetView, recorder: SessionRecorder, qtbot: QtBot) -> None:
+    start = view.from_sheet(QPointF(7, 7)).toPoint()
+    qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=start)
+    move = QMouseEvent(
+        QEvent.Type.MouseMove,
+        QPointF(start + QPoint(20, 0)),
+        QPointF(view.viewport().mapToGlobal(start + QPoint(20, 0))),
+        Qt.MouseButton.NoButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.ShiftModifier,
+    )
+    QApplication.sendEvent(view.viewport(), move)
+    qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=start + QPoint(20, 0))
+    drag = next(line for line in entries(recorder) if line.startswith("drag"))
+    assert drag.endswith(" [S]")

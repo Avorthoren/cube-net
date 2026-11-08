@@ -1,5 +1,6 @@
 """`CutHover`: highlights the cut or perimeter vertex under the mouse (docs/idea.txt, DEFAULT state, rule 1)."""
 
+from collections.abc import Callable
 from fractions import Fraction
 
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -36,6 +37,10 @@ def fold_target(view: SheetView, net: Net, x: float, y: float, prefer: HalfEdge 
     return fold_edge_at(net, quantize(x, y), half_width, prefer)
 
 
+# What a mouse at sheet point (x, y) would really pick, if someone knows better than `perimeter_target` (else None).
+type HoverTarget = Callable[[float, float], tuple[NetVertex | None, HalfEdge | None] | None]
+
+
 class CutHover(QObject):
     """Follows the mouse over `view` and highlights the cut whose hitbox is under it."""
 
@@ -48,8 +53,11 @@ class CutHover(QObject):
         self._net = net
         self._ignored: frozenset[HalfEdge] = frozenset()
         self._vertices = True
+        self._target: HoverTarget = lambda _x, _y: None
+        self._mouse: tuple[float, float] | None = None
         view.mouse_moved.connect(self._on_mouse_moved)
-        view.mouse_left.connect(self.clear)
+        view.mouse_left.connect(self._on_mouse_left)
+        view.shift_changed.connect(self._on_shift_changed)
 
     def set_net(self, net: Net, ignored: frozenset[HalfEdge] = frozenset(), vertices: bool = True) -> None:
         """Follow the cuts of `net`; those in `ignored` mean nothing, and don't highlight. Without `vertices`, vertices
@@ -64,6 +72,9 @@ class CutHover(QObject):
         item = self._view.net_item()
         if item is not None:
             item.set_highlight_vertex(None)
+
+    def set_target(self, target: HoverTarget) -> None:
+        self._target = target
 
     def hovered(self) -> HalfEdge | None:
         item = self._view.net_item()
@@ -81,11 +92,20 @@ class CutHover(QObject):
         if self._view.is_panning():
             self._set(None, None)
             return
-        vertex, cut = perimeter_target(self._view, self._net, x, y)
+        vertex, cut = self._target(x, y) or perimeter_target(self._view, self._net, x, y)
         self._set(vertex, None if cut in self._ignored else cut)
 
     def _on_mouse_moved(self, x: float, y: float) -> None:
+        self._mouse = x, y
         self.update_at(x, y)
+
+    def _on_mouse_left(self) -> None:
+        self._mouse = None
+        self.clear()
+
+    def _on_shift_changed(self) -> None:
+        if self._mouse is not None:
+            self.update_at(*self._mouse)
 
     def _set(self, vertex: NetVertex | None, cut: HalfEdge | None) -> None:
         item = self._view.net_item()

@@ -279,6 +279,10 @@ Initially we are in the DEFAULT state, in which:
 As soon as first point of a new cut line created, we are in a slightly different state (CUTTING):
 1. Application should show segments that connect i-th and (i+1)-th point of the new cut line, and segment that connects
    the last point with current mouse location.
+   While SHIFT is held, that segment is restricted to horizontal or vertical (whichever is closer to the mouse), and it
+   changes at once when SHIFT is pressed or released. Whatever it snaps to has to keep it that way: a vertex of the outer
+   perimeter only if it's exactly on its line, a segment of the outer perimeter or a fold line at the point where its
+   line crosses them.
 2. As soon as user clicks inside the cube net application should check if segment from the last point to current mouse
    location has intersection with other segments of the new cut line or the outer perimeter. If so - current segment
    should just become black for 200 ms. If there is no intersection - new point of new cut line should be created.
@@ -308,7 +312,8 @@ when hovered. The exception: while the first/last point of the cut line is dragg
 highlighted (that's never a counterpart image: the point can't go to those).
 1. Here in the middle of every segment of the new cut line should be a small hollow circle (just a thin outline, with
    transparent inside), click on which should create new point of the new cut line.
-2. SHIFT+click on any point of the new cut line (except for first and last one) should delete that point. But there is
+2. SHIFT+click on any point of the new cut line (except for first and last one) should delete that point (when the mouse
+   is released, if it has hardly moved: SHIFT+drag is a move, see below). But there is
    a catch: consider 2 consecutive segments P1 - P2 and P2 - P3 of the new cut line, and user tries to delete P2.
    If segment P1-P3 intersects any other segment of the new cut line or the outer perimeter (i.e. violates the rule
    "new cut line should be strictly inside the cube net"), then for 200 ms we hide segments P1 - P2, P2 - P3 and show
@@ -320,6 +325,10 @@ highlighted (that's never a counterpart image: the point can't go to those).
    outer perimeter: if such point is released while the mouse is inside a hitbox of the outer perimeter (a segment or a
    vertex), the movement is rejected. If such point gets inside the hitbox of a fold line, it goes to the point of that
    fold line closest to the mouse, and it stays on that fold line (moving along it) until the mouse leaves that hitbox.
+   While SHIFT is held, the segment from the previous point to the dragged one is restricted to horizontal or vertical
+   (the first point has no previous one, so it moves as usual), with the same snapping rules as while cutting. The last
+   point stays on the outer perimeter: it goes to the point of the perimeter closest to the mouse that is straight from
+   the previous point.
    As soon as user releases the mouse click application
    should check if any segment of the new cut line that has moved point (two segments if that's an inner point of the
    cut line, or one if that's the first/last point) has intersection with any other segment of the new cut line or

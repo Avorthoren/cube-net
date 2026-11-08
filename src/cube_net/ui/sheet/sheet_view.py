@@ -7,7 +7,7 @@ from the core are used as-is.
 from collections.abc import Callable
 
 from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QMouseEvent, QMoveEvent, QPainter, QResizeEvent, QShowEvent, QTransform, QWheelEvent
+from PyQt6.QtGui import QKeyEvent, QMouseEvent, QMoveEvent, QPainter, QResizeEvent, QShowEvent, QTransform, QWheelEvent
 from PyQt6.QtWidgets import QGraphicsScene, QGraphicsView, QWidget
 
 from cube_net.core.geometry import Box
@@ -35,6 +35,9 @@ class SheetView(QGraphicsView):
 
     # Left button pressed at a sheet point (x, y) that doesn't start panning.
     left_pressed = pyqtSignal(float, float)
+
+    # SHIFT was pressed or released (even if the mouse stays where it is).
+    shift_changed = pyqtSignal()
 
     # Left button released at a sheet point (x, y), unless it ended panning.
     left_released = pyqtSignal(float, float)
@@ -64,6 +67,7 @@ class SheetView(QGraphicsView):
         self._pan_last: QPoint | None = None
         self._panning_enabled = True
         self._press_modifiers = Qt.KeyboardModifier.NoModifier
+        self._shift_held = False
         self._pending_initial_view: Box | None = None
         # Where the viewport's top-left corner was in the window, so the sheet can be kept in place when it moves.
         self._viewport_origin: QPoint | None = None
@@ -127,6 +131,14 @@ class SheetView(QGraphicsView):
 
     def sheet_rect(self) -> QRectF:
         return QRectF(self._sheet)
+
+    def shift_held(self) -> bool:
+        return self._shift_held
+
+    def _note_shift(self, held: bool) -> None:
+        if held != self._shift_held:
+            self._shift_held = held
+            self.shift_changed.emit()
 
     def press_modifiers(self) -> Qt.KeyboardModifier:
         """The modifier keys held during the latest mouse press."""
@@ -192,6 +204,7 @@ class SheetView(QGraphicsView):
         if event is None:
             return
         self._press_modifiers = event.modifiers()
+        self._note_shift(bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
         if event.button() == Qt.MouseButton.LeftButton:
             p = self.to_sheet(event.position())
             if self._panning_enabled and not self.press_claimed(p.x(), p.y()):
@@ -206,6 +219,7 @@ class SheetView(QGraphicsView):
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
             return
+        self._note_shift(bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
         pos = event.position()
         if self._pan_last is not None:
             delta = pos.toPoint() - self._pan_last
@@ -226,6 +240,16 @@ class SheetView(QGraphicsView):
             event.accept()
             return
         super().mouseReleaseEvent(event)
+
+    def keyPressEvent(self, event: QKeyEvent | None) -> None:
+        if event is not None and event.key() == Qt.Key.Key_Shift:
+            self._note_shift(True)
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event: QKeyEvent | None) -> None:
+        if event is not None and event.key() == Qt.Key.Key_Shift:
+            self._note_shift(False)
+        super().keyReleaseEvent(event)
 
     def leaveEvent(self, event: object) -> None:
         self.mouse_left.emit()

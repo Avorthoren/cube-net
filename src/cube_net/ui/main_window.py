@@ -84,9 +84,11 @@ class MainWindow(QMainWindow):
         self.cut_tool.glued.connect(self._on_glued)
         self.cut_hover.hover_changed.connect(self._update_divided_view)
         self.cut_tool.rejected.connect(self._on_cut_rejected)
+        self.cut_hover.set_target(self.cut_tool.hover_target)
         self.sheet_view.set_press_claim(self.cut_tool.claims)
         self.sheet_view.show_initial_view(net_box)
         self.setCentralWidget(self.sheet_view)
+        self.sheet_view.setFocus()  # it wants to know about SHIFT even before the first click
 
         self.coords_label = QLabel(NO_COORDINATES, self)
         # Wide enough for any value, so the status bar doesn't jump while the mouse moves.

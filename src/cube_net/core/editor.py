@@ -30,12 +30,15 @@ from cube_net.core.cutting import (
     Rearranged,
     SplitNet,
     approve,
+    closest_straight_point,
     invalid_segments,
+    line_meets_segment,
     project_onto,
     rearrange,
     segment_allowed,
     segment_valid,
     split_net,
+    straighten,
 )
 from cube_net.core.geometry import Vec
 from cube_net.core.history import ActionKind, History
@@ -99,27 +102,61 @@ class Editor:
         return self.rearranged.net if self.rearranged is not None else self.net
 
     def candidate(
-        self, p: Vec, cut: HalfEdge | None, vertex: NetVertex | None = None, fold: HalfEdge | None = None
+        self,
+        p: Vec,
+        cut: HalfEdge | None,
+        vertex: NetVertex | None = None,
+        fold: HalfEdge | None = None,
+        straight: bool = False,
     ) -> CutPoint:
         """The point a click at `p` would create: exactly at `vertex`, on `cut` or `fold` (the closest point of it), or
-        at `p` inside the net."""
+        at `p` inside the net. `straight` (SHIFT, while cutting): the new segment is horizontal or vertical."""
+        if straight and self.cut_line is not None:
+            return self._straight_point(self.cut_line.last.position, p, cut, vertex, fold)
         if cut is not None and vertex is None:
-            projected = project_onto(cut, p)
-            for end in (cut.origin, cut.destination):
-                if projected == end.position:  # landed exactly on the end of the cut: that's the vertex
-                    vertex = end
-            if vertex is None:
-                return CutPoint(projected, cut)
+            return self._point_on_cut(project_onto(cut, p), cut)
         if vertex is not None:
-            return CutPoint(vertex.position, boundary_edge_from(self.net, vertex), vertex)
+            return self._point_at_vertex(vertex)
         if fold is not None:
             return CutPoint(project_onto(fold, p), fold=fold)
         return CutPoint(p)
 
+    def _point_at_vertex(self, vertex: NetVertex) -> CutPoint:
+        return CutPoint(vertex.position, boundary_edge_from(self.net, vertex), vertex)
+
+    def _point_on_cut(self, position: Vec, cut: HalfEdge) -> CutPoint:
+        for end in (cut.origin, cut.destination):
+            if position == end.position:  # exactly on the end of the cut: that's the vertex
+                return self._point_at_vertex(end)
+        return CutPoint(position, cut)
+
+    def _straight_point(
+        self, anchor: Vec, p: Vec, cut: HalfEdge | None, vertex: NetVertex | None, fold: HalfEdge | None
+    ) -> CutPoint:
+        """The point near `p` that is straight from `anchor`. What it snaps to must be on its line."""
+        p = straighten(anchor, p)
+        if vertex is not None and (p - anchor).cross(vertex.position - anchor) == 0:
+            return self._point_at_vertex(vertex)
+        if cut is not None:
+            hit = line_meets_segment(anchor, p, cut.origin.position, cut.destination.position)
+            if hit is not None:
+                return self._point_on_cut(hit, cut)
+        if fold is not None:
+            hit = line_meets_segment(anchor, p, fold.origin.position, fold.destination.position)
+            if hit is not None:
+                return CutPoint(hit, fold=fold)
+        return CutPoint(p)
+
     def click(
-        self, p: Vec, cut: HalfEdge | None, vertex: NetVertex | None = None, fold: HalfEdge | None = None
+        self,
+        p: Vec,
+        cut: HalfEdge | None,
+        vertex: NetVertex | None = None,
+        fold: HalfEdge | None = None,
+        straight: bool = False,
     ) -> Rejection | None:
-        """A left click at sheet point `p`; `vertex`, `cut` and `fold` are what the click hit, if anything.
+        """A left click at sheet point `p`; `vertex`, `cut` and `fold` are what the click hit, if anything. `straight`:
+        see `candidate`.
 
         Returns a `Rejection` if the click would break the rules; None if it was accepted or means nothing here.
         """
@@ -132,7 +169,7 @@ class Editor:
                     self._record(ActionKind.ADD_POINT, before)
                 return None
             case EditorState.CUTTING:
-                return self._extend(self.candidate(p, cut, vertex, fold))
+                return self._extend(self.candidate(p, cut, vertex, fold, straight))
             case _:
                 return None
 
@@ -170,18 +207,30 @@ class Editor:
         vertex: NetVertex | None = None,
         fold: HalfEdge | None = None,
         current: CutPoint | None = None,
+        straight: bool = False,
     ) -> CutPoint:
         """Where point i goes when dragged to `p`; `current` is where the drag has brought it so far.
 
         An inner point goes to `p`, or onto `fold` if the mouse is in that fold's hitbox. An endpoint goes to the
         perimeter `vertex` if the mouse is in its circle; otherwise it walks along the perimeter from `current` towards
         `p`, passing vertices on the way, and stops where it gets no closer.
+
+        `straight` (SHIFT): the segment from the previous point is horizontal or vertical (the first point has none, so
+        it goes as usual). The last point then goes to the point of the perimeter closest to `p` that allows that.
         """
         line = self._editing_line()
+        if straight and i > 0:
+            anchor = line.points[i - 1].position
+            if line.points[i].edge is None:
+                return self._straight_point(anchor, p, None, None, fold)
+            found = closest_straight_point(self.net, anchor, p)
+            if found is None:
+                return current if current is not None else line.points[i]
+            return self._point_on_cut(*found)
         if line.points[i].edge is None:
             return CutPoint(project_onto(fold, p), fold=fold) if fold is not None else CutPoint(p)
         if vertex is not None:
-            return CutPoint(vertex.position, boundary_edge_from(self.net, vertex), vertex)
+            return self._point_at_vertex(vertex)
         point = current if current is not None else line.points[i]
         while True:
             target = self._closest_on_adjacent_cuts(point, p)

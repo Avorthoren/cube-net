@@ -191,7 +191,7 @@ class SessionRecorder(QObject):
         if now - self._last_drag < DRAG_INTERVAL:
             return
         self._last_drag = now
-        self._log.write("drag", *self._where(obj, event.position()))
+        self._log.write("drag", *self._where(obj, event.position()), *format_modifiers(event.modifiers()))
 
     def _wheel(self, obj: QWidget, event: QWheelEvent) -> None:
         notches = event.angleDelta().y() / 120

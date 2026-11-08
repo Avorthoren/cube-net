@@ -157,3 +157,28 @@ class TestWithoutVertices:
         hover.set_net(net)
         hover.update_at(*self.in_circle_of_a_1(view))
         assert hover.hovered_vertex() is not None
+
+
+class TestTarget:
+    def test_it_decides_when_it_knows_better(self, setup: tuple[SheetView, CutHover, Net]) -> None:
+        _, hover, net = setup
+        other = net.boundary_edges()[0]
+        hover.set_target(lambda _x, _y: (None, other))
+        hover.update_at(7, 7)
+        assert hover.hovered() is other
+
+    def test_otherwise_the_mouse_does(self, setup: tuple[SheetView, CutHover, Net]) -> None:
+        view, hover, _ = setup
+        hover.set_target(lambda _x, _y: None)
+        hover.update_at(near_cut(view), 12.5)
+        assert hover.hovered() is not None
+
+    def test_shift_asks_again_without_a_move(self, setup: tuple[SheetView, CutHover, Net], qtbot: QtBot) -> None:
+        view, hover, _ = setup
+        view.mouse_moved.emit(near_cut(view), 12.5)
+        assert hover.hovered() is not None
+        hover.set_target(lambda _x, _y: (None, None) if view.shift_held() else None)
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        assert hover.hovered() is None
+        qtbot.keyRelease(view, Qt.Key.Key_Shift)
+        assert hover.hovered() is not None
