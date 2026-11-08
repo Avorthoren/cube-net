@@ -8,7 +8,7 @@ from PyQt6.QtWidgets import QApplication
 from cube_net.core.cutting import CutLine, CutPoint, SplitNet, split_net
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, vertex_labels
-from cube_net.core.net import default_net
+from cube_net.core.net import HalfEdge, default_net
 from cube_net.ui import palette
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.net_item import NetItem, hatch_path
@@ -230,3 +230,57 @@ def test_useless_part_is_not_highlighted_under_the_mouse() -> None:
     wide = 13 - (net_style.USELESS_CUT_PX + 2) / SCALE
     assert colour_at(image, world, x, wide) != palette.USELESS_CUT
     assert colour_at(image, world, x, 13 - 0.5 / SCALE) == palette.USELESS_CUT
+
+
+class TestHiddenCut:
+    def bottom_cut(self, split: SplitNet) -> HalfEdge:
+        half = Fraction(1, 2)
+        return next(
+            he
+            for he in split.net.boundary_edges()
+            if {he.origin.position, he.destination.position} == {Vec(11 + half, 10), Vec(12, 10)}
+        )
+
+    def test_it_is_left_out_and_the_rest_stays(self) -> None:
+        item, split = divided_corner_cut()
+        item.set_divided(split)
+        cut = self.bottom_cut(split)
+        shown, world = render_item(item)
+        item.set_hidden_cut(cut)
+        assert item.hidden_cut() is cut
+        hidden, _ = render_item(item)
+        assert shown != hidden
+        changed = [
+            world.inverted()[0].map(QPointF(x, y))
+            for x in range(0, shown.width(), 2)
+            for y in range(0, shown.height(), 2)
+            if shown.pixel(x, y) != hidden.pixel(x, y)
+        ]
+        assert changed
+        tolerance = net_style.EDGE_WIDTH_PX * 2 / SCALE + net_style.VERTEX_RADIUS_PX / SCALE
+        assert all(abs(p.y() - 10) <= tolerance for p in changed)
+        assert all(11.5 - tolerance <= p.x() <= 12 + tolerance for p in changed)
+
+    def test_visible_again(self) -> None:
+        item, split = divided_corner_cut()
+        item.set_divided(split)
+        shown, _ = render_item(item)
+        item.set_hidden_cut(self.bottom_cut(split))
+        item.set_hidden_cut(None)
+        again, _ = render_item(item)
+        assert shown == again
+
+    def test_its_vertices_stay(self) -> None:
+        item, split = divided_corner_cut()
+        item.set_divided(split)
+        shown, world = render_item(item)
+        item.set_hidden_cut(self.bottom_cut(split))
+        hidden, _ = render_item(item)
+        b_3 = world.map(QPointF(12, 10)).toPoint()
+        assert shown.pixel(b_3) == hidden.pixel(b_3)
+
+    def test_a_new_net_forgets_it(self) -> None:
+        item, split = divided_corner_cut()
+        item.set_hidden_cut(self.bottom_cut(split))
+        item.set_net(default_net())
+        assert item.hidden_cut() is None

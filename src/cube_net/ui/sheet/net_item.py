@@ -5,7 +5,8 @@ Painted bottom to top:
 2. Fold edges: two-colour dashes centred on the cube edge.
 3. Cuts (the perimeter): dashes drawn fully inside their region; a highlighted cut or fold edge is drawn wider. In
    CUT_EDITING, while the user hovers the perimeter, the cuts are drawn as the line divides them, and the parts that
-   can't be chosen for gluing are thin and black.
+   can't be chosen for gluing are thin and black. The counterpart of a hovered cut that can be chosen blinks: one cut
+   can be left out.
 4. Vertex circles on the perimeter, one equal sector per face of the vertex; a highlighted vertex gets a ring.
 5. Optional debug labels (A_1, B_2, ...) next to all vertices, placed outside the net.
 Hatch is drawn in sheet units; lines and circles have constant pixel sizes, so they are drawn in device pixels.
@@ -52,6 +53,7 @@ class NetItem(QGraphicsItem):
         self._glue: tuple[HalfEdge, ...] = ()
         self._overlapping: frozenset[HalfEdge] = frozenset()
         self._divided: SplitNet | None = None
+        self._hidden_cut: HalfEdge | None = None
 
     def set_net(self, net: Net) -> None:
         self.prepareGeometryChange()
@@ -63,6 +65,7 @@ class NetItem(QGraphicsItem):
         self._glue = ()
         self._overlapping = frozenset()
         self._divided = None
+        self._hidden_cut = None
         self.update()
 
     def set_highlight(self, cut: HalfEdge | None) -> None:
@@ -98,6 +101,15 @@ class NetItem(QGraphicsItem):
 
     def divided(self) -> SplitNet | None:
         return self._divided
+
+    def set_hidden_cut(self, cut: HalfEdge | None) -> None:
+        """Leave this cut out, as if it weren't there; its vertices stay (None: all of them are drawn)."""
+        if cut is not self._hidden_cut:
+            self._hidden_cut = cut
+            self.update()
+
+    def hidden_cut(self) -> HalfEdge | None:
+        return self._hidden_cut
 
     def set_highlight_fold(self, fold: HalfEdge | None) -> None:
         """Draw this fold edge highlighted (None: no highlight)."""
@@ -145,6 +157,8 @@ class NetItem(QGraphicsItem):
             self._paint_dashed(painter, world, he, inset=0.0)
         useless = self._divided.same_half_cuts if self._divided is not None else frozenset()
         for he in self._cuts_to_paint():
+            if he is self._hidden_cut:
+                continue
             if he in useless:
                 self._paint_solid(painter, world, he, palette.USELESS_CUT, net_style.USELESS_CUT_PX, units_per_px)
             else:

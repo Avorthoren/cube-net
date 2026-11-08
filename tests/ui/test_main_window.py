@@ -2429,3 +2429,173 @@ class TestProjectSettings:
         window.project_settings_action.trigger()
         assert session_lines(window.recorder.log.path)[-1] == "project threshold 5.000"
         window.stop_recording("test over")
+
+
+# x_1-B_1, on the top of face 1 (for the corner cut).
+TOP_PART = frozenset({Vec(F(23, 2), 14), Vec(12, 14)})
+
+
+class TestCounterpartBlinks:
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def hitbox(self, window: MainWindow) -> float:
+        from cube_net.ui.sheet import net_style
+
+        return net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+
+    def close_line(self, window: MainWindow) -> None:
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+
+    def blinking(self, window: MainWindow) -> set[Vec] | None:
+        cut = window.counterpart_blink.cut()
+        return None if cut is None else {cut.origin.position, cut.destination.position}
+
+    def hover_bottom(self, window: MainWindow) -> None:
+        """x_2-B_3, on the bottom of face 5: it can be chosen, and its counterpart is x_1-B_1 on the top of face 1."""
+        window.sheet_view.mouse_moved.emit(11.75, 10 + self.hitbox(window))
+
+    def test_the_exact_part_that_is_the_counterpart(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.hover_bottom(window)
+        assert self.blinking(window) == TOP_PART
+        item = window.sheet_view.net_item()
+        assert item is not None and item.hidden_cut() is window.counterpart_blink.cut()
+
+    def test_it_is_a_cut_that_gets_painted(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.hover_bottom(window)
+        cut = window.counterpart_blink.cut()
+        assert cut is not None
+        assert cut in window.editor.split().net.boundary_edges()
+
+    def test_it_really_blinks(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.hover_bottom(window)
+        item = window.sheet_view.net_item()
+        assert item is not None
+        qtbot.waitUntil(lambda: item.hidden_cut() is None, timeout=2000)
+        qtbot.waitUntil(lambda: item.hidden_cut() is not None, timeout=2000)
+
+    def test_not_for_a_useless_cut(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        window.sheet_view.mouse_moved.emit(10.5, 12 + self.hitbox(window))  # E_2-H_1: thin and black
+        item = window.sheet_view.net_item()
+        assert item is not None and item.divided() is not None
+        assert window.cut_hover.hovered() is not None
+        assert self.blinking(window) is None
+        assert item.hidden_cut() is None
+
+    def test_not_for_the_new_line(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        window.sheet_view.mouse_moved.emit(11.5 + self.hitbox(window), 13.8)
+        assert self.blinking(window) is None
+
+    def test_not_on_a_vertex(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        window.sheet_view.mouse_moved.emit(12.0, 10.0)
+        assert self.blinking(window) is None
+
+    @pytest.mark.parametrize("state", ["default", "cutting"])
+    def test_not_in_other_states(self, qtbot: QtBot, tmp_path: Path, state: str) -> None:
+        window = self.make(qtbot, tmp_path)
+        if state == "cutting":
+            window.sheet_view.left_pressed.emit(11.5, 14 - self.hitbox(window))
+        self.hover_bottom(window)
+        assert window.cut_hover.hovered() is not None
+        assert self.blinking(window) is None
+
+    def test_not_while_approving(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.hover_bottom(window)
+        window.sheet_view.left_pressed.emit(11.75, 10 + self.hitbox(window))
+        assert window.editor.state.value == "cut_approving"
+        assert self.blinking(window) is None
+        item = window.sheet_view.net_item()
+        assert item is not None and item.hidden_cut() is None
+
+    def test_stops_when_the_mouse_moves_away(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.hover_bottom(window)
+        window.sheet_view.mouse_moved.emit(11.5, 12.5)
+        assert self.blinking(window) is None
+        item = window.sheet_view.net_item()
+        assert item is not None and item.hidden_cut() is None
+
+    def test_stops_when_the_mouse_leaves_the_view(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.hover_bottom(window)
+        window.sheet_view.mouse_left.emit()
+        assert self.blinking(window) is None
+
+    def test_follows_the_mouse_to_another_cut(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.hover_bottom(window)
+        assert self.blinking(window) == TOP_PART
+        window.sheet_view.mouse_moved.emit(11.75, 14 - self.hitbox(window))  # x_1-B_1: now the other way round
+        assert self.blinking(window) == {Vec(F(23, 2), 10), Vec(12, 10)}
+        item = window.sheet_view.net_item()
+        assert item is not None and item.hidden_cut() is window.counterpart_blink.cut()
+
+    def test_not_while_dragging(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.hover_bottom(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 13.5)
+        assert self.blinking(window) is None
+        self.hover_bottom(window)
+        assert self.blinking(window) is None
+        view.left_released.emit(11.75, 10 + self.hitbox(window))
+        view.mouse_moved.emit(7.0, 7.0)
+        self.hover_bottom(window)
+        assert self.blinking(window) is not None
+
+    def test_not_while_the_ruler_is_active(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.hover_bottom(window)
+        window.ruler_action.trigger()
+        assert self.blinking(window) is None
+        window.ruler_action.trigger()
+        assert self.blinking(window) is not None
+
+    def test_undo_stops_it(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.hover_bottom(window)
+        window.undo_action.trigger()
+        assert window.editor.state.value == "cutting"
+        assert self.blinking(window) is None
+        item = window.sheet_view.net_item()
+        assert item is not None and item.hidden_cut() is None
+
+    def test_the_counterpart_follows_the_line(self, qtbot: QtBot, tmp_path: Path) -> None:
+        """Moving the end of the line changes where the parts begin."""
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14.0)
+        view.mouse_moved.emit(11.25, 14.0)
+        view.left_released.emit(11.25, 14.0)
+        view.mouse_moved.emit(7.0, 7.0)
+        view.mouse_moved.emit(11.75, 10 + self.hitbox(window))
+        assert self.blinking(window) == {Vec(F(45, 4), 14), Vec(12, 14)}

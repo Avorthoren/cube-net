@@ -47,6 +47,9 @@ FOLD_HITBOX_PX = CUT_HITBOX_PX
 # Width of a part of a cut that can't be chosen for gluing (its counterpart is in the same half), while it's shown so.
 USELESS_CUT_PX = 1.5
 
+# How long the counterpart of a hovered cut stays regular, and then invisible, while it blinks: 6 changes per second.
+COUNTERPART_BLINK_MS = round(1000 / 6)
+
 # Radius of the round "approve" button shown in the middle of the segment chosen for gluing.
 APPROVE_BUTTON_RADIUS_PX = 14.0
 

@@ -38,6 +38,7 @@ from cube_net.ui.session.start import (
     stop_session_recording,
 )
 from cube_net.ui.sheet.bounding_item import BoundingItem
+from cube_net.ui.sheet.counterpart_blink import CounterpartBlink
 from cube_net.ui.sheet.cut_hover import CutHover
 from cube_net.ui.sheet.cut_tool import CutTool
 from cube_net.ui.sheet.ruler_tool import RulerTool
@@ -95,6 +96,7 @@ class MainWindow(QMainWindow):
         self.sheet_view.set_sheet(sheet_box(v.position for v in self.net.vertices))
         self.sheet_view.set_net(self.net)
         self.cut_hover = CutHover(self.sheet_view, self.net)
+        self.counterpart_blink = CounterpartBlink(self.sheet_view)
         self.ruler_tool = RulerTool(self.sheet_view)
         self.ruler_tool.point_added.connect(self._on_ruler_point)
         self.editor = Editor(self.net)
@@ -533,7 +535,7 @@ class MainWindow(QMainWindow):
 
     def _update_divided_view(self) -> None:
         """While the user hovers a perimeter edge in CUT_EDITING (ruler off, nothing being dragged), show which parts
-        of the cuts can't be chosen for gluing."""
+        of the cuts can't be chosen for gluing; if the hovered one can be, its counterpart blinks."""
         item = self.sheet_view.net_item()
         if item is None:
             return
@@ -543,7 +545,13 @@ class MainWindow(QMainWindow):
             and not self.cut_tool.dragging
             and self.cut_hover.hovered() is not None
         )
-        item.set_divided(self.editor.split() if show else None)
+        split = self.editor.split() if show else None
+        item.set_divided(split)
+        hovered = self.cut_hover.hovered()
+        if split is None or hovered is None or hovered in split.same_half_cuts:
+            self.counterpart_blink.set_cut(None)
+        else:
+            self.counterpart_blink.set_cut(split.net.counterpart(hovered))
 
     def _update_hover_net(self) -> None:
         """Which cuts follow the mouse: in CUT_EDITING the parts of the net as divided by the line, because that's what

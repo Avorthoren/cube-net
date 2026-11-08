@@ -341,6 +341,9 @@ highlighted (that's never a counterpart image: the point can't go to those).
    and black, showing that clicking on it can't rearrange anything. Segments here include the divisions made by the
    first/last points and their images: only the affected parts of a cut change. The segments of the new cut line
    itself are not affected.
+   If the segment under the mouse isn't one of those (clicking on it would rearrange the halves), its counterpart
+   blinks instead: regular and invisible in equal durations, 6 changes per second, so that user can see which segment
+   would be glued with it. The vertices at its ends stay visible.
 4. If user clicks on any segment of the outer perimeter (not including its vertices) that should indicate the intent
    of rearranging two parts cube net was divided in such a way, that this chosen segment is glued with its counterpart.
    Because of the way we defined the cut if there is segment of outer perimeter Xi - Yj, then there always is exactly
