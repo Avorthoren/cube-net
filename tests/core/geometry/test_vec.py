@@ -127,3 +127,25 @@ class TestProperties:
     def test_rotations_compose(self, a: Vec, k: int, m: int) -> None:
         assert a.rotated90(k).rotated90(m) == a.rotated90(k + m)
         assert a.rotated90(k).rotated90(-k) == a
+
+
+class TestArithmeticGivesProperVecs:
+    """Arithmetic skips the checks of the constructor: what it makes must still be like any other `Vec`."""
+
+    def test_results_hold_fractions(self) -> None:
+        a, b = Vec(1, 2), Vec(F(1, 3), 5)
+        for result in (a + b, a - b, -a, a * 2, a * F(1, 2), 3 * a, a / 2, a / F(3, 4)):
+            assert isinstance(result, Vec)
+            assert isinstance(result.x, F) and isinstance(result.y, F)
+
+    def test_equal_and_hashed_like_any_other(self) -> None:
+        made = Vec(1, 2) + Vec(F(1, 2), 1)
+        plain = Vec(F(3, 2), 3)
+        assert made == plain
+        assert hash(made) == hash(plain)
+        assert not made < plain and not plain < made
+
+    def test_results_stay_immutable(self) -> None:
+        made = Vec(1, 2) + Vec(3, 4)
+        with pytest.raises(AttributeError):
+            made.x = F(0)  # type: ignore[misc]

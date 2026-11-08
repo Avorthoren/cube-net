@@ -302,3 +302,24 @@ class TestDamagedFiles:
 
     def test_the_undamaged_one_is_fine(self) -> None:
         decode_project(self.data())
+
+
+def test_any_coordinates_can_be_saved() -> None:
+    """More digits than Python turns into text by default (old projects may have them): a project must always save."""
+    from fractions import Fraction
+
+    from cube_net.core.geometry import Rigid90, Vec
+    from cube_net.core.net import default_net
+    from cube_net.core.project import Project
+
+    huge = Fraction(1, 3**12000)
+    assert len(str(huge.denominator)) > 4300
+    net = default_net().copy().net
+    motion = Rigid90.translation(Vec(huge, 0))
+    for vertex in net.vertices:
+        vertex.position = motion.apply(vertex.position)
+    for region in net.regions:
+        region.placement = motion @ region.placement
+    project = project_of(Editor(net))
+    assert isinstance(project, Project)
+    assert net_contents(round_trip(project).state.net) == net_contents(net)

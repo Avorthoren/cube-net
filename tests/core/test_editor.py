@@ -1,13 +1,14 @@
 from collections.abc import Callable
 from fractions import Fraction as F
+from random import Random
 
 import pytest
 
 from cube_net.core.cutting import MAX_POINTS_AFTER_FIRST, CutLine, CutPoint
 from cube_net.core.editor import Editor, EditorState
-from cube_net.core.geometry import Vec
+from cube_net.core.geometry import Vec, quantize
 from cube_net.core.labels import PointLabels, vertex_labels
-from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_vertex_at, default_net
+from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_vertex_at, default_net, validate_net
 
 
 @pytest.fixture
@@ -714,3 +715,45 @@ class TestStraight:
             assert point.position == v("11.5", "14")
             assert editing.move_point(2, point) is not None
             assert positions(editing) == before
+
+
+class TestLongSession:
+    """Many generations of cuts, each starting on what the ones before made (docs/plan.md, M10)."""
+
+    def point_on(self, cut: HalfEdge, rng: Random) -> Vec:
+        a, b = cut.origin.position, cut.destination.position
+        t = F(rng.randint(100, 900), 1000)
+        return quantize(float(a.x + (b.x - a.x) * t), float(a.y + (b.y - a.y) * t))
+
+    def try_a_cut(self, editor: Editor, rng: Random) -> None:
+        first, last = rng.sample(editor.net.boundary_edges(), 2)
+        if editor.click(self.point_on(first, rng), first) is not None:
+            return
+        if editor.click(self.point_on(last, rng), last) is not None or editor.state is not EditorState.CUT_EDITING:
+            editor.undo()
+            return
+        split = editor.split()
+        ids = [c.id for c in split.net.boundary_edges() if c not in split.line_edges | split.same_half_cuts]
+        rng.shuffle(ids)
+        for cut_id in ids[:8]:
+            chosen = next(c for c in editor.split().net.half_edges if c.id == cut_id)
+            if editor.glue(chosen) is None and editor.rearranged is not None:
+                if editor.rearranged.valid:
+                    editor.approve()
+                    return
+                editor.undo()
+        editor.undo()
+        editor.undo()
+
+    def test_coordinates_stay_small_and_the_net_valid(self) -> None:
+        rng = Random(7)
+        editor = Editor(default_net())
+        tries = 0
+        while editor.approved_cuts < 30 and tries < 500:
+            tries += 1
+            self.try_a_cut(editor, rng)
+        assert editor.approved_cuts == 30
+        validate_net(editor.net)
+        positions = [v.position for v in editor.net.vertices]
+        largest = max(max(p.x.denominator, p.y.denominator) for p in positions)
+        assert largest < 10**100  # with the exact closest point it's thousands of digits by 45 cuts, and growing fast

@@ -10,6 +10,8 @@ Painted bottom to top:
 4. Vertex circles on the perimeter, one equal sector per face of the vertex; a highlighted vertex gets a ring.
 5. Optional debug labels (A_1, B_2, ...) next to all vertices, placed outside the net.
 Hatch is drawn in sheet units; lines and circles have constant pixel sizes, so they are drawn in device pixels.
+
+A net never changes once it's made, so what takes exact arithmetic is worked out once for it, not in every paint.
 """
 
 import math
@@ -18,14 +20,22 @@ from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 
+from cube_net.core.cube import Face
 from cube_net.core.cutting import SplitNet
 from cube_net.core.labels import VertexLabel
-from cube_net.core.net import HalfEdge, Net, NetVertex
+from cube_net.core.net import HalfEdge, Net, NetVertex, Region
 from cube_net.core.sheet import SHEET_MARGIN
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf, to_qtransform
 from cube_net.ui.sheet import net_style
-from cube_net.ui.sheet.net_painting import UP_RIGHT, paint_dashed, paint_labels, paint_vertex
+from cube_net.ui.sheet.net_painting import (
+    UP_RIGHT,
+    DashedSegment,
+    paint_labels,
+    paint_prepared,
+    paint_vertex,
+    prepare_dashed,
+)
 
 
 def hatch_path() -> QPainterPath:
@@ -54,6 +64,10 @@ class NetItem(QGraphicsItem):
         self._overlapping: frozenset[HalfEdge] = frozenset()
         self._divided: SplitNet | None = None
         self._hidden_cut: HalfEdge | None = None
+        self._dashes: dict[HalfEdge, DashedSegment | None] = {}
+        self._polygons: dict[Region, QPolygonF] = {}
+        self._centers: list[tuple[QPointF, frozenset[Face]]] | None = None
+        self._outward: dict[NetVertex, QPointF] | None = None
 
     def set_net(self, net: Net) -> None:
         self.prepareGeometryChange()
@@ -66,6 +80,10 @@ class NetItem(QGraphicsItem):
         self._overlapping = frozenset()
         self._divided = None
         self._hidden_cut = None
+        self._dashes = {}
+        self._polygons = {}
+        self._centers = None
+        self._outward = None
         self.update()
 
     def set_highlight(self, cut: HalfEdge | None) -> None:
@@ -97,6 +115,7 @@ class NetItem(QGraphicsItem):
         """Draw the cuts as divided by the cut line, those that can't be chosen thin and black (None: as usual)."""
         if split is not self._divided:
             self._divided = split
+            self._dashes = {}  # the divided cuts are other half-edges
             self.update()
 
     def divided(self) -> SplitNet | None:
@@ -189,7 +208,7 @@ class NetItem(QGraphicsItem):
     def _paint_hatch(self, painter: QPainter) -> None:
         for region in self._net.regions:
             outline = QPainterPath()
-            outline.addPolygon(QPolygonF([to_qpointf(p) for p in self._net.region_polygon(region)]))
+            outline.addPolygon(self._polygon(region))
             outline.closeSubpath()
             painter.save()
             painter.setClipPath(outline, Qt.ClipOperation.IntersectClip)
@@ -198,12 +217,24 @@ class NetItem(QGraphicsItem):
             painter.fillPath(self._hatch, palette.FACE_COLORS[region.face])
             painter.restore()
 
+    def _polygon(self, region: Region) -> QPolygonF:
+        polygon = self._polygons.get(region)
+        if polygon is None:
+            polygon = QPolygonF([to_qpointf(p) for p in self._net.region_polygon(region)])
+            self._polygons[region] = polygon
+        return polygon
+
     def _paint_dashed(
         self, painter: QPainter, world: QTransform, he: HalfEdge, inset: float, width: float = net_style.EDGE_WIDTH_PX
     ) -> None:
         """Dashed line of `width` px along `he`, shifted by `inset` units to its left (into its region)."""
-        a, b = he.origin, he.destination
-        paint_dashed(painter, world, a.position, b.position, a.point, b.point, inset, width)
+        if he in self._dashes:
+            segment = self._dashes[he]
+        else:
+            a, b = he.origin, he.destination
+            segment = self._dashes[he] = prepare_dashed(a.position, b.position, a.point, b.point)
+        if segment is not None:
+            paint_prepared(painter, world, segment, inset, width)
 
     def _cuts_to_paint(self) -> list[HalfEdge]:
         if self._divided is None:
@@ -225,12 +256,16 @@ class NetItem(QGraphicsItem):
         painter.drawLine(world.map(a + inset), world.map(b + inset))
 
     def _paint_vertices(self, painter: QPainter, world: QTransform) -> None:
-        for vertex in {v.id: v for v in self._net.boundary_vertices()}.values():
-            center = world.map(to_qpointf(vertex.position))
-            paint_vertex(painter, center, vertex.point.faces, net_style.VERTEX_RADIUS_PX)
+        if self._centers is None:
+            vertices = {v.id: v for v in self._net.boundary_vertices()}.values()
+            self._centers = [(to_qpointf(v.position), v.point.faces) for v in vertices]
+        for center, faces in self._centers:
+            paint_vertex(painter, world.map(center), faces, net_style.VERTEX_RADIUS_PX)
 
     def _paint_labels(self, painter: QPainter, world: QTransform, labels: dict[NetVertex, VertexLabel]) -> None:
-        outward = self._outward_directions(world)
+        if self._outward is None:  # the view only zooms and moves: directions in pixels stay the same
+            self._outward = self._outward_directions(world)
+        outward = self._outward
         paint_labels(
             painter,
             ((world.map(to_qpointf(v.position)), outward.get(v, UP_RIGHT), label) for v, label in labels.items()),

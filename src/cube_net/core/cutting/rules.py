@@ -8,6 +8,7 @@ cut line only at a, where it continues the previous segment.
 from collections.abc import Iterable, Sequence
 from fractions import Fraction
 from itertools import pairwise
+from math import ceil
 
 from cube_net.core.cutting.cut_line import CutLine, CutPoint
 from cube_net.core.geometry import IntersectionKind, Vec, classify_segments, on_segment
@@ -16,13 +17,23 @@ from cube_net.core.net import HalfEdge, Net
 # At most this many points after the first one (docs/idea.txt).
 MAX_POINTS_AFTER_FIRST = 50
 
+# How far apart the points are that a point projected onto a cut can land on: the size mouse input is rounded to.
+PROJECTION_STEP = Fraction(1, 1000)
+
 
 def project_onto(edge: HalfEdge, p: Vec) -> Vec:
-    """The point of the cut `edge` closest to `p` (exact; the ends of the cut included)."""
+    """The point of the cut `edge` closest to `p`, among points at most `PROJECTION_STEP` apart along it (the ends of
+    the cut included). It's exactly on the cut.
+
+    The steps are there because the exact closest point has a denominator of about the square of the cut's. Points on
+    a cut become the ends of later cuts, so the numbers would double in length with every generation of cuts, and soon
+    have thousands of digits. This way they just grow a little. Mouse input is rounded to the same size anyway.
+    """
     a, b = edge.origin.position, edge.destination.position
     d = b - a
-    t = (p - a).dot(d) / d.length_squared()
-    return a + d * min(max(t, Fraction(0)), Fraction(1))
+    t = min(max((p - a).dot(d) / d.length_squared(), Fraction(0)), Fraction(1))
+    steps = max(1, ceil((abs(d.x) + abs(d.y)) / PROJECTION_STEP))
+    return a + d * Fraction(round(t * steps), steps)
 
 
 def strictly_inside(net: Net, p: Vec) -> bool:

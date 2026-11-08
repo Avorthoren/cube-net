@@ -438,11 +438,22 @@ part is built right away**, before more logic is added. Every step marked 👁 e
 | M7  | Approve                           | **Done.** 1. Gluing, auto-glue walk, cleanup (§4.6), `validate_net()` (§3.4). 2. 👁 The ✓ button on the sheet and Ctrl+Enter accept the cut; you can keep cutting the new net. | All **11 hexomino nets** are reachable from the cross (core scenario test) and in the app |
 | M8  | Undo / redo                       | **Done.** 1. `history.py` with every special rule (§5.2). 2. 👁 Ctrl+Z / Ctrl+Y and Edit menu items, in every state.                         | Table-driven history tests pass; works in the app |
 | M9  | Projects                          | **Done.** 1. 👁 (**done**) Serialization of the editor state, history and point names (`PointLabels`), so debug labels stay the same after reopening; File → Open…, Save As… 2. 👁 (**done**) Save (Ctrl+S), New, the dirty flag and the unsaved-changes prompt (also on Quit). 3. 👁 (**done**) Startup flow (reopen the last project). 4. 👁 (**done**) Project settings dialog (area threshold). 5. (**done**) The session-recording state snapshot (§6.7) becomes the serialized project. | Save → restart → identical state with full undo/redo |
-| M10 | Polish                            | Colour variants for the new cut line, cursor shapes, performance check at about 50 cuts, anything found while trying the app      | Smooth interaction with a heavily cut net |
+| M10 | Polish                            | 1. (**done**) Performance check at about 50 cuts (below). 2. 👁 Cursor shapes. 3. Anything found while trying the app. Colour variants for the new cut line are in since M5 (halo and rings). | Smooth interaction with a heavily cut net |
 | M11 | Packaging                         | PyInstaller one-folder build → `.deb` and/or AppImage for Ubuntu 24; later macOS (`.app`/`.dmg`) and Windows                       | Install on a clean Ubuntu VM and run |
 
 M7's "all 11 nets" scenario is the main acceptance test for the whole topology engine. It's written against the
 core API with exact coordinates, so it doesn't need snapping.
+
+**Performance at 50 approved random cuts** (116 perimeter edges, 34 regions; 1400×900, offscreen, debug labels on; a
+mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dragging an end of the line 29 ms.
+
+- A point projected onto a cut lands on a grid along it, of at most 1/1000 unit (`project_onto`). The exact closest point
+  would double the digits of the coordinates with every generation of cuts: 7000 digits at 45 cuts, with 12 s per cut.
+- `NetItem` works out what needs exact arithmetic once per net. Nets never change once they're made.
+- Dashes are drawn in one call per colour. `Vec` arithmetic skips the checks of its constructor.
+- UI tests run Python's collector only between tests: it crashes Qt when it frees dead windows during another window's
+  paint. A real session has one window, which is fine with the collector running constantly (checked at 8 million
+  collections on a 50-cut project), but which Qt object is responsible hasn't been found out.
 
 ---
 

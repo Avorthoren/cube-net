@@ -8,6 +8,7 @@ kept as they were, so that a loaded project behaves exactly like the saved one.
 
 from __future__ import annotations
 
+import sys
 from fractions import Fraction
 from typing import Any
 
@@ -20,6 +21,10 @@ from cube_net.core.labels import PointLabels
 from cube_net.core.net import EdgeKind, HalfEdge, Net, NetInvariantError, NetVertex, Region, validate_net
 from cube_net.core.project.project import Project, ProjectFileError
 from cube_net.core.project_settings import ProjectSettings, format_threshold
+
+# Exact coordinates can have many digits, more than Python turns into text by default (a guard against huge numbers from
+# strangers, which doesn't apply here). A project must be saved and loaded, however complicated it got.
+sys.set_int_max_str_digits(0)
 
 # Raise it whenever the format changes (and keep reading the older ones, if there's anything worth keeping).
 FORMAT_VERSION = 1

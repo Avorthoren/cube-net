@@ -5,9 +5,10 @@ They paint in device pixels: the painter must have no transform; `world` maps sh
 
 import math
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
-from PyQt6.QtGui import QFont, QFontMetricsF, QPainter, QPen, QTransform
+from PyQt6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen, QTransform
 
 from cube_net.core.cube import DASH_LENGTH, Face, SurfacePoint, dash_layout
 from cube_net.core.geometry import Vec
@@ -16,6 +17,60 @@ from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.dashing import dash_pieces
+
+
+@dataclass(frozen=True, slots=True)
+class DashedSegment:
+    """All that takes exact arithmetic to find out about a dashed line, ready to be painted again and again."""
+
+    # Where the dash pattern starts and ends on the sheet, in floats.
+    start: QPointF
+    end: QPointF
+
+    # The unit vector to the left of the line as `a` -> `b` were given, on the sheet.
+    normal: QPointF
+
+    length: float
+
+    # (start, end, parity) along the line, in sheet units; see `dash_pieces`.
+    pieces: list[tuple[float, float, int]]
+
+    # The colour of the dashes of each parity.
+    colours: tuple[QColor, QColor]
+
+
+def prepare_dashed(a: Vec, b: Vec, a_point: SurfacePoint, b_point: SurfacePoint) -> DashedSegment | None:
+    """The dashed line a-b (sheet positions of cube points `a_point`, `b_point`). Colours and dash positions follow
+    `dash_layout`, so every image of a cube segment looks the same. None if a and b are the same point on the sheet."""
+    qa, qb = to_qpointf(a), to_qpointf(b)
+    d = qb - qa
+    length = math.hypot(d.x(), d.y())
+    if length == 0:
+        return None
+    layout = dash_layout(a_point, b_point)
+    colours = [palette.FACE_COLORS[f] if f is not None else palette.WHITE for f in layout.faces]
+    start, end = (qa, qb) if layout.start == a_point else (qb, qa)
+    pieces = dash_pieces(length, float(layout.offset), float(DASH_LENGTH))
+    return DashedSegment(start, end, QPointF(-d.y(), d.x()) / length, length, pieces, (colours[0], colours[1]))
+
+
+def paint_prepared(
+    painter: QPainter, world: QTransform, segment: DashedSegment, inset: float, width: float = net_style.EDGE_WIDTH_PX
+) -> None:
+    """Paint the line `width` px wide, shifted by `inset` units to its left. All dashes of a colour go in one call."""
+    shift = segment.normal * inset
+    start, end = world.map(segment.start + shift), world.map(segment.end + shift)
+    x, y = start.x(), start.y()
+    ux, uy = (end.x() - x) / segment.length, (end.y() - y) / segment.length
+    groups: tuple[list[QLineF], list[QLineF]] = ([], [])
+    for s0, s1, parity in segment.pieces:
+        groups[parity].append(QLineF(x + ux * s0, y + uy * s0, x + ux * s1, y + uy * s1))
+    for colour, group in zip(segment.colours, groups, strict=True):
+        if group:
+            pen = QPen(colour, width)
+            pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+            painter.setPen(pen)
+            painter.drawLines(group)
 
 
 def paint_dashed(
@@ -28,26 +83,10 @@ def paint_dashed(
     inset: float = 0.0,
     width: float = net_style.EDGE_WIDTH_PX,
 ) -> None:
-    """The dashed line a-b (sheet positions of cube points `a_point`, `b_point`), `width` px wide, shifted by `inset`
-    units to the left of a->b. Colours and dash positions follow `dash_layout`, so every image of a cube segment looks
-    the same."""
-    qa, qb = to_qpointf(a), to_qpointf(b)
-    d = qb - qa
-    length = math.hypot(d.x(), d.y())
-    if length == 0:
-        return
-    normal = QPointF(-d.y(), d.x()) / length
-    pa, pb = world.map(qa + normal * inset), world.map(qb + normal * inset)
-    layout = dash_layout(a_point, b_point)
-    if layout.start != a_point:
-        pa, pb = pb, pa
-    line = QLineF(pa, pb)
-    colours = [palette.FACE_COLORS[f] if f is not None else palette.WHITE for f in layout.faces]
-    for s0, s1, parity in dash_pieces(length, float(layout.offset), float(DASH_LENGTH)):
-        pen = QPen(colours[parity], width)
-        pen.setCapStyle(Qt.PenCapStyle.FlatCap)
-        painter.setPen(pen)
-        painter.drawLine(QLineF(line.pointAt(s0 / length), line.pointAt(s1 / length)))
+    """A dashed line painted just once: see `prepare_dashed` and `paint_prepared`."""
+    segment = prepare_dashed(a, b, a_point, b_point)
+    if segment is not None:
+        paint_prepared(painter, world, segment, inset, width)
 
 
 def paint_vertex(painter: QPainter, center: QPointF, faces: Iterable[Face], radius: float) -> None:

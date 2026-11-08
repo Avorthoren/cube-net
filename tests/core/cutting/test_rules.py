@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from fractions import Fraction as F
+from math import ceil, lcm
 
 from cube_net.core.cutting import (
     CutLine,
@@ -10,7 +11,8 @@ from cube_net.core.cutting import (
     segment_valid,
     strictly_inside,
 )
-from cube_net.core.geometry import Vec
+from cube_net.core.cutting.rules import PROJECTION_STEP
+from cube_net.core.geometry import Vec, on_segment
 from cube_net.core.net import HalfEdge, Net
 
 
@@ -80,3 +82,63 @@ def test_segment_valid_checks_any_segment_of_the_line(net: Net, cut: Callable[[s
     ]
     assert invalid_segments(net, crossing, (0, 1, 2)) == [0, 2]  # the first and the last segments cross
     assert invalid_segments(net, good, (-1, 2, 5)) == []  # indices outside the line are ignored
+
+
+class TestProjectionStaysSimple:
+    """The numbers must not double in length with every generation of cuts (docs/plan.md, M10)."""
+
+    def slanted(self) -> HalfEdge:
+        from cube_net.core.cube import SurfacePoint
+        from cube_net.core.net import EdgeKind, NetVertex
+
+        a = NetVertex(0, Vec(F(1, 3), F(1, 7)), SurfacePoint(1, Vec(0, 0)))
+        b = NetVertex(1, Vec(F(14, 3), F(22, 7)), SurfacePoint(1, Vec(1, 1)))
+        edge, twin = HalfEdge(0, a, EdgeKind.BOUNDARY, None), HalfEdge(1, b, EdgeKind.BOUNDARY, None)
+        edge.twin, twin.twin = twin, edge
+        return edge
+
+    def test_it_is_exactly_on_the_cut(self) -> None:
+        edge = self.slanted()
+        a, b = edge.origin.position, edge.destination.position
+        p = project_onto(edge, v("2.5", "1.5"))
+        assert on_segment(p, a, b)
+
+    def test_it_is_near_the_exact_closest_point(self) -> None:
+        edge = self.slanted()
+        a, b = edge.origin.position, edge.destination.position
+        d = b - a
+        for query in (v("2.5", "1.5"), v("1.234", "0.777"), v("4.001", "2.999")):
+            exact = a + d * ((query - a).dot(d) / d.length_squared())
+            step = project_onto(edge, query) - exact
+            assert step.length_squared() <= PROJECTION_STEP**2
+
+    def test_the_denominator_does_not_square(self) -> None:
+        edge = self.slanted()
+        a, b = edge.origin.position, edge.destination.position
+        limit = lcm(a.x.denominator, a.y.denominator, b.x.denominator, b.y.denominator)
+        length = (b - a).length_squared()
+        p = project_onto(edge, v("2.5", "1.5"))
+        steps = ceil((abs((b - a).x) + abs((b - a).y)) / PROJECTION_STEP)
+        assert max(p.x.denominator, p.y.denominator) <= limit * steps
+        assert length.denominator > 1  # what the exact projection would have divided by
+
+    def test_the_ends_are_reached(self) -> None:
+        edge = self.slanted()
+        assert project_onto(edge, Vec(-5, -5)) == edge.origin.position
+        assert project_onto(edge, Vec(50, 50)) == edge.destination.position
+
+    def test_a_very_short_cut_has_just_its_ends(self) -> None:
+        from cube_net.core.cube import SurfacePoint
+        from cube_net.core.net import EdgeKind, NetVertex
+
+        a = NetVertex(0, Vec(0, 0), SurfacePoint(1, Vec(0, 0)))
+        b = NetVertex(1, Vec(F(1, 5000), 0), SurfacePoint(1, Vec(1, 1)))
+        edge, twin = HalfEdge(0, a, EdgeKind.BOUNDARY, None), HalfEdge(1, b, EdgeKind.BOUNDARY, None)
+        edge.twin, twin.twin = twin, edge
+        assert project_onto(edge, Vec(F(1, 20000), 0)) == a.position
+        assert project_onto(edge, Vec(F(1, 6000), 0)) == b.position
+
+    def test_on_a_cut_along_the_grid_it_is_as_before(self, cut: Callable[[str], HalfEdge]) -> None:
+        top = cut("B_1-A_1")
+        assert project_onto(top, v("11.123", "13.9")) == v("11.123", "14")
+        assert project_onto(top, v("11.987", "14.5")) == v("11.987", "14")

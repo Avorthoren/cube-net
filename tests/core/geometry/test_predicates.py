@@ -219,3 +219,25 @@ class TestClassifyProperties:
             case K.DISJOINT:
                 assert not any(on_segment(p, *b) for p in a)
                 assert not any(on_segment(p, *a) for p in b)
+
+
+class TestAgainstTheDefinitions:
+    """The hot code takes shortcuts; these are the plain formulas it must agree with, everywhere."""
+
+    @given(grid, grid, grid)
+    def test_orient(self, a: Vec, b: Vec, c: Vec) -> None:
+        cross = (b - a).cross(c - a)
+        assert orient(a, b, c) == (cross > 0) - (cross < 0)
+
+    @given(grid, grid, grid)
+    def test_on_segment(self, p: Vec, a: Vec, b: Vec) -> None:
+        expected = (
+            (b - a).cross(p - a) == 0
+            and min(a.x, b.x) <= p.x <= max(a.x, b.x)
+            and min(a.y, b.y) <= p.y <= max(a.y, b.y)
+        )
+        assert on_segment(p, a, b) == expected
+
+    @given(grid, grid, st.integers(0, 10))
+    def test_points_between_are_on_it(self, a: Vec, b: Vec, step: int) -> None:
+        assert on_segment(a + (b - a) * F(step, 10), a, b)

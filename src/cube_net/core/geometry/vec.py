@@ -41,23 +41,31 @@ class Vec:
         object.__setattr__(self, "x", to_fraction(x))
         object.__setattr__(self, "y", to_fraction(y))
 
+    @classmethod
+    def _of_fractions(cls, x: Fraction, y: Fraction) -> Vec:
+        """A `Vec` of what's known to be fractions, without checking: this is the hottest code of the application."""
+        result = object.__new__(cls)
+        object.__setattr__(result, "x", x)
+        object.__setattr__(result, "y", y)
+        return result
+
     def __add__(self, other: Vec) -> Vec:
         if not isinstance(other, Vec):
             return NotImplemented
-        return Vec(self.x + other.x, self.y + other.y)
+        return Vec._of_fractions(self.x + other.x, self.y + other.y)
 
     def __sub__(self, other: Vec) -> Vec:
         if not isinstance(other, Vec):
             return NotImplemented
-        return Vec(self.x - other.x, self.y - other.y)
+        return Vec._of_fractions(self.x - other.x, self.y - other.y)
 
     def __neg__(self) -> Vec:
-        return Vec(-self.x, -self.y)
+        return Vec._of_fractions(-self.x, -self.y)
 
     def __mul__(self, k: Scalar) -> Vec:
         if isinstance(k, bool) or not isinstance(k, Rational):
             return NotImplemented
-        return Vec(self.x * k, self.y * k)
+        return Vec._of_fractions(self.x * k, self.y * k)
 
     __rmul__ = __mul__
 
@@ -66,7 +74,7 @@ class Vec:
             return NotImplemented
         if k == 0:
             raise ZeroDivisionError("Vec division by zero")
-        return Vec(self.x / k, self.y / k)
+        return Vec._of_fractions(self.x / k, self.y / k)
 
     def dot(self, other: Vec) -> Fraction:
         return self.x * other.x + self.y * other.y

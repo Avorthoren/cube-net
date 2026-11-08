@@ -16,15 +16,15 @@ from cube_net.core.geometry.vec import Vec
 
 def orient(a: Vec, b: Vec, c: Vec) -> int:
     """Orientation of the triple: 1 if a->b->c turns counter-clockwise, -1 if clockwise, 0 if collinear."""
-    cross = (b - a).cross(c - a)
+    cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
     return (cross > 0) - (cross < 0)
 
 
 def on_segment(p: Vec, a: Vec, b: Vec) -> bool:
     """True if `p` lies on the closed segment a-b (works for a degenerate segment a == b too)."""
-    if orient(a, b, p) != 0:
-        return False
-    return min(a.x, b.x) <= p.x <= max(a.x, b.x) and min(a.y, b.y) <= p.y <= max(a.y, b.y)
+    # The bounding box first: it rules out most points, for much less than the orientation costs.
+    in_box = min(a.x, b.x) <= p.x <= max(a.x, b.x) and min(a.y, b.y) <= p.y <= max(a.y, b.y)
+    return in_box and orient(a, b, p) == 0
 
 
 class IntersectionKind(Enum):
