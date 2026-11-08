@@ -2037,6 +2037,7 @@ class TestUnsavedChanges:
             window.open_action,
             window.save_action,
             window.save_as_action,
+            window.project_settings_action,
             window.quit_action,
         )
         assert all(action.isEnabled() for action in actions)
@@ -2053,7 +2054,7 @@ class TestUnsavedChanges:
         assert window.quit_action.shortcut().toString() == "Ctrl+Q"
         menu = window.new_action.associatedObjects()[0]
         texts = [a.text() for a in menu.actions() if not a.isSeparator()]  # type: ignore[union-attr]
-        assert texts == ["&New", "&Open...", "&Save", "Save &As...", "&Quit"]
+        assert texts == ["&New", "&Open...", "&Save", "Save &As...", "Project se&ttings...", "&Quit"]
 
     def test_recorded(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from cube_net.ui.save_changes_dialog import SaveChoice
@@ -2280,3 +2281,151 @@ class TestReopeningAtStart:
         assert other.recorder is not None
         assert f"project reopening failed {path}" in session_lines(other.recorder.log.path)
         other.stop_recording("test over")
+
+
+class TestProjectSettings:
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def answer(self, monkeypatch: pytest.MonkeyPatch, *answers: object) -> list[object]:
+        """Make the dialog answer this; returns the settings it was shown."""
+        remaining = list(answers)
+        shown: list[object] = []
+
+        def ask(_parent: object, settings: object) -> object:
+            shown.append(settings)
+            return remaining.pop(0)
+
+        monkeypatch.setattr("cube_net.ui.main_window.ask_project_settings", ask)
+        return shown
+
+    def settings(self, threshold: int) -> object:
+        from fractions import Fraction
+
+        from cube_net.core.project_settings import ProjectSettings
+
+        return ProjectSettings(Fraction(threshold))
+
+    def test_it_shows_the_current_ones(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        window = self.make(qtbot, tmp_path)
+        shown = self.answer(monkeypatch, None)
+        window.project_settings_action.trigger()
+        assert shown == [window.project_settings]
+
+    def test_a_new_threshold_is_used_at_once(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from fractions import Fraction
+
+        window = self.make(qtbot, tmp_path)
+        used: list[Fraction] = []
+        original = window.bounding.update
+
+        def spy(rectangle: object, threshold: Fraction) -> None:
+            used.append(threshold)
+            original(rectangle, threshold)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(window.bounding, "update", spy)
+        self.answer(monkeypatch, self.settings(5))
+        window.project_settings_action.trigger()
+        assert window.project_settings == self.settings(5)
+        assert used == [Fraction(5)]
+
+    def test_cancelled_changes_nothing(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        window = self.make(qtbot, tmp_path)
+        before = window.project_settings
+        self.answer(monkeypatch, None)
+        window.project_settings_action.trigger()
+        assert window.project_settings is before
+        assert not window.is_dirty
+
+    def test_the_same_value_is_not_a_change(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.core.project_settings import ProjectSettings
+
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, ProjectSettings())
+        window.project_settings_action.trigger()
+        assert not window.is_dirty
+        assert not window.isWindowModified()
+
+    def test_a_change_is_an_unsaved_change(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, self.settings(5))
+        window.project_settings_action.trigger()
+        assert window.is_dirty
+        assert window.isWindowModified()
+        assert window.save_project_to(tmp_path / "cube.cubenet")
+        assert not window.is_dirty
+        assert not window.isWindowModified()
+
+    def test_back_to_what_was_saved_is_no_change(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.core.project_settings import ProjectSettings
+
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, self.settings(5), ProjectSettings())
+        window.project_settings_action.trigger()
+        window.project_settings_action.trigger()
+        assert not window.is_dirty
+        assert not window.isWindowModified()
+
+    def test_quitting_asks_about_it(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, self.settings(5))
+        window.project_settings_action.trigger()
+        asked: list[str] = []
+
+        def ask(_parent: object, name: str) -> SaveChoice:
+            asked.append(name)
+            return SaveChoice.DISCARD
+
+        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", ask)
+        assert window.close()
+        assert asked == ["Untitled"]
+
+    def test_it_is_saved_with_the_project(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, self.settings(5))
+        window.project_settings_action.trigger()
+        path = tmp_path / "cube.cubenet"
+        window.save_project_to(path)
+        other = self.make(qtbot, tmp_path)
+        other.open_project_from(path)
+        assert other.project_settings == self.settings(5)
+        assert not other.is_dirty
+
+    def test_undo_does_not_touch_it(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.sheet_view.left_pressed.emit(10.0, 13.0)
+        self.answer(monkeypatch, self.settings(5))
+        window.project_settings_action.trigger()
+        window.undo_action.trigger()
+        assert window.project_settings == self.settings(5)
+
+    def test_new_and_open_bring_their_own(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.core.project_settings import ProjectSettings
+
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, self.settings(5))
+        window.project_settings_action.trigger()
+        window.start_new_project()
+        assert window.project_settings == ProjectSettings()
+        assert not window.is_dirty
+
+    def test_recorded(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        window = self.make(qtbot, tmp_path, record=True)
+        assert window.recorder is not None
+        assert "state threshold 7.100" in session_lines(window.recorder.log.path)
+        self.answer(monkeypatch, self.settings(5))
+        window.project_settings_action.trigger()
+        assert session_lines(window.recorder.log.path)[-1] == "project threshold 5.000"
+        window.stop_recording("test over")

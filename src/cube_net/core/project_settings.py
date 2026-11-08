@@ -6,6 +6,9 @@ from fractions import Fraction
 # The goal of the application: a net that fits into a rectangle of less than this area (docs/idea.txt).
 DEFAULT_AREA_THRESHOLD = Fraction(71, 10)
 
+# The smallest threshold there can be: it's positive, with at most 3 decimals.
+MIN_AREA_THRESHOLD = Fraction(1, 1000)
+
 # The threshold can't exceed the area of the default net's bounding rectangle.
 MAX_AREA_THRESHOLD = Fraction(12)
 

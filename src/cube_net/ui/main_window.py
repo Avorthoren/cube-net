@@ -20,11 +20,12 @@ from cube_net.core.project import (
     new_project,
     save_project,
 )
-from cube_net.core.project_settings import ProjectSettings
+from cube_net.core.project_settings import ProjectSettings, format_threshold
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.instruments.bounding_controls import BoundingControls
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
+from cube_net.ui.project_settings_dialog import ask_project_settings
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.session.session_recorder import SessionRecorder
 from cube_net.ui.session.start import (
@@ -83,6 +84,9 @@ class MainWindow(QMainWindow):
 
         # The revision of the history when the project was last saved (or created, or opened).
         self._saved_revision = 0
+
+        # The settings as they were then. They aren't part of the history: they have no undo.
+        self._saved_settings = self.project_settings
         self.recorder: SessionRecorder | None = None
 
         self.net: Net = default_net()
@@ -158,6 +162,7 @@ class MainWindow(QMainWindow):
         In M9 the full project state will be written here.
         """
         recorder.note("state", "project", self.project_path if self.project_path is not None else "untitled")
+        recorder.note("state", "threshold", format_threshold(self.project_settings.area_threshold))
         self._record_net_state(recorder)
         recorder.note("state", "labels", "on" if self.settings.show_vertex_labels else "off")
         recorder.note("state", "window", f"{self.width()}x{self.height()}")
@@ -247,7 +252,14 @@ class MainWindow(QMainWindow):
         self.redo_action.setEnabled(self.editor.history.can_redo and not dragging)
         rearranged = self.editor.rearranged
         self.approve_action.setEnabled(rearranged is not None and rearranged.valid)
-        for action in (self.new_action, self.open_action, self.save_action, self.save_as_action, self.quit_action):
+        for action in (
+            self.new_action,
+            self.open_action,
+            self.save_action,
+            self.save_as_action,
+            self.project_settings_action,
+            self.quit_action,
+        ):
             action.setEnabled(not dragging)  # they may ask something, and the mouse button is still down
         self.setWindowModified(self.is_dirty)
 
@@ -290,7 +302,7 @@ class MainWindow(QMainWindow):
     @property
     def is_dirty(self) -> bool:
         """Are there changes that aren't saved? Undo and redo count too: the history is saved with the project."""
-        return self.editor.history.revision != self._saved_revision
+        return self.editor.history.revision != self._saved_revision or self.project_settings != self._saved_settings
 
     def _project_name(self) -> str:
         return UNTITLED if self.project_path is None else self.project_path.name
@@ -309,6 +321,7 @@ class MainWindow(QMainWindow):
         self.project_path = path
         self.settings.last_project = path
         self._saved_revision = self.editor.history.revision
+        self._saved_settings = self.project_settings
         self._update_title()
         self.setWindowModified(False)
         if self.recorder is not None:
@@ -371,6 +384,7 @@ class MainWindow(QMainWindow):
         self.project_settings = project.settings
         self.project_path = path
         self._saved_revision = project.history.revision
+        self._saved_settings = project.settings
         self._update_title()
         self.cut_tool.reload()
         self.sheet_view.show_initial_view(self.net.bounding_box())
@@ -411,6 +425,16 @@ class MainWindow(QMainWindow):
         path = Path(name)
         return self.save_project_to(path if path.suffix else path.with_suffix(PROJECT_SUFFIX))
 
+    def _on_project_settings(self) -> None:
+        settings = ask_project_settings(self, self.project_settings)
+        if settings is None or settings == self.project_settings:
+            return
+        self.project_settings = settings
+        self._update_bounding()
+        self.setWindowModified(self.is_dirty)
+        if self.recorder is not None:
+            self.recorder.note("project", "threshold", format_threshold(settings.area_threshold))
+
     def closeEvent(self, event: QCloseEvent | None) -> None:
         """Closing the window is quitting: the project goes away."""
         if event is None:
@@ -442,6 +466,10 @@ class MainWindow(QMainWindow):
         self.save_as_action.setShortcut("Ctrl+Shift+S")
         self.save_as_action.triggered.connect(lambda: self._save_as())
         file_menu.addAction(self.save_as_action)
+        file_menu.addSeparator()
+        self.project_settings_action = QAction("Project se&ttings...", self)
+        self.project_settings_action.triggered.connect(self._on_project_settings)
+        file_menu.addAction(self.project_settings_action)
         file_menu.addSeparator()
         self.quit_action = QAction("&Quit", self)
         self.quit_action.setShortcut("Ctrl+Q")
