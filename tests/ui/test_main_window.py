@@ -57,8 +57,9 @@ def test_hit_test_follows_default_net(qtbot: QtBot) -> None:
     window.show()
     qtbot.waitExposed(window)  # vertex circles have their pixel size only once the zoom is set
     view = window.sheet_view
-    assert view.is_on_net(11.5, 12.5)  # face 2
-    assert not view.is_on_net(10.5, 13.5)  # empty corner left of face 1
+    assert view.press_claimed(10.0, 13.0)  # a perimeter vertex
+    assert not view.press_claimed(11.5, 12.5)  # the middle of face 2: nothing to click there
+    assert not view.press_claimed(10.5, 13.5)  # empty corner left of face 1
 
 
 def test_vertex_labels_toggle(qtbot: QtBot, tmp_path: Path) -> None:
@@ -296,8 +297,8 @@ def test_no_panning_inside_a_vertex_circle_outside_the_net(qtbot: QtBot, tmp_pat
 
     view = window.sheet_view
     near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
-    assert view.is_on_net(11 - near, 14 + near)  # up-left of A_1: off the net, but in its circle
-    assert not view.is_on_net(11 - 3 * near, 14 + 3 * near)  # farther out: panning is fine there
+    assert view.press_claimed(11 - near, 14 + near)  # up-left of A_1: off the net, but in its circle
+    assert not view.press_claimed(11 - 3 * near, 14 + 3 * near)  # farther out: panning is fine there
 
 
 def test_cut_line_labels_follow_the_line_and_the_setting(qtbot: QtBot, tmp_path: Path) -> None:
@@ -716,8 +717,8 @@ class TestApproving:
         window.approve_action.trigger()
         view = window.sheet_view
         h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
-        assert view.is_on_net(11.75, 9.75)  # the moved piece, under face 5
-        assert not view.is_on_net(11.75, 13.75)  # where it was
+        assert view.press_claimed(11.75, 9.5 + h)  # a cut of the moved piece, under face 5
+        assert not view.press_claimed(11.75, 13.9)  # where the top of face 1 was
         window.cut_hover.update_at(11.75, 9.5 + h)
         cut = window.cut_hover.hovered()
         assert cut is not None  # y_2-z_2, a cut of the new net
@@ -1156,3 +1157,158 @@ class TestNoHoverWhileApproving:
         assert window.cut_hover.hovered() is not None
         view.mouse_moved.emit(10.0, 13.0)
         assert window.cut_hover.hovered_vertex() is not None
+
+
+class TestPanningFromInsideTheNet:
+    """A drag pans the sheet from wherever a press means nothing in the current state, even inside the net."""
+
+    MIDDLE_OF_FACE_2 = 11.5, 12.5
+
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def hitbox(self, window: MainWindow) -> float:
+        from cube_net.ui.sheet import net_style
+
+        return net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+
+    def close_line(self, window: MainWindow) -> None:
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+        assert window.editor.state.value == "cut_editing"
+
+    def rearrange(self, window: MainWindow) -> None:
+        self.close_line(window)
+        window.sheet_view.left_pressed.emit(11.75, 10 + self.hitbox(window))
+        assert window.editor.state.value == "cut_approving"
+
+    def assert_drag_pans(self, qtbot: QtBot, window: MainWindow, x: float, y: float) -> None:
+        """A real drag from (x, y): the sheet follows the mouse, and the editor doesn't notice."""
+        from PyQt6.QtCore import QPoint, QPointF
+
+        view = window.sheet_view
+        state = window.editor.state
+        done = window.editor.history.done_count
+        start = view.from_sheet(QPointF(x, y)).toPoint()
+        end = start + QPoint(40, -30)
+        qtbot.mouseMove(view.viewport(), start)
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=start)
+        assert view.is_panning()
+        qtbot.mouseMove(view.viewport(), end)
+        qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=end)
+        assert not view.is_panning()
+        moved = view.to_sheet(QPointF(end))
+        assert (moved.x(), moved.y()) == pytest.approx((x, y), abs=2 / view.scale_factor())
+        assert window.editor.state is state
+        assert window.editor.history.done_count == done
+
+    def test_default_pans_from_the_middle_of_a_face(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.assert_drag_pans(qtbot, window, *self.MIDDLE_OF_FACE_2)
+        assert window.editor.cut_line is None
+
+    def test_default_what_can_be_clicked(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        h = self.hitbox(window)
+        view = window.sheet_view
+        assert view.press_claimed(10 + h, 12.5)  # a cut
+        assert view.press_claimed(10.0, 13.0)  # a vertex
+        assert not view.press_claimed(*self.MIDDLE_OF_FACE_2)
+        assert not view.press_claimed(10 + 3 * h, 12.5)  # just past the hitbox of the cut
+
+    def test_a_press_on_a_cut_still_starts_the_line(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from PyQt6.QtCore import QPointF
+
+        window = self.make(qtbot, tmp_path)
+        view = window.sheet_view
+        pos = view.from_sheet(QPointF(10 + self.hitbox(window), 12.5)).toPoint()
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        assert not view.is_panning()
+        qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        assert window.editor.state.value == "cutting"
+
+    def test_cutting_a_click_on_the_net_still_adds_a_point(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - self.hitbox(window))
+        assert view.press_claimed(*self.MIDDLE_OF_FACE_2)
+        assert not view.press_claimed(10.5, 13.5)  # off the net: panning, as always
+
+    def test_cut_editing_what_can_be_clicked(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        h = self.hitbox(window)
+        view = window.sheet_view
+        for place in (
+            (11.5, 14.0),  # an endpoint of the line
+            (11.5, 13.5),  # its inner point
+            (11.5, 13.75),  # the circle in the middle of a segment
+            (11.75, 10 + h),  # a cut that can be chosen
+            (10.5, 12 + h),  # a cut that can't, which is told by a flash
+        ):
+            assert view.press_claimed(*place), place
+        for place in (
+            self.MIDDLE_OF_FACE_2,
+            (10.0, 13.0),  # a perimeter vertex
+            (12.5, 13.0),  # a counterpart image
+            (11.5 + h, 13.625),  # next to the new line, whose hitbox means nothing
+        ):
+            assert not view.press_claimed(*place), place
+
+    def test_cut_editing_pans_from_a_face_and_a_vertex(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.assert_drag_pans(qtbot, window, *self.MIDDLE_OF_FACE_2)
+        self.assert_drag_pans(qtbot, window, 10.0, 13.0)
+
+    def test_cut_approving_only_the_button_can_be_clicked(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.rearrange(window)
+        h = self.hitbox(window)
+        view = window.sheet_view
+        assert view.press_claimed(11.75, 10.0)  # the button
+        for place in (self.MIDDLE_OF_FACE_2, (10 + h, 12.5), (10.0, 13.0)):  # a face, a cut, a vertex
+            assert not view.press_claimed(*place), place
+        self.assert_drag_pans(qtbot, window, *self.MIDDLE_OF_FACE_2)
+        self.assert_drag_pans(qtbot, window, 10 + h, 12.5)
+
+    def test_cut_approving_the_x_can_be_clicked_too(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(12 - h, 13.5)
+        view.left_pressed.emit(11 + h, 11.5)
+        view.left_pressed.emit(12.75, 13 - h)
+        assert window.editor.rearranged is not None and not window.editor.rearranged.valid
+        assert view.press_claimed(12.75, 13.0)
+
+    def test_never_while_the_ruler_is_active(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from PyQt6.QtCore import QPointF
+
+        window = self.make(qtbot, tmp_path)
+        window.ruler_tool.set_active(True)
+        view = window.sheet_view
+        pos = view.from_sheet(QPointF(*self.MIDDLE_OF_FACE_2)).toPoint()
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        assert not view.is_panning()
+        qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        assert len(window.ruler_tool.ruler.points) == 1
+
+    def test_dragging_a_point_does_not_pan(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from PyQt6.QtCore import QPointF
+
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        view = window.sheet_view
+        pos = view.from_sheet(QPointF(11.5, 13.5)).toPoint()
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        assert not view.is_panning()
+        assert window.cut_tool.dragging
+        qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)

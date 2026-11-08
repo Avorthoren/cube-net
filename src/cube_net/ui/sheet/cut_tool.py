@@ -152,14 +152,23 @@ class CutTool(QObject):
         self.line_changed.emit()
 
     def claims(self, x: float, y: float) -> bool:
-        """Would a press at sheet point (x, y) act on the cut line's points? (It must not start panning then.)"""
+        """Would a press at sheet point (x, y) mean something in the current state? Anywhere else it pans the sheet."""
         if self._ruler.active:
             return False
-        if self._editor.state is EditorState.CUT_APPROVING:
+        state = self._editor.state
+        if state is EditorState.CUT_APPROVING:
             return self._on_approve_button(x, y)
-        return self._editor.state is EditorState.CUT_EDITING and (
-            self._point_at(x, y) is not None or self._midpoint_at(x, y) is not None
-        )
+        if state is EditorState.CUT_EDITING:
+            return (
+                self._point_at(x, y) is not None
+                or self._midpoint_at(x, y) is not None
+                or self._glue_target(x, y) is not None
+            )
+        net = self._editor.net
+        vertex, cut = perimeter_target(self._view, net, x, y)
+        if state is EditorState.CUTTING:
+            return vertex is not None or net.contains(quantize(x, y))  # a click on the net adds a point
+        return vertex is not None or cut is not None  # DEFAULT: only the perimeter can start a line
 
     def _on_approve_button(self, x: float, y: float) -> bool:
         position = self.approve_button.position()
@@ -226,10 +235,16 @@ class CutTool(QObject):
             return
         self._press_on_cut(x, y)
 
-    def _press_on_cut(self, x: float, y: float) -> None:
+    def _glue_target(self, x: float, y: float) -> HalfEdge | None:
+        """The part of a cut that a press at (x, y) in CUT_EDITING would choose: not in a vertex's circle, not the new
+        line itself. It may still get rejected."""
         split = self._editor.split()
         vertex, cut = perimeter_target(self._view, split.net, x, y)
-        if vertex is not None or cut is None:
+        return None if vertex is not None or cut in split.line_edges else cut
+
+    def _press_on_cut(self, x: float, y: float) -> None:
+        cut = self._glue_target(x, y)
+        if cut is None:
             return
         rejection = self._editor.glue(cut)
         if rejection is not None:

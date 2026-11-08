@@ -18,7 +18,7 @@ def setup(qtbot: QtBot) -> tuple[SheetView, CutHover, Net]:
     view.resize(800, 600)
     view.set_sheet(sheet_box(v.position for v in net.vertices))
     view.set_net(net)
-    view.set_net_hit_test(lambda x, y: net.contains(Vec(round(x * 1000), round(y * 1000)) / 1000))
+    view.set_press_claim(lambda x, y: net.contains(Vec(round(x * 1000), round(y * 1000)) / 1000))
     view.show_initial_view(net.bounding_box())
     view.show()
     qtbot.waitExposed(view)

@@ -60,7 +60,7 @@ class SheetView(QGraphicsView):
 
         self._scale = 1.0
         self._sheet = QRectF()
-        self._on_net: HitTest = lambda _x, _y: False
+        self._press_claim: HitTest = lambda _x, _y: False
         self._pan_last: QPoint | None = None
         self._panning_enabled = True
         self._press_modifiers = Qt.KeyboardModifier.NoModifier
@@ -100,12 +100,13 @@ class SheetView(QGraphicsView):
         return self._net_item
 
     def set_panning_enabled(self, enabled: bool) -> None:
-        """Dragging outside the net pans the view only when enabled (e.g. not while the ruler is active)."""
+        """Dragging from where a press means nothing pans the view only when enabled (e.g. not while the ruler is
+        active)."""
         self._panning_enabled = enabled
 
-    def set_net_hit_test(self, on_net: HitTest) -> None:
-        """Panning by dragging is only allowed outside the cube net; this tells where the net is."""
-        self._on_net = on_net
+    def set_press_claim(self, claim: HitTest) -> None:
+        """Tells where a press of the left button means something. Dragging from anywhere else pans the view."""
+        self._press_claim = claim
 
     def show_initial_view(self, net: Box) -> None:
         """Zoom so that the net takes 50% of the screen height and center it. Deferred until the view is shown."""
@@ -135,9 +136,9 @@ class SheetView(QGraphicsView):
         """Whether the user is dragging the sheet right now."""
         return self._pan_last is not None
 
-    def is_on_net(self, x: float, y: float) -> bool:
-        """Whether the sheet point (x, y) lies on the cube net."""
-        return self._on_net(x, y)
+    def press_claimed(self, x: float, y: float) -> bool:
+        """Does a press at sheet point (x, y) mean something (so that it can't start panning)?"""
+        return self._press_claim(x, y)
 
     def zoom_limits(self) -> tuple[float, float]:
         if self._sheet.isEmpty():
@@ -193,7 +194,7 @@ class SheetView(QGraphicsView):
         self._press_modifiers = event.modifiers()
         if event.button() == Qt.MouseButton.LeftButton:
             p = self.to_sheet(event.position())
-            if self._panning_enabled and not self.is_on_net(p.x(), p.y()):
+            if self._panning_enabled and not self.press_claimed(p.x(), p.y()):
                 self._pan_last = event.position().toPoint()
                 self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
             else:

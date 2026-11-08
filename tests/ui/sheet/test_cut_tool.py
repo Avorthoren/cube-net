@@ -22,7 +22,7 @@ def setup(qtbot: QtBot) -> tuple[SheetView, CutTool, RulerTool]:
     view.resize(800, 600)
     view.set_sheet(sheet_box(v.position for v in net.vertices))
     view.set_net(net)
-    view.set_net_hit_test(lambda x, y: net.contains(quantize(x, y)))
+    view.set_press_claim(lambda x, y: net.contains(quantize(x, y)))
     view.show_initial_view(net.bounding_box())
     view.show()
     qtbot.waitExposed(view)
@@ -237,12 +237,41 @@ def test_the_ruler_takes_presses_while_editing(setup: tuple[SheetView, CutTool, 
     assert len(ruler.ruler.points) == 1
 
 
-def test_claims_only_points_and_midpoints(setup: tuple[SheetView, CutTool, RulerTool]) -> None:
-    view, tool, _ = setup
-    assert not tool.claims(11.5, 14)  # not editing yet
-    corner_cut(view)
-    assert tool.claims(11.5, 14) and tool.claims(11.5, 13.75)
-    assert not tool.claims(7, 7)
+class TestClaims:
+    """Where a press means something, per state; anywhere else a drag pans the sheet."""
+
+    MIDDLE_OF_FACE_2 = 11.5, 12.5
+
+    def test_default_the_perimeter(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        assert tool.claims(10 + h, 12.5) and tool.claims(10, 13)  # a cut, a vertex
+        assert not tool.claims(*self.MIDDLE_OF_FACE_2) and not tool.claims(7, 7)
+
+    def test_cutting_the_whole_net(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        assert tool.claims(*self.MIDDLE_OF_FACE_2) and tool.claims(10, 13)
+        assert not tool.claims(7, 7)
+
+    def test_cut_editing_the_line_and_the_cuts(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        assert tool.claims(11.5, 14) and tool.claims(11.5, 13.75) and tool.claims(10 + h, 12.5)
+        assert not tool.claims(*self.MIDDLE_OF_FACE_2) and not tool.claims(10, 13) and not tool.claims(7, 7)
+
+    def test_cut_approving_only_the_button(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        rearranged_corner_cut(view)
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        assert tool.claims(*MIDDLE_OF_X2_B3)
+        assert not tool.claims(*self.MIDDLE_OF_FACE_2) and not tool.claims(10 + h, 12.5) and not tool.claims(10, 13)
+
+    def test_nothing_for_the_ruler(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        _, tool, ruler = setup
+        ruler.set_active(True)
+        assert not tool.claims(10, 13)
 
 
 def half_fold_hitbox(view: SheetView) -> float:

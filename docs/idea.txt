@@ -131,8 +131,12 @@ Zoom should be limited to:
 These limits are provisional (just to prevent the image from "blowing up"), we'll revisit them later.
 Panning:
 1. The main area should have scroll bars.
-2. Click-and-hold mouse1 (no additional keys) and drag pans the view. It works only when the click is outside the cube
-   net, and only when such click doesn't mean anything else. For example, it doesn't work when ruler is active.
+2. Click-and-hold mouse1 (no additional keys) and drag pans the view. It works whenever such click doesn't mean anything
+   else, even inside the cube net: in the DEFAULT state everywhere except the cuts and the vertices of the outer
+   perimeter; in the CUT_EDITING state everywhere except the points of the new cut line, the circles in the middle of
+   its segments and the cuts (not their vertices, and not the new cut line itself); in the CUT_APPROVING state everywhere
+   except the round button. In the CUTTING state a click on the cube net adds a point, so it works only outside the cube
+   net. It never works when ruler is active.
 
 Cube net should be on a rectangular "sheet" of dynamic size: it's left edge should be 5 units to the left of the
 leftmost point of the cube net, top edge should be 5 units higher than the highest point of the cube net and so on.

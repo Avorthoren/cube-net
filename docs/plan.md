@@ -325,7 +325,8 @@ Undo and redo are available in every state. Each public method either performs o
 - **Initial zoom:** the default net (4 units tall) takes 50% of the *screen* height, using the screen the window is
   on.
 - **Pan:**
-  - left-drag on empty space outside the net, when the click means nothing else (never while the ruler is active);
+  - left-drag from wherever the click means nothing else, even inside the net: `CutTool.claims` decides, per state
+    (never while the ruler is active);
   - scrollbars.
 - When the sheet bounds change, the net stays at the same screen position: the view is adjusted, not the net.
 
@@ -358,7 +359,7 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
 - One controller per editor state, which translates Qt events into editor calls. Precedence:
   1. ruler active → ruler;
   2. otherwise the state controller;
-  3. otherwise, outside the net, panning.
+  3. otherwise, wherever the click means nothing in that state, panning.
 - Hover: the nearest boundary segment within the inside-hitbox is highlighted, in DEFAULT, CUTTING (when about to
   end) and CUT_EDITING.
 - Dragging cut-line points shows the live position; the result is validated on release (§4.2).

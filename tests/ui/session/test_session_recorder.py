@@ -28,7 +28,7 @@ def view(qtbot: QtBot, recorder: SessionRecorder) -> SheetView:
     qtbot.addWidget(v)
     v.resize(800, 600)
     v.set_sheet(Box(Vec(5, 5), Vec(18, 19)))
-    v.set_net_hit_test(lambda x, y: 10 <= x <= 13 and 10 <= y <= 14)
+    v.set_press_claim(lambda x, y: 10 <= x <= 13 and 10 <= y <= 14)
     v.show_initial_view(Box(Vec(10, 10), Vec(13, 14)))
     v.show()
     qtbot.waitExposed(v)

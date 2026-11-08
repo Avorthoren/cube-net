@@ -9,9 +9,9 @@ from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QSizePolicy, QToo
 from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.cutting import CutLine
 from cube_net.core.editor import Editor, EditorState
-from cube_net.core.geometry import Vec, quantize
+from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, cut_line_labels, vertex_labels
-from cube_net.core.net import Net, boundary_vertex_at, default_net
+from cube_net.core.net import Net, default_net
 from cube_net.core.project_settings import ProjectSettings
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
@@ -27,7 +27,7 @@ from cube_net.ui.session.start import (
     stop_session_recording,
 )
 from cube_net.ui.sheet.bounding_item import BoundingItem
-from cube_net.ui.sheet.cut_hover import CutHover, vertex_radius
+from cube_net.ui.sheet.cut_hover import CutHover
 from cube_net.ui.sheet.cut_tool import CutTool
 from cube_net.ui.sheet.ruler_tool import RulerTool
 from cube_net.ui.sheet.sheet_view import SheetView
@@ -84,7 +84,7 @@ class MainWindow(QMainWindow):
         self.cut_tool.glued.connect(self._on_glued)
         self.cut_hover.hover_changed.connect(self._update_divided_view)
         self.cut_tool.rejected.connect(self._on_cut_rejected)
-        self.sheet_view.set_net_hit_test(self._is_on_net)
+        self.sheet_view.set_press_claim(self.cut_tool.claims)
         self.sheet_view.show_initial_view(net_box)
         self.setCentralWidget(self.sheet_view)
 
@@ -161,15 +161,6 @@ class MainWindow(QMainWindow):
             corners = [f"{p.x},{p.y}" for p in self.editor.net.region_polygon(region)]
             placement = region.placement
             recorder.note("state", "region", region.face, placement.k, f"{placement.t.x},{placement.t.y}", *corners)
-
-    def _is_on_net(self, x: float, y: float) -> bool:
-        """On the net, or inside a perimeter vertex's circle (which sticks out of the net): no panning there."""
-        p = quantize(x, y)
-        return (
-            self.net.contains(p)
-            or boundary_vertex_at(self.net, p, vertex_radius(self.sheet_view)) is not None
-            or self.cut_tool.claims(x, y)
-        )
 
     def _create_instruments(self) -> None:
         toolbar = QToolBar("Instruments", self)
