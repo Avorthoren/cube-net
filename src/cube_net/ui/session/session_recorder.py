@@ -14,7 +14,8 @@ Line format (after the time in seconds since start):
     menu "Show vertex labels (development)"   menu item chosen with the mouse
     resize 1600x900                main window size
 
-Mouse moves without buttons are not recorded. Anything else worth recording can be added with `note()`.
+Mouse moves without buttons are not recorded. Anything else worth recording can be added with `note()`. `state ...`
+lines tell the state a recording starts from; `state snapshot` holds the whole project (see `snapshots`).
 """
 
 from __future__ import annotations

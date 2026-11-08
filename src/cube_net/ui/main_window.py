@@ -28,6 +28,7 @@ from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_faile
 from cube_net.ui.project_settings_dialog import ask_project_settings
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.session.session_recorder import SessionRecorder
+from cube_net.ui.session.snapshots import snapshot_text
 from cube_net.ui.session.start import (
     STARTED_AT_LAUNCH,
     STARTED_BY_USER,
@@ -147,7 +148,10 @@ class MainWindow(QMainWindow):
         # If the window goes away before the app quits, its recording ends with it (only `app` and `recorder` are
         # captured: the window itself is already gone when this runs).
         self.destroyed.connect(lambda: _end_recording(app, recorder))
-        self._record_state(recorder)
+        # At launch, with a project about to be reopened, the new one the window has for now isn't worth a snapshot:
+        # `reopen_last_project` takes care of that.
+        reopening = reason == STARTED_AT_LAUNCH and self.settings.last_project is not None
+        self._record_state(recorder, snapshot=not reopening)
         self.statusBar().showMessage(f"Recording session to {recorder.log.path}", 15000)
 
     def stop_recording(self, reason: str) -> None:
@@ -158,13 +162,13 @@ class MainWindow(QMainWindow):
         self.recorder = None
         self.statusBar().showMessage("Session recording stopped", 5000)
 
-    def _record_state(self, recorder: SessionRecorder) -> None:
-        """Everything needed to reproduce the session from this point on.
-
-        In M9 the full project state will be written here.
-        """
+    def _record_state(self, recorder: SessionRecorder, snapshot: bool = True) -> None:
+        """Everything needed to reproduce the session from this point on: the whole project in its snapshot, and what
+        isn't part of a project. The rest is there to be read by a person."""
         recorder.note("state", "project", self.project_path if self.project_path is not None else "untitled")
         recorder.note("state", "threshold", format_threshold(self.project_settings.area_threshold))
+        if snapshot:
+            self._record_snapshot(recorder)
         self._record_net_state(recorder)
         recorder.note("state", "labels", "on" if self.settings.show_vertex_labels else "off")
         recorder.note("state", "window", f"{self.width()}x{self.height()}")
@@ -175,22 +179,18 @@ class MainWindow(QMainWindow):
         cut_points = [format_point(p.position) + ("p" if p.on_perimeter else "") for p in line.points] if line else []
         recorder.note("state", "cut", self.editor.state.value, *cut_points)  # "p": on the perimeter
         history = self.editor.history
-        recorder.note("state", "history", history.done_count, history.undone_count)  # the actions themselves: M9
+        recorder.note("state", "history", history.done_count, history.undone_count)
         if self.editor.rearranged is not None:
             kept = self.editor.rearranged.kept
             recorder.note("state", "glue", format_point(kept.origin.position), format_point(kept.destination.position))
         recorder.schedule_view_record()  # zoom and position, once the view has been laid out
 
+    def _record_snapshot(self, recorder: SessionRecorder) -> None:
+        recorder.note("state", "snapshot", snapshot_text(self._project()))
+
     def _record_net_state(self, recorder: SessionRecorder) -> None:
-        """The net: "default", or after approved cuts every region exactly (face, placement, corners)."""
-        if self.editor.approved_cuts == 0:
-            recorder.note("state", "net", "default")
-            return
-        recorder.note("state", "net", f"after {self.editor.approved_cuts} approved cuts")
-        for region in self.editor.net.regions:
-            corners = [f"{p.x},{p.y}" for p in self.editor.net.region_polygon(region)]
-            placement = region.placement
-            recorder.note("state", "region", region.face, placement.k, f"{placement.t.x},{placement.t.y}", *corners)
+        cuts = self.editor.approved_cuts
+        recorder.note("state", "net", "default" if cuts == 0 else f"after {cuts} approved cuts")
 
     def _create_instruments(self) -> None:
         toolbar = QToolBar("Instruments", self)
@@ -312,11 +312,13 @@ class MainWindow(QMainWindow):
     def _update_title(self) -> None:
         self.setWindowTitle(f"{self._project_name()}[*] — {APP_TITLE}")
 
+    def _project(self) -> Project:
+        return Project(self.editor.snapshot(), self.editor.history, self.project_settings, self.point_labels)
+
     def save_project_to(self, path: Path) -> bool:
         """Save the project to `path`; from now on that's its file. Tells the user if it fails."""
-        project = Project(self.editor.snapshot(), self.editor.history, self.project_settings, self.point_labels)
         try:
-            save_project(project, path)
+            save_project(self._project(), path)
         except ProjectFileError as e:
             QMessageBox.critical(self, APP_TITLE, str(e))
             return False
@@ -359,6 +361,8 @@ class MainWindow(QMainWindow):
             if self.recorder is not None:
                 self.recorder.note("project", "reopening failed", path)
             self._offer_another_project(str(e))
+            if self.recorder is not None and self.project_path is None:
+                self._record_snapshot(self.recorder)  # it's the new project after all
 
     def _offer_another_project(self, message: str) -> None:
         """The project that should be here can't be loaded: the user decides. The window has a new one until then."""

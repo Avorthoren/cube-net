@@ -7,8 +7,10 @@ from PyQt6.QtWidgets import QToolBar
 from pytestqt.qtbot import QtBot
 
 from cube_net.core.geometry import Vec
+from cube_net.core.project import project_from_bytes
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.main_window import APP_TITLE, NO_COORDINATES, MainWindow, format_coordinates, format_ruler_total
+from cube_net.ui.session.snapshots import snapshots_in
 
 
 @pytest.fixture(autouse=True)
@@ -734,9 +736,10 @@ class TestApproving:
         assert window.recorder is not None
         lines = session_lines(window.recorder.log.path)
         assert "state net after 1 approved cuts" in lines
-        regions = [line for line in lines if line.startswith("state region ")]
-        assert len(regions) == 7
-        assert any(line.startswith("state region 1 0 11,9 ") and "23/2,19/2" in line for line in regions)  # the piece
+        snapshots = snapshots_in(window.recorder.log.path)
+        project = project_from_bytes(snapshots[-1])
+        assert project.state.approved_cuts == 1
+        assert len(project.state.net.regions) == 7
         window.stop_recording("test over")
 
 
@@ -2599,3 +2602,192 @@ class TestCounterpartBlinks:
         view.mouse_moved.emit(7.0, 7.0)
         view.mouse_moved.emit(11.75, 10 + self.hitbox(window))
         assert self.blinking(window) == {Vec(F(45, 4), 14), Vec(12, 14)}
+
+
+class TestSnapshots:
+    """A session log holds the whole project, so that the file alone is enough to reproduce what follows."""
+
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = True) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def close_line(self, window: MainWindow) -> None:
+        from cube_net.ui.sheet import net_style
+
+        h = net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+
+    def snapshots(self, window: MainWindow) -> list[bytes]:
+        assert window.recorder is not None
+        return snapshots_in(window.recorder.log.path)
+
+    def test_at_launch(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        snapshots = self.snapshots(window)
+        assert len(snapshots) == 1
+        project = project_from_bytes(snapshots[0])
+        assert project.state.points is None
+        assert not project.history.can_undo
+        window.stop_recording("test over")
+
+    def test_when_recording_is_turned_on_it_has_the_work_so_far(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, record=False)
+        self.close_line(window)
+        window.undo_action.trigger()
+        window.record_session_action.setChecked(True)
+        project = project_from_bytes(self.snapshots(window)[-1])
+        assert project.state.points is not None and len(project.state.points) == 2
+        assert project.history.can_undo and project.history.can_redo
+        window.stop_recording("test over")
+
+    def test_unsaved_settings_are_in_it(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from fractions import Fraction
+
+        from cube_net.core.project_settings import ProjectSettings
+
+        window = self.make(qtbot, tmp_path, record=False)
+        window.project_settings = ProjectSettings(Fraction(5))
+        window.record_session_action.setChecked(True)
+        assert project_from_bytes(self.snapshots(window)[-1]).settings == ProjectSettings(Fraction(5))
+        window.stop_recording("test over")
+
+    def test_one_more_for_another_project(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        path = tmp_path / "cube.cubenet"
+        window.save_project_to(path)
+        assert len(self.snapshots(window)) == 1  # saving changes nothing in the project
+        window.open_project_from(path)
+        assert len(self.snapshots(window)) == 2
+        assert project_from_bytes(self.snapshots(window)[1]).state.points is not None
+        window.start_new_project()
+        assert len(self.snapshots(window)) == 3
+        assert project_from_bytes(self.snapshots(window)[2]).state.points is None
+        window.stop_recording("test over")
+
+    def test_it_opens_as_a_project(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.ui.session.snapshots import extract_snapshots
+
+        window = self.make(qtbot, tmp_path, record=False)
+        self.close_line(window)
+        window.record_session_action.setChecked(True)
+        assert window.recorder is not None
+        log = window.recorder.log.path
+        window.stop_recording("test over")
+        other = self.make(qtbot, tmp_path, record=False)
+        assert other.open_project_from(extract_snapshots(log)[-1])
+        assert other.editor.state.value == "cut_editing"
+        other.undo_action.trigger()
+        assert other.editor.state.value == "cutting"
+
+    def test_a_person_can_still_read_the_log(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, record=False)
+        self.close_line(window)
+        window.record_session_action.setChecked(True)
+        assert window.recorder is not None
+        lines = session_lines(window.recorder.log.path)
+        assert any(line.startswith("state cut cut_editing ") for line in lines)
+        assert "state history 3 0" in lines
+        assert not any(line.startswith("state region") for line in lines)
+        window.stop_recording("test over")
+
+
+class TestSnapshotsAtLaunch:
+    """One snapshot of what the session really starts from, not of the new project a window has for a moment."""
+
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = True) -> MainWindow:
+        settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+        settings.record_session = record
+        window = MainWindow(settings=settings, session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def saved_project(self, qtbot: QtBot, tmp_path: Path) -> Path:
+        """A session that ended with this file saved: one point of a line in it."""
+        from cube_net.ui.sheet import net_style
+
+        window = self.make(qtbot, tmp_path, record=False)
+        h = net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+        window.sheet_view.left_pressed.emit(11.5, 14 - h)
+        path = tmp_path / "cube.cubenet"
+        assert window.save_project_to(path)
+        return path
+
+    def snapshots(self, window: MainWindow) -> list[bytes]:
+        assert window.recorder is not None
+        return snapshots_in(window.recorder.log.path)
+
+    def test_nothing_to_reopen_one_of_the_new_project(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        snapshots = self.snapshots(window)
+        assert len(snapshots) == 1
+        assert project_from_bytes(snapshots[0]).state.points is None
+        window.stop_recording("test over")
+
+    def test_reopened_one_of_that_project(self, qtbot: QtBot, tmp_path: Path) -> None:
+        self.saved_project(qtbot, tmp_path)
+        window = self.make(qtbot, tmp_path)
+        assert self.snapshots(window) == []
+        window.reopen_last_project()
+        snapshots = self.snapshots(window)
+        assert len(snapshots) == 1
+        assert project_from_bytes(snapshots[0]).state.points is not None
+        window.stop_recording("test over")
+
+    def test_the_other_state_lines_are_still_there_before_it(self, qtbot: QtBot, tmp_path: Path) -> None:
+        self.saved_project(qtbot, tmp_path)
+        window = self.make(qtbot, tmp_path)
+        assert window.recorder is not None
+        lines = session_lines(window.recorder.log.path)
+        assert "state project untitled" in lines
+        assert "state net default" in lines
+        window.stop_recording("test over")
+
+    def test_reopening_failed_one_of_the_new_project(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.load_failed_dialog import AfterLoadFailed
+
+        self.saved_project(qtbot, tmp_path).unlink()
+        monkeypatch.setattr("cube_net.ui.main_window.ask_after_load_failed", lambda *_: AfterLoadFailed.NEW_PROJECT)
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        snapshots = self.snapshots(window)
+        assert len(snapshots) == 1
+        assert project_from_bytes(snapshots[0]).state.points is None
+        window.stop_recording("test over")
+
+    def test_reopening_failed_and_another_opened_one_of_that(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+
+        from cube_net.ui.load_failed_dialog import AfterLoadFailed
+
+        path = self.saved_project(qtbot, tmp_path)
+        other = path.with_name("other.cubenet")
+        path.rename(other)
+        monkeypatch.setattr("cube_net.ui.main_window.ask_after_load_failed", lambda *_: AfterLoadFailed.OPEN_ANOTHER)
+        monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_: (str(other), ""))
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        snapshots = self.snapshots(window)
+        assert len(snapshots) == 1
+        assert project_from_bytes(snapshots[0]).state.points is not None
+        window.stop_recording("test over")
+
+    def test_turned_on_later_it_always_has_one(self, qtbot: QtBot, tmp_path: Path) -> None:
+        self.saved_project(qtbot, tmp_path)
+        window = self.make(qtbot, tmp_path, record=False)
+        window.record_session_action.setChecked(True)
+        assert len(self.snapshots(window)) == 1
+        window.stop_recording("test over")

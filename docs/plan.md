@@ -410,9 +410,14 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
   by `state …` lines describing the current state (`MainWindow._record_state`), so the file alone is enough to
   reproduce what follows. Turning recording off writes `stop turned off by the user` and closes the file. Turning it
   on again starts a new file.
-- **Keep the state snapshot complete.** Right now the state is just the default net, the labels setting, the window
-  size and the view. Every milestone that adds state must extend `_record_state`: the cut line in progress (M5), a
-  rearranged candidate (M6), the history (M8). In M9 the snapshot becomes the full serialized project.
+- **The state snapshot.** `state snapshot <base64>` holds the whole project, unsaved work included: the bytes of a project
+  file. It's written whenever recording starts and whenever another project comes along, except at launch with a project
+  about to be reopened: then the log's first snapshot is the reopened project (or, if that fails, the new one).
+  `python -m cube_net.ui.session.snapshots <log>` turns snapshots back into `.cubenet` files next to the log, ready for
+  File → Open. The other `state …` lines are what a project doesn't hold (labels setting, window size, bounds, ruler,
+  view), plus a short summary for a person to read.
+- **Keep it complete.** Whatever goes into a project gets into the snapshot by itself. Any new state outside a project
+  must extend `_record_state`.
 
 ## 7. Milestones
 
@@ -432,7 +437,7 @@ part is built right away**, before more logic is added. Every step marked 👁 e
 | M6  | Rearrange and the overlap check   | **Done.** 1. (**done**) Splitting the net along the cut line, the two halves (§4.3). 2. (**done**) Rearrangement (§4.4). 3. 👁 (**done**) Clicking a segment moves the other half (CUT_APPROVING), while hovering a perimeter edge in CUT_EDITING the parts that can't be chosen are thin and black, the glued segment is shown, a counterpart in the same half flashes black; the sheet and the bounding rectangle follow; Ctrl+Z goes back to CUT_EDITING (M8). 4. (**done**) Overlap check (§4.5), verified against the exact shared area. 5. 👁 (**done**) Overlapping segments in black, ✓ button in the middle of the chosen segment, green and clickable only when valid. Bounding rectangle follows the candidate. | The corner-cut example from `idea.txt` reproduces exactly in the app |
 | M7  | Approve                           | **Done.** 1. Gluing, auto-glue walk, cleanup (§4.6), `validate_net()` (§3.4). 2. 👁 The ✓ button on the sheet and Ctrl+Enter accept the cut; you can keep cutting the new net. | All **11 hexomino nets** are reachable from the cross (core scenario test) and in the app |
 | M8  | Undo / redo                       | **Done.** 1. `history.py` with every special rule (§5.2). 2. 👁 Ctrl+Z / Ctrl+Y and Edit menu items, in every state.                         | Table-driven history tests pass; works in the app |
-| M9  | Projects                          | 1. 👁 (**done**) Serialization of the editor state, history and point names (`PointLabels`), so debug labels stay the same after reopening; File → Open…, Save As… 2. 👁 (**done**) Save (Ctrl+S), New, the dirty flag and the unsaved-changes prompt (also on Quit). 3. 👁 (**done**) Startup flow (reopen the last project). 4. 👁 (**done**) Project settings dialog (area threshold). 5. The session-recording state snapshot (§6.7) becomes the serialized project. | Save → restart → identical state with full undo/redo |
+| M9  | Projects                          | **Done.** 1. 👁 (**done**) Serialization of the editor state, history and point names (`PointLabels`), so debug labels stay the same after reopening; File → Open…, Save As… 2. 👁 (**done**) Save (Ctrl+S), New, the dirty flag and the unsaved-changes prompt (also on Quit). 3. 👁 (**done**) Startup flow (reopen the last project). 4. 👁 (**done**) Project settings dialog (area threshold). 5. (**done**) The session-recording state snapshot (§6.7) becomes the serialized project. | Save → restart → identical state with full undo/redo |
 | M10 | Polish                            | Colour variants for the new cut line, cursor shapes, performance check at about 50 cuts, anything found while trying the app      | Smooth interaction with a heavily cut net |
 | M11 | Packaging                         | PyInstaller one-folder build → `.deb` and/or AppImage for Ubuntu 24; later macOS (`.app`/`.dmg`) and Windows                       | Install on a clean Ubuntu VM and run |
 
