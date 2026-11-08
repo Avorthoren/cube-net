@@ -215,20 +215,18 @@ cube_net/
 - The result is a *candidate* net. It is **not glued yet**: `S` and `S'` coincide but stay separate boundary
   half-edges until approval. Store the candidate together with which segment pair is meant to be glued.
 
-### 4.5 Overlap check: what "self-intersection" means
-The criterion: region interiors must not overlap. Implementation, in O(n²) over boundary segments, which is fine
-at this size:
-1. **Proper crossings** of two boundary segments are a violation. Mark both segments.
-2. **Collinear overlaps**: compare which side the net lies on for each segment. Opposite sides means touching (OK);
-   the same side means a violation.
-3. **Coincident points**, i.e. all vertex images and T-touch points at the same sheet position: build the angular
-   *wedges* the net occupies around that point, one per incident corner. If any two wedges overlap in a positive
-   angle, it's a violation. This one rule covers "vertex pokes through a segment", point-touching (OK) and corner
-   cases at reflex vertices.
-4. Covering only, with no boundary crossings, is impossible here, because both halves meet along `S`. So 1–3 are
-   enough. The proof sketch goes into the module docstring, and a test guards it.
+### 4.5 Overlap check: what "self-intersection" means (`cutting/overlap.py`)
+The criterion: the interiors of the two halves must not share any area; touching is allowed. Each half is free of
+overlaps by itself, so only pairs of perimeter segments from different halves are compared (O(n²), fine at this size):
+1. **Proper crossings** are a violation; both segments are marked.
+2. **Contacts** are every touching point, and the middle of every collinear overlap. At each one, compare the angular
+   sectors each half occupies around that point (`geometry/sectors.py`, exact). A shared positive angle is a violation;
+   the segments bounding those sectors are marked. This one rule covers collinear segments with the net on the same or
+   on opposite sides, a vertex poking through a segment, touching at a point, and reflex corners.
+3. One half can't lie inside the other without a contact, because the halves share the glued cut.
 
-Output: OK, or the set of boundary half-edges to draw in black.
+Output: the set of cuts to draw in black (empty: valid). Tests compare the verdict with the exact shared area
+(`tests/core/cutting/net_checks.py`); at a larger scale, 2008 random rearrangements agreed.
 
 ### 4.6 Approval: glue, auto-glue, cleanup (`rearrange.py`, `cleanup.py`)
 1. Glue `S` with `S'`: merge their endpoint vertices and make the pair twins with kind `SEAM`, or `FOLD` if the
@@ -418,7 +416,7 @@ part is built right away**, before more logic is added. Every step marked 👁 e
 | M3  | Ruler                             | **Done.** 1. Ruler model (points, segment lengths; no history). 2. 👁 Ruler toggle on the instrument panel (shortcut R), points, lines, coordinate and distance labels (kept inside the view), total length of the placed segments (Σ, under the button), panning disabled while active. | Behaviour as specified |
 | M4  | Bounding rectangle                | **Done.** 1. `bounding.py` (exact hull + minimum-area rectangle). 2. 👁 Area label, toggle button, rectangle drawing, green colouring and blinking below the threshold (`ProjectSettings.area_threshold`, 7.100; editable in M9). Shortcut B. | 12.000 for the cross |
 | M5  | Cut line                          | **Done.** 1. (**done**) Cut-line model and validation rules (§4.2). 2. 👁 (**done**) DEFAULT → CUTTING → CUT_EDITING in the app: start on a cut or a perimeter vertex (click inside its circle; a vertex wins over a cut), add points, rubber band, black flashes on rejection. 3. 👁 (**done**) Endpoint counterpart images (z_3), computed from the line (the net is only split when gluing, M6); projections onto a cut's end become that vertex; debug labels for the line's points and images (I_1, I_2, ...). Crossings of placed segments with cube edges are shown as vertices of the line right away; they are derived from the line (not draggable or deletable, they follow its points; drawn as small grey dots in CUTTING / CUT_EDITING, as normal vertices from CUT_APPROVING on; counterpart images of endpoints likewise, as small black dots), so every piece between two vertices lies in one face or along one cube edge. 4. 👁 (**done**) Midpoint circles, Shift+click delete (a rejection previews the line without the point, the shortcut black), dragging points checked on release (endpoints walk along the perimeter and snap to its vertices; inner points snap to fold lines and may not be released in a perimeter hitbox). Clicks in a fold line's hitbox land on the fold. Names of the line's new points are previews until the line is applied (M6). | Every CUTTING/CUT_EDITING rule from `idea.txt` is covered by core tests and usable in the app |
-| M6  | Rearrange and the overlap check   | 1. (**done**) Splitting the net along the cut line, the two halves (§4.3). 2. (**done**) Rearrangement (§4.4). 3. 👁 (**done**) Clicking a segment moves the other half (CUT_APPROVING), the glued segment is shown, a counterpart in the same half flashes black; the sheet and the bounding rectangle follow; a temporary Ctrl+Z goes back to CUT_EDITING until M8. 4. Overlap check (§4.5). 5. 👁 Overlapping segments in black, ✓ button enabled only when valid. Bounding rectangle follows the candidate. | The corner-cut example from `idea.txt` reproduces exactly in the app |
+| M6  | Rearrange and the overlap check   | **Done.** 1. (**done**) Splitting the net along the cut line, the two halves (§4.3). 2. (**done**) Rearrangement (§4.4). 3. 👁 (**done**) Clicking a segment moves the other half (CUT_APPROVING), while hovering a perimeter edge in CUT_EDITING the parts that can't be chosen are thin and black, the glued segment is shown, a counterpart in the same half flashes black; the sheet and the bounding rectangle follow; a temporary Ctrl+Z goes back to CUT_EDITING until M8. 4. (**done**) Overlap check (§4.5), verified against the exact shared area. 5. 👁 (**done**) Overlapping segments in black, ✓ button enabled only when valid (accepting is M7). Bounding rectangle follows the candidate. | The corner-cut example from `idea.txt` reproduces exactly in the app |
 | M7  | Approve                           | 1. Gluing, auto-glue walk, cleanup (§4.6), `validate_net()` (§3.4). 2. 👁 ✓ button and Ctrl+Enter accept the cut; you can keep cutting the new net. | All **11 hexomino nets** are reachable from the cross (core scenario test) and in the app |
 | M8  | Undo / redo                       | 1. `history.py` with every special rule (§5.2). 2. 👁 Ctrl+Z / Ctrl+Y and Edit menu items, in every state.                         | Table-driven history tests pass; works in the app |
 | M9  | Projects                          | 1. Serialization of the editor state and history, including the point names (`PointLabels`), so debug labels stay the same after reopening. The session-recording state snapshot (§6.7) becomes this serialized project. 2. 👁 File menu: New/Open/Save/Save As (Ctrl+S), unsaved-changes prompt, startup flow (reopen last saved project). 3. 👁 Project settings dialog (area threshold). | Save → restart → identical state with full undo/redo |

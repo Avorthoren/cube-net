@@ -43,3 +43,6 @@ MIDPOINT_RADIUS_FACTOR = 0.6
 
 # Total width of a fold line's hitbox, centered on the line (a click or a dragged point there lands on the fold).
 FOLD_HITBOX_PX = CUT_HITBOX_PX
+
+# Width of a part of a cut that can't be chosen for gluing (its counterpart is in the same half), while it's shown so.
+USELESS_CUT_PX = 1.5

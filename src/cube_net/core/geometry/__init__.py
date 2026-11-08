@@ -12,6 +12,7 @@ from cube_net.core.geometry.predicates import (
 )
 from cube_net.core.geometry.quantize import QUANTUM, quantize, quantize_scalar
 from cube_net.core.geometry.rigid90 import Rigid90
+from cube_net.core.geometry.sectors import sectors_overlap, strictly_within
 from cube_net.core.geometry.vec import Scalar, Vec, to_fraction
 
 __all__ = [
@@ -29,6 +30,8 @@ __all__ = [
     "polygon_contains",
     "quantize",
     "quantize_scalar",
+    "sectors_overlap",
     "signed_area",
+    "strictly_within",
     "to_fraction",
 ]

@@ -441,7 +441,7 @@ class TestRearrangement:
         assert len(window.cut_tool.item.points()) == 3
         assert window.recorder is not None
         lines = session_lines(window.recorder.log.path)
-        assert lines[-2:] == ["cut glue 11.500,10.000 12.000,10.000", "cut unglue"]
+        assert lines[-2:] == ["cut glue 11.500,10.000 12.000,10.000 ok", "cut unglue"]
         window.stop_recording("test over")
 
     def test_labels_keep_the_previewed_names_after_rearranging(self, qtbot: QtBot, tmp_path: Path) -> None:
@@ -477,3 +477,162 @@ class TestRearrangement:
         assert "state glue 11.500,10.000 12.000,10.000" in lines
         assert any(line.startswith("state cut cut_approving ") for line in lines)
         window.stop_recording("test over")
+
+
+class TestApproveButton:
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def hitbox(self, window: MainWindow) -> float:
+        from cube_net.ui.sheet import net_style
+
+        return net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+
+    def valid_rearrangement(self, window: MainWindow) -> None:
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+        view.left_pressed.emit(11.75, 10 + h)
+
+    def overlapping_rearrangement(self, window: MainWindow) -> None:
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(12 - h, 13.5)  # on D_1-B_1
+        view.left_pressed.emit(11 + h, 11.5)  # on H_1-E_1: closes the line
+        view.left_pressed.emit(12.75, 13 + h - 2 * h)  # on z_3-B_2, from inside face 3
+
+    def test_disabled_until_a_valid_rearrangement(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert not window.approve_action.isEnabled()
+        self.valid_rearrangement(window)
+        assert window.approve_action.isEnabled()
+        item = window.sheet_view.net_item()
+        assert item is not None and item.overlapping() == frozenset()
+        window.undo_rearrangement_action.trigger()
+        assert not window.approve_action.isEnabled()
+
+    def test_overlap_shown_black_and_not_approvable(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, record=True)
+        self.overlapping_rearrangement(window)
+        assert window.editor.state.value == "cut_approving"
+        assert not window.approve_action.isEnabled()
+        item = window.sheet_view.net_item()
+        assert item is not None and item.overlapping()
+        assert window.recorder is not None
+        assert session_lines(window.recorder.log.path)[-1].endswith(" overlap")
+        window.undo_rearrangement_action.trigger()
+        assert item.overlapping() == frozenset()
+        window.stop_recording("test over")
+
+    def test_shortcut_is_ctrl_enter(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert window.approve_action.shortcut().toString() == "Ctrl+Return"
+
+
+class TestDividedView:
+    """While hovering a perimeter edge in CUT_EDITING, cuts that can't be chosen are shown thin and black."""
+
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def hitbox(self, window: MainWindow) -> float:
+        from cube_net.ui.sheet import net_style
+
+        return net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+
+    def close_line(self, window: MainWindow) -> None:
+        """From the top of face 1, through y, to its right side (the corner cut)."""
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+
+    def divided_on(self, window: MainWindow) -> bool:
+        item = window.sheet_view.net_item()
+        assert item is not None
+        return item.divided() is not None
+
+    def hover_edge(self, window: MainWindow) -> None:
+        window.sheet_view.mouse_moved.emit(10 + self.hitbox(window), 12.5)  # A_2-E_2
+
+    def test_on_while_hovering_an_edge_off_elsewhere(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        window.sheet_view.mouse_moved.emit(7.0, 7.0)
+        assert not self.divided_on(window)
+        self.hover_edge(window)
+        assert self.divided_on(window)
+        window.sheet_view.mouse_moved.emit(11.5, 12.5)  # the middle of face 2
+        assert not self.divided_on(window)
+        self.hover_edge(window)
+        window.sheet_view.mouse_left.emit()
+        assert not self.divided_on(window)
+
+    def test_off_in_other_states(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.hover_edge(window)
+        assert not self.divided_on(window)  # DEFAULT
+        h = self.hitbox(window)
+        window.sheet_view.mouse_moved.emit(7.0, 7.0)
+        window.sheet_view.left_pressed.emit(11.5, 14 - h)
+        self.hover_edge(window)
+        assert not self.divided_on(window)  # CUTTING
+
+    def test_off_while_the_ruler_is_active(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.hover_edge(window)
+        assert self.divided_on(window)
+        window.ruler_action.setChecked(True)
+        assert not self.divided_on(window)
+        window.sheet_view.mouse_moved.emit(7.0, 7.0)
+        self.hover_edge(window)
+        assert not self.divided_on(window)
+        window.ruler_action.setChecked(False)
+        assert self.divided_on(window)  # still over the edge
+
+    def test_off_while_dragging_a_point(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        self.hover_edge(window)
+        assert self.divided_on(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 13.5)  # the inner point: the drag starts
+        assert not self.divided_on(window)
+        self.hover_edge(window)
+        assert not self.divided_on(window)
+        view.left_released.emit(11.5, 13.5)
+        view.mouse_moved.emit(7.0, 7.0)
+        self.hover_edge(window)
+        assert self.divided_on(window)
+
+    def test_the_new_line_itself_does_not_trigger_it(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        window.sheet_view.mouse_moved.emit(11.5 + self.hitbox(window), 13.8)  # beside the new line
+        assert not self.divided_on(window)
+
+    def test_off_after_rearranging_and_back_after_undo(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        h = self.hitbox(window)
+        window.sheet_view.mouse_moved.emit(11.75, 10 + h)
+        assert self.divided_on(window)
+        window.sheet_view.left_pressed.emit(11.75, 10 + h)
+        assert window.editor.state.value == "cut_approving"
+        assert not self.divided_on(window)
+        window.undo_rearrangement_action.trigger()
+        assert not self.divided_on(window)  # the hover was reset; the next move decides
+        window.sheet_view.mouse_moved.emit(11.75, 10 + h)
+        assert self.divided_on(window)

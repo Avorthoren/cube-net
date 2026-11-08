@@ -320,6 +320,11 @@ very first one, from which this new cut started) - we transition to the next sta
    should reverse its position back.
    When the first/last point is dragged, its counterpart image (see z_3 case) moves accordingly along the counterpart
    segment, so that both images always represent the same point of the cube's surface.
+   While the ruler is not active, nothing is being dragged, and the mouse is over a segment of the outer perimeter (in
+   its hitbox), every segment of the outer perimeter whose counterpart is in the same half of the cube net is drawn thin
+   and black, showing that clicking on it can't rearrange anything. Segments here include the divisions made by the
+   first/last points and their images: only the affected parts of a cut change. The segments of the new cut line
+   itself are not affected.
 4. If user clicks on any segment of the outer perimeter (not including its vertices) that should indicate the intent
    of rearranging two parts cube net was divided in such a way, that this chosen segment is glued with its counterpart.
    Because of the way we defined the cut if there is segment of outer perimeter Xi - Yj, then there always is exactly

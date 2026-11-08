@@ -27,6 +27,9 @@ class SplitNet:
     # The inner half-edges of the new cuts (both sides of every piece of the line).
     line_edges: frozenset[HalfEdge]
 
+    # The other cuts whose counterpart is in the same half: choosing them can't rearrange anything.
+    same_half_cuts: frozenset[HalfEdge]
+
     def half_of(self, region: Region) -> set[Region]:
         """The regions of the half that contains `region`."""
         return connected_regions(region)
@@ -53,7 +56,18 @@ def split_net(net: Net, line: CutLine) -> SplitNet:
     backward = [he.twin for he in forward]
     _unzip(copy.net, stops, forward)
     copy.net.reindex()
-    return SplitNet(copy.net, frozenset(forward) | frozenset(backward))
+    line_edges = frozenset(forward) | frozenset(backward)
+    return SplitNet(copy.net, line_edges, _same_half_cuts(copy.net, line_edges))
+
+
+def _same_half_cuts(net: Net, line_edges: frozenset[HalfEdge]) -> frozenset[HalfEdge]:
+    assert net.regions
+    half = connected_regions(net.regions[0])  # one half is enough: there are two
+    result = set()
+    for he in net.boundary_edges():
+        if he not in line_edges and (he.region in half) == (net.counterpart(he).region in half):
+            result.add(he)
+    return frozenset(result)
 
 
 def _create_stops(net: Net, copy: NetCopy, line: CutLine) -> list[NetVertex]:

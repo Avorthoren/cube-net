@@ -2,6 +2,7 @@
 
 from cube_net.core.cutting.cut_line import CutLine, CutPoint
 from cube_net.core.cutting.images import CounterpartImage, counterpart_image, endpoint_point
+from cube_net.core.cutting.overlap import overlapping_cuts
 from cube_net.core.cutting.pieces import Piece, crossings, pieces, region_at, surface_point_at
 from cube_net.core.cutting.rearrange import Rearranged, rearrange
 from cube_net.core.cutting.rules import (
@@ -27,6 +28,7 @@ __all__ = [
     "crossings",
     "endpoint_point",
     "invalid_segments",
+    "overlapping_cuts",
     "pieces",
     "project_onto",
     "rearrange",

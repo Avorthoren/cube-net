@@ -14,6 +14,7 @@ from cube_net.core.labels import PointLabels, cut_line_labels, vertex_labels
 from cube_net.core.net import Net, boundary_vertex_at, default_net
 from cube_net.core.project_settings import ProjectSettings
 from cube_net.core.sheet import sheet_box
+from cube_net.ui import palette
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.instruments.bounding_controls import BoundingControls
 from cube_net.ui.session.session_recorder import SessionRecorder
@@ -81,6 +82,7 @@ class MainWindow(QMainWindow):
         self.cut_tool.line_changed.connect(self._update_vertex_labels)
         self.cut_tool.line_changed.connect(self._update_hover_net)
         self.cut_tool.net_changed.connect(self._on_net_changed)
+        self.cut_hover.hover_changed.connect(self._update_divided_view)
         self.cut_tool.rejected.connect(self._on_cut_rejected)
         self.sheet_view.set_net_hit_test(self._is_on_net)
         self.sheet_view.show_initial_view(net_box)
@@ -183,6 +185,20 @@ class MainWindow(QMainWindow):
         self.bounding.toggled.connect(self._on_bounding_toggled)
         self._update_bounding()
 
+        toolbar.addSeparator()
+        self.approve_action = QAction("✓", self)
+        self.approve_action.setShortcut("Ctrl+Return")
+        self.approve_action.setToolTip("Approve the rearrangement (Ctrl+Enter)")
+        self.approve_action.setEnabled(False)
+        self.approve_action.triggered.connect(self._on_approve)
+        toolbar.addAction(self.approve_action)
+        approve_button = toolbar.widgetForAction(self.approve_action)
+        if approve_button is not None:
+            green = palette.SUCCESS.name()
+            approve_button.setStyleSheet(
+                f"QToolButton:enabled {{ color: {green}; font-size: 20px; font-weight: bold; }}"
+            )
+
         spacer = QWidget(toolbar)  # pushes what follows to the bottom of the panel
         spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         toolbar.addWidget(spacer)
@@ -195,6 +211,10 @@ class MainWindow(QMainWindow):
         """Recompute the minimum-area bounding rectangle of the current net."""
         rectangle = min_area_rectangle(v.position for v in self.net.vertices)
         self.bounding.update(rectangle, self.project_settings.area_threshold)
+
+    def _on_approve(self) -> None:
+        # Gluing the two halves for good is the next milestone (M7).
+        self.statusBar().showMessage("Approving is the next step of the development (M7)", 5000)
 
     def _on_open_logs(self) -> None:
         if not open_session_log_folder(self._session_dir):
@@ -212,6 +232,7 @@ class MainWindow(QMainWindow):
 
     def _on_ruler_toggled(self, checked: bool) -> None:
         self.ruler_tool.set_active(checked)
+        self._update_divided_view()
         if self.recorder is not None:
             self.recorder.note("ruler", "on" if checked else "off")
 
@@ -267,6 +288,8 @@ class MainWindow(QMainWindow):
         item = self.sheet_view.net_item()
         assert item is not None
         item.set_glue((rearranged.kept, rearranged.moved) if rearranged is not None else ())
+        item.set_overlapping(rearranged.overlapping if rearranged is not None else frozenset())
+        self.approve_action.setEnabled(rearranged is not None and rearranged.valid)
         self._update_bounding()
         self._update_hover_net()
         self._update_vertex_labels()
@@ -275,9 +298,23 @@ class MainWindow(QMainWindow):
             if rearranged is not None:
                 kept = rearranged.kept
                 ends = format_point(kept.origin.position), format_point(kept.destination.position)
-                self.recorder.note("cut", "glue", *ends)
+                self.recorder.note("cut", "glue", *ends, "ok" if rearranged.valid else "overlap")
             else:
                 self.recorder.note("cut", "unglue")
+
+    def _update_divided_view(self) -> None:
+        """While the user hovers a perimeter edge in CUT_EDITING (ruler off, nothing being dragged), show which parts
+        of the cuts can't be chosen for gluing."""
+        item = self.sheet_view.net_item()
+        if item is None:
+            return
+        show = (
+            self.editor.state is EditorState.CUT_EDITING
+            and not self.ruler_tool.active
+            and not self.cut_tool.dragging
+            and self.cut_hover.hovered() is not None
+        )
+        item.set_divided(self.editor.split() if show else None)
 
     def _update_hover_net(self) -> None:
         """Which cuts follow the mouse: in CUT_EDITING the parts of the net as divided by the line, because that's what
@@ -288,6 +325,7 @@ class MainWindow(QMainWindow):
                 self.cut_hover.set_net(split.net, split.line_edges)
         else:
             self.cut_hover.set_net(self.net)
+        self._update_divided_view()
 
     def _on_show_labels_toggled(self, checked: bool) -> None:
         self.settings.show_vertex_labels = checked

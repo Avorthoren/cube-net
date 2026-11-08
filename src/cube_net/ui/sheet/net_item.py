@@ -3,7 +3,9 @@
 Painted bottom to top:
 1. Hatch: each region is white with coloured triangles in its face's own frame (so the pattern rotates with it).
 2. Fold edges: two-colour dashes centred on the cube edge.
-3. Cuts (the perimeter): dashes drawn fully inside their region; a highlighted cut or fold edge is drawn wider.
+3. Cuts (the perimeter): dashes drawn fully inside their region; a highlighted cut or fold edge is drawn wider. In
+   CUT_EDITING, while the user hovers the perimeter, the cuts are drawn as the line divides them, and the parts that
+   can't be chosen for gluing are thin and black.
 4. Vertex circles on the perimeter, one equal sector per face of the vertex; a highlighted vertex gets a ring.
 5. Optional debug labels (A_1, B_2, ...) next to all vertices, placed outside the net.
 Hatch is drawn in sheet units; lines and circles have constant pixel sizes, so they are drawn in device pixels.
@@ -12,9 +14,10 @@ Hatch is drawn in sheet units; lines and circles have constant pixel sizes, so t
 import math
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QPainter, QPainterPath, QPen, QPolygonF, QTransform
+from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 
+from cube_net.core.cutting import SplitNet
 from cube_net.core.labels import VertexLabel
 from cube_net.core.net import HalfEdge, Net, NetVertex
 from cube_net.core.sheet import SHEET_MARGIN
@@ -47,6 +50,8 @@ class NetItem(QGraphicsItem):
         self._highlight_vertex: NetVertex | None = None
         self._highlight_fold: HalfEdge | None = None
         self._glue: tuple[HalfEdge, ...] = ()
+        self._overlapping: frozenset[HalfEdge] = frozenset()
+        self._divided: SplitNet | None = None
 
     def set_net(self, net: Net) -> None:
         self.prepareGeometryChange()
@@ -56,6 +61,8 @@ class NetItem(QGraphicsItem):
         self._highlight_vertex = None
         self._highlight_fold = None
         self._glue = ()
+        self._overlapping = frozenset()
+        self._divided = None
         self.update()
 
     def set_highlight(self, cut: HalfEdge | None) -> None:
@@ -74,6 +81,23 @@ class NetItem(QGraphicsItem):
 
     def glue(self) -> tuple[HalfEdge, ...]:
         return self._glue
+
+    def set_overlapping(self, cuts: frozenset[HalfEdge]) -> None:
+        """The cuts that take part in an overlap, shown in black (empty: none)."""
+        self._overlapping = cuts
+        self.update()
+
+    def overlapping(self) -> frozenset[HalfEdge]:
+        return self._overlapping
+
+    def set_divided(self, split: SplitNet | None) -> None:
+        """Draw the cuts as divided by the cut line, those that can't be chosen thin and black (None: as usual)."""
+        if split is not self._divided:
+            self._divided = split
+            self.update()
+
+    def divided(self) -> SplitNet | None:
+        return self._divided
 
     def set_highlight_fold(self, fold: HalfEdge | None) -> None:
         """Draw this fold edge highlighted (None: no highlight)."""
@@ -119,16 +143,22 @@ class NetItem(QGraphicsItem):
         units_per_px = 1 / math.hypot(world.m11(), world.m12())
         for he in self._net.fold_edges():
             self._paint_dashed(painter, world, he, inset=0.0)
-        for he in self._net.boundary_edges():
-            self._paint_dashed(painter, world, he, inset=net_style.EDGE_WIDTH_PX / 2 * units_per_px)
+        useless = self._divided.same_half_cuts if self._divided is not None else frozenset()
+        for he in self._cuts_to_paint():
+            if he in useless:
+                self._paint_solid(painter, world, he, palette.USELESS_CUT, net_style.USELESS_CUT_PX, units_per_px)
+            else:
+                self._paint_dashed(painter, world, he, inset=net_style.EDGE_WIDTH_PX / 2 * units_per_px)
         for he in self._glue:
             width = net_style.HIGHLIGHT_WIDTH_PX
             self._paint_dashed(painter, world, he, inset=width / 2 * units_per_px, width=width)
-        if self._highlight is not None:
+        if self._highlight is not None and self._highlight not in useless:
             width = net_style.HIGHLIGHT_WIDTH_PX
             self._paint_dashed(painter, world, self._highlight, inset=width / 2 * units_per_px, width=width)
         if self._highlight_fold is not None:  # as wide as a highlighted cut, but centered like every fold edge
             self._paint_dashed(painter, world, self._highlight_fold, inset=0.0, width=net_style.HIGHLIGHT_WIDTH_PX)
+        for he in self._overlapping:
+            self._paint_solid(painter, world, he, palette.REJECTED, net_style.EDGE_WIDTH_PX, units_per_px)
         self._paint_vertices(painter, world)
         if self._highlight_vertex is not None:
             center = world.map(to_qpointf(self._highlight_vertex.position))
@@ -160,6 +190,25 @@ class NetItem(QGraphicsItem):
         """Dashed line of `width` px along `he`, shifted by `inset` units to its left (into its region)."""
         a, b = he.origin, he.destination
         paint_dashed(painter, world, a.position, b.position, a.point, b.point, inset, width)
+
+    def _cuts_to_paint(self) -> list[HalfEdge]:
+        if self._divided is None:
+            return self._net.boundary_edges()
+        return [he for he in self._divided.net.boundary_edges() if he not in self._divided.line_edges]
+
+    @staticmethod
+    def _paint_solid(
+        painter: QPainter, world: QTransform, he: HalfEdge, colour: QColor, width: float, units_per_px: float
+    ) -> None:
+        """A cut in one solid colour, where the cut is drawn: inside its region."""
+        a, b = to_qpointf(he.origin.position), to_qpointf(he.destination.position)
+        d = b - a
+        normal = QPointF(-d.y(), d.x()) / math.hypot(d.x(), d.y())
+        inset = normal * (width / 2 * units_per_px)
+        pen = QPen(colour, width)
+        pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+        painter.setPen(pen)
+        painter.drawLine(world.map(a + inset), world.map(b + inset))
 
     def _paint_vertices(self, painter: QPainter, world: QTransform) -> None:
         for vertex in {v.id: v for v in self._net.boundary_vertices()}.values():

@@ -2,7 +2,7 @@
 
 from fractions import Fraction
 
-from PyQt6.QtCore import QObject
+from PyQt6.QtCore import QObject, pyqtSignal
 
 from cube_net.core.geometry import quantize
 from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_edge_at, boundary_vertex_at, fold_edge_at
@@ -38,6 +38,9 @@ def fold_target(view: SheetView, net: Net, x: float, y: float, prefer: HalfEdge 
 
 class CutHover(QObject):
     """Follows the mouse over `view` and highlights the cut whose hitbox is under it."""
+
+    # The cut under the mouse changed (it may be none now).
+    hover_changed = pyqtSignal()
 
     def __init__(self, view: SheetView, net: Net) -> None:
         super().__init__(view)
@@ -78,5 +81,8 @@ class CutHover(QObject):
     def _set(self, vertex: NetVertex | None, cut: HalfEdge | None) -> None:
         item = self._view.net_item()
         if item is not None:
+            changed = item.highlight() is not cut
             item.set_highlight(cut)
             item.set_highlight_vertex(vertex)
+            if changed:
+                self.hover_changed.emit()

@@ -1,8 +1,11 @@
+from fractions import Fraction
+
 import pytest
 from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QColor, QImage, QPainter, QTransform
 from PyQt6.QtWidgets import QApplication
 
+from cube_net.core.cutting import CutLine, CutPoint, SplitNet, split_net
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import default_net
@@ -155,3 +158,75 @@ def test_glue_pair_is_shown_highlighted() -> None:
     assert colour_at(image, world, near_inner_edge, 12.525) in (palette.FACE_COLORS[4], palette.FACE_COLORS[5])
     item.set_net(net)
     assert item.glue() == ()
+
+
+def test_overlapping_cuts_are_black_inside_their_face() -> None:
+    net = default_net()
+    item = NetItem(net)
+    cut = next(he for he in net.boundary_edges() if he.origin.position.x == he.destination.position.x == 10)
+    item.set_overlapping(frozenset({cut}))
+    assert item.overlapping() == {cut}
+    image = QImage(500, 600, QImage.Format.Format_RGB32)
+    image.fill(QColor("white"))
+    world = QTransform().scale(SCALE, -SCALE).translate(-ORIGIN.x(), -ORIGIN.y())
+    painter = QPainter(image)
+    painter.setTransform(world)
+    item.paint(painter, None)
+    painter.end()
+    assert colour_at(image, world, 10 + net_style.EDGE_WIDTH_PX / 2 / SCALE, 12.5) == palette.REJECTED
+    assert colour_at(image, world, 10 - 3 / SCALE, 12.5) == QColor("white")
+    item.set_net(net)
+    assert item.overlapping() == frozenset()
+
+
+def divided_corner_cut() -> tuple[NetItem, SplitNet]:
+    net = default_net()
+    top = next(he for he in net.boundary_edges() if he.origin.position == Vec(12, 14))
+    right = next(he for he in net.boundary_edges() if he.destination.position == Vec(12, 14))
+    half = Fraction(1, 2)
+    line = CutLine(
+        [CutPoint(Vec(11 + half, 14), top), CutPoint(Vec(11 + half, 13 + half)), CutPoint(Vec(12, 13 + half), right)]
+    )
+    return NetItem(net), split_net(net, line)
+
+
+def render_item(item: NetItem) -> tuple[QImage, QTransform]:
+    image = QImage(500, 600, QImage.Format.Format_RGB32)
+    image.fill(QColor("white"))
+    world = QTransform().scale(SCALE, -SCALE).translate(-ORIGIN.x(), -ORIGIN.y())
+    painter = QPainter(image)
+    painter.setTransform(world)
+    item.paint(painter, None)
+    painter.end()
+    return image, world
+
+
+def test_divided_view_draws_useless_parts_thin_and_black() -> None:
+    """In the corner cut, C_1-A_2 (y = 13) has its counterpart in the same half, so it can't be chosen."""
+    item, split = divided_corner_cut()
+    plain, world = render_item(item)
+    x, y = 10.525, 13.0
+    assert colour_at(plain, world, x, y - net_style.EDGE_WIDTH_PX / 2 / SCALE) in (
+        palette.FACE_COLORS[1],
+        palette.FACE_COLORS[4],
+    )
+    item.set_divided(split)
+    assert item.divided() is split
+    shown, _ = render_item(item)
+    assert colour_at(shown, world, x, y - 0.5 / SCALE) == palette.USELESS_CUT  # thin black along the cut
+    outside_the_thin_line = y - (net_style.USELESS_CUT_PX + 2) / SCALE
+    assert colour_at(shown, world, x, outside_the_thin_line) != palette.USELESS_CUT
+    item.set_divided(None)
+    assert item.divided() is None
+
+
+def test_useless_part_is_not_highlighted_under_the_mouse() -> None:
+    item, split = divided_corner_cut()
+    useless = next(he for he in split.same_half_cuts if he.origin.position.y == he.destination.position.y == 13)
+    item.set_divided(split)
+    item.set_highlight(useless)
+    image, world = render_item(item)
+    x = float(useless.origin.position.x + useless.destination.position.x) / 2
+    wide = 13 - (net_style.USELESS_CUT_PX + 2) / SCALE
+    assert colour_at(image, world, x, wide) != palette.USELESS_CUT
+    assert colour_at(image, world, x, 13 - 0.5 / SCALE) == palette.USELESS_CUT

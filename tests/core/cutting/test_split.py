@@ -5,7 +5,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from net_checks import assert_consistent
 
-from cube_net.core.cutting import CutLine, CutPoint, connected_regions, split_net
+from cube_net.core.cutting import CutLine, CutPoint, SplitNet, connected_regions, rearrange, split_net
 from cube_net.core.geometry import Vec
 from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_edge_from, boundary_vertex_at, default_net
 
@@ -146,3 +146,41 @@ def test_random_lines_down_the_column_stay_consistent(top: F, middle: F, bottom:
     split = split_net(net, line)
     assert_consistent(split.net)
     assert len(split.net.perimeters()) == 2
+
+
+def cut_names(split: SplitNet, cuts: frozenset[HalfEdge]) -> set[frozenset[Vec]]:
+    return {frozenset((he.origin.position, he.destination.position)) for he in cuts}
+
+
+class TestSameHalfCuts:
+    """The user's example: a straight line from B_1 to K_1 on H_1-E_1 of the default net."""
+
+    def split(self, net: Net, cut: Callable[[str], HalfEdge]) -> SplitNet:
+        k1 = CutPoint(v("11", "11.5"), cut("H_1-E_1"))
+        return split_net(net, CutLine([at_vertex(net, 12, 14), k1]))
+
+    def test_both_images_of_the_part_next_to_h1(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        names = cut_names(self.split(net, cut), self.split(net, cut).same_half_cuts)
+        h1 = Vec(11, 12)
+        assert frozenset((h1, v("11", "11.5"))) in names  # H_1-K_1
+        assert frozenset((h1, v("10.5", "12"))) in names  # H_1-K_2
+
+    def test_the_parts_that_can_be_glued_are_not_there(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        names = cut_names(self.split(net, cut), self.split(net, cut).same_half_cuts)
+        assert frozenset((v("11", "11.5"), Vec(11, 11))) not in names  # K_1-E_1
+        assert frozenset((v("10.5", "12"), Vec(10, 12))) not in names  # K_2-E_2
+        assert frozenset((Vec(11, 14), Vec(12, 14))) not in names  # A_1-B_1
+        assert frozenset((Vec(11, 10), Vec(12, 10))) not in names  # A_3-B_3
+
+    def test_exactly_the_cuts_rearrange_refuses(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        split = self.split(net, cut)
+        for he in split.net.boundary_edges():
+            if he in split.line_edges:
+                assert he not in split.same_half_cuts  # the new line itself is never in the set
+            else:
+                assert (rearrange(split, he) is None) == (he in split.same_half_cuts)
+
+    def test_a_closed_loop_leaves_only_such_cuts(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        line = CutLine([CutPoint(v("11.5", "14"), cut("B_1-A_1")), CutPoint(v("11.5", "10"), cut("A_3-B_3"))])
+        split = split_net(net, line)
+        assert split.same_half_cuts == frozenset(split.net.boundary_edges()) - split.line_edges

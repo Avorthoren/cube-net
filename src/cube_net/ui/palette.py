@@ -70,3 +70,6 @@ DERIVED_POINT = QColor("#9E9E9E")
 # Counterpart images of the cut line's endpoints (docs/idea.txt: z_3): small black dots while the line is being drawn
 # and edited (they can't be edited themselves; they follow their endpoint).
 COUNTERPART_IMAGE = QColor("#000000")
+
+# A part of a cut that can't be chosen for gluing: thin and black while the user hovers the perimeter in CUT_EDITING.
+USELESS_CUT = QColor("#000000")

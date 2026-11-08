@@ -143,6 +143,7 @@ class CutTool(QObject):
         if i is not None:
             if not self._view.press_modifiers() & Qt.KeyboardModifier.ShiftModifier:
                 self._drag_index, self._drag_target, self._drag_over_perimeter = i, None, False
+                self.line_changed.emit()
             elif 0 < i < len(line.points) - 1:
                 position = line.points[i].position
                 rejection = self._editor.delete_point(i)

@@ -7,6 +7,7 @@ two cuts are not glued yet: that happens when the user approves the result.
 
 from dataclasses import dataclass
 
+from cube_net.core.cutting.overlap import overlapping_cuts
 from cube_net.core.cutting.split import SplitNet, connected_regions
 from cube_net.core.geometry import Rigid90
 from cube_net.core.net import HalfEdge, Net
@@ -23,6 +24,13 @@ class Rearranged:
     moved: HalfEdge
 
     motion: Rigid90
+
+    # The cuts that take part in an overlap of the two halves; empty if the result is valid.
+    overlapping: frozenset[HalfEdge]
+
+    @property
+    def valid(self) -> bool:
+        return not self.overlapping
 
 
 def rearrange(split: SplitNet, clicked: HalfEdge) -> Rearranged | None:
@@ -46,4 +54,7 @@ def rearrange(split: SplitNet, clicked: HalfEdge) -> Rearranged | None:
         vertex.position = motion.apply(vertex.position)
     for region in regions:
         region.placement = motion @ region.placement
-    return Rearranged(copy.net, kept, moved, motion)
+    cycles = copy.net.perimeters()
+    outer_kept = next(c for c in cycles if kept.twin in c)
+    outer_moved = next(c for c in cycles if moved.twin in c)
+    return Rearranged(copy.net, kept, moved, motion, overlapping_cuts(outer_kept, outer_moved))
