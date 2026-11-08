@@ -366,10 +366,10 @@ class TestGlue:
         assert editing.glue(line_edge) is None
         assert editing.state is EditorState.CUT_EDITING
 
-    def test_cancel_goes_back_with_the_line_intact(self, editing: Editor) -> None:
+    def test_undo_goes_back_with_the_line_intact(self, editing: Editor) -> None:
         before = positions(editing)
         editing.glue(self.cut_at(editing, v("11.5", "10"), Vec(12, 10)))
-        editing.cancel_rearrangement()
+        editing.undo()
         assert editing.state is EditorState.CUT_EDITING
         assert positions(editing) == before
         assert editing.display_net is editing.net
@@ -414,3 +414,154 @@ class TestApprove:
         new_cut = next(he for he in editing.net.boundary_edges() if he.origin.position == v("11.5", "9.5"))
         assert editing.click(v("11.75", "9.5"), new_cut) is None  # on y_2-z_2, which didn't exist before
         assert editing.state is EditorState.CUTTING
+
+
+def on_cut_through(net: Net, a: Vec, b: Vec) -> HalfEdge:
+    return next(he for he in net.boundary_edges() if {he.origin.position, he.destination.position} == {a, b})
+
+
+class TestUndoRedo:
+    """docs/idea.txt: every action can be undone and redone, in every state."""
+
+    def state_of(self, editor: Editor) -> tuple[object, ...]:
+        """All there is to the editor's state. Nets and rearrangements never change: they must be the same objects."""
+        points = None if editor.cut_line is None else tuple(editor.cut_line.points)
+        return editor.state, editor.net, points, editor.rearranged, editor.approved_cuts
+
+    def bottom_of_face_5(self, editor: Editor) -> HalfEdge:
+        return on_cut_through(editor.split().net, v("11.5", "10"), Vec(12, 10))
+
+    def test_nothing_to_undo_or_redo_at_first(self, net: Net) -> None:
+        editor = Editor(net)
+        assert not editor.undo()
+        assert not editor.redo()
+        assert editor.state is EditorState.DEFAULT
+
+    def test_a_whole_walk_there_and_back(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        """All five kinds of actions; every step back and forth gives exactly the state that was there."""
+        editor = Editor(net)
+        actions: list[Callable[[], object]] = [
+            lambda: editor.click(v("11.5", "14"), cut("B_1-A_1")),  # the first point: CUTTING
+            lambda: editor.click(v("11.5", "13.5"), None),
+            lambda: editor.click(v("12", "13.5"), cut("D_1-B_1")),  # the closing point: CUT_EDITING
+            lambda: editor.insert_midpoint(0),
+            lambda: editor.move_point(1, editor.drag_target(1, v("11.6", "13.8"))),
+            lambda: editor.delete_point(1),
+            lambda: editor.glue(self.bottom_of_face_5(editor)),  # CUT_APPROVING
+            lambda: editor.approve(),  # DEFAULT
+        ]
+        states = [self.state_of(editor)]
+        for action in actions:
+            assert action() is None
+            states.append(self.state_of(editor))
+        assert [s[0] for s in states] == [
+            EditorState.DEFAULT,
+            EditorState.CUTTING,
+            EditorState.CUTTING,
+            EditorState.CUT_EDITING,
+            EditorState.CUT_EDITING,
+            EditorState.CUT_EDITING,
+            EditorState.CUT_EDITING,
+            EditorState.CUT_APPROVING,
+            EditorState.DEFAULT,
+        ]
+
+        assert editor.undo()  # the approval and the rearrangement together
+        assert self.state_of(editor) == states[6]
+        for i in range(5, -1, -1):
+            assert editor.undo()
+            assert self.state_of(editor) == states[i]
+        assert not editor.undo()
+
+        for i in range(1, 9):
+            assert editor.redo()
+            assert self.state_of(editor) == states[i]
+        assert not editor.redo()
+
+    def test_redo_after_undoing_an_approval_is_one_action_at_a_time(self, editing: Editor) -> None:
+        editing.glue(self.bottom_of_face_5(editing))
+        editing.approve()
+        approved = editing.net
+        editing.undo()
+        assert editing.state is EditorState.CUT_EDITING
+        assert editing.approved_cuts == 0
+        editing.redo()
+        assert editing.state is EditorState.CUT_APPROVING
+        assert editing.rearranged is not None
+        assert editing.display_net is editing.rearranged.net
+        editing.redo()
+        assert editing.state is EditorState.DEFAULT
+        assert editing.net is approved
+        assert editing.approved_cuts == 1
+
+    def test_back_to_the_original_net_after_approving(self, editing: Editor) -> None:
+        original = editing.net
+        editing.glue(self.bottom_of_face_5(editing))
+        editing.approve()
+        editing.undo()
+        assert editing.net is original
+
+    def test_a_new_action_forgets_what_could_be_redone(self, editing: Editor) -> None:
+        editing.insert_midpoint(0)
+        editing.undo()
+        assert editing.history.can_redo
+        editing.insert_midpoint(1)
+        assert not editing.history.can_redo
+        assert not editing.redo()
+
+    def test_an_overlapping_rearrangement_cannot_be_redone(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        editor.click(v("12", "13.5"), cut("D_1-B_1"))
+        editor.click(v("11", "11.5"), on_cut_through(net, Vec(11, 11), Vec(11, 12)))
+        assert editor.state is EditorState.CUT_EDITING
+        before = self.state_of(editor)[2]
+        chosen = next(
+            he
+            for he in editor.split().net.boundary_edges()
+            if he.origin.position.y == he.destination.position.y == 13
+            and min(he.origin.position.x, he.destination.position.x) > 12
+            and he not in editor.split().line_edges
+        )
+        assert editor.glue(chosen) is None
+        assert editor.rearranged is not None and not editor.rearranged.valid
+        assert editor.undo()
+        assert editor.state is EditorState.CUT_EDITING
+        assert self.state_of(editor)[2] == before
+        assert not editor.redo()
+
+    def test_the_split_follows_undo_and_redo(self, editing: Editor) -> None:
+        split = editing.split()
+        editing.insert_midpoint(0)
+        editing.undo()
+        assert editing.split() is not split  # worked out anew, for the line as it is now
+        assert len(editing.split().line_edges) == len(split.line_edges)
+        editing.redo()
+        assert len(editing.split().line_edges) == len(split.line_edges) + 2  # a new segment: both of its half-edges
+
+    def test_later_edits_do_not_change_what_was_remembered(self, editing: Editor) -> None:
+        """Later edits work on the line as it is now; they must not leak into what was remembered."""
+        before = positions(editing)
+        editing.insert_midpoint(0)
+        editing.undo()
+        editing.insert_midpoint(1)
+        editing.undo()
+        assert positions(editing) == before
+
+    def test_what_changes_nothing_is_not_an_action(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        editor.click(v("11.5", "12.5"), None)  # off the perimeter in DEFAULT
+        assert editor.history.done_count == 0
+        editor.click(v("11.5", "14"), cut("B_1-A_1"))
+        editor.click(v("11.5", "13.5"), None)
+        assert editor.history.done_count == 2
+        assert editor.click(v("11.5", "14"), cut("B_1-A_1")) is not None  # rejected: ends at the start
+        assert editor.history.done_count == 2
+        editor.click(v("12", "13.5"), cut("D_1-B_1"))
+        assert editor.history.done_count == 3
+        editor.click(v("11.5", "13.7"), None)  # the line is closed
+        assert editor.history.done_count == 3
+        assert editor.move_point(1, editor.drag_target(1, v("11.5", "13.5"))) is None  # to where it is
+        assert editor.history.done_count == 3
+        assert editor.move_point(1, editor.drag_target(1, Vec(13, 13))) is not None  # off the net
+        assert editor.glue(on_cut_through(editor.split().net, Vec(10, 12), Vec(11, 12))) is not None  # the same half
+        assert editor.history.done_count == 3

@@ -54,3 +54,24 @@ def test_constant_size_in_pixels() -> None:
     image, center = render(item)
     just_outside = center + QPointF(net_style.APPROVE_BUTTON_RADIUS_PX + net_style.APPROVE_CHECK_WIDTH_PX + 1, 0)
     assert image.pixelColor(just_outside.toPoint()) == QColor("black")
+
+
+def on_diagonals(image: QImage, center: QPointF) -> list[QColor]:
+    """The pixels a quarter of the radius away from the centre, along both diagonals."""
+    d = int(net_style.APPROVE_BUTTON_RADIUS_PX / 4)
+    x, y = int(center.x()), int(center.y())
+    return [image.pixelColor(x + dx, y + dy) for dx in (d, -d - 1) for dy in (d, -d - 1)]
+
+
+def test_x_when_disabled() -> None:
+    item = ApproveButtonItem()
+    item.set_state(Vec(2, 2), False)
+    image, center = render(item)
+    assert palette.APPROVE_BUTTON_FILL not in on_diagonals(image, center)  # both strokes of the "x" go through them
+
+
+def test_check_mark_when_enabled() -> None:
+    item = ApproveButtonItem()
+    item.set_state(Vec(2, 2), True)
+    image, center = render(item)
+    assert palette.APPROVE_BUTTON_FILL in on_diagonals(image, center)  # a check mark misses some of them

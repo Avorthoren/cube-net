@@ -1,6 +1,7 @@
-"""`ApproveButtonItem`: the round check mark in the middle of the segment chosen for gluing (CUT_APPROVING).
+"""`ApproveButtonItem`: the round button in the middle of the segment chosen for gluing (CUT_APPROVING).
 
-Green when the rearrangement can be approved, grey when it can't. It has a constant size in pixels.
+A green check mark when the rearrangement can be approved, a grey "x" when it can't (clicking it undoes the
+rearrangement then). It has a constant size in pixels.
 """
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
@@ -11,6 +12,9 @@ from cube_net.core.geometry import Vec
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
+
+# How far the arms of the "x" reach from the centre along each axis, as a share of the button's radius.
+CROSS_ARM = 0.4
 
 
 class ApproveButtonItem(QGraphicsItem):
@@ -59,6 +63,11 @@ class ApproveButtonItem(QGraphicsItem):
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
-        check = [QPointF(-0.5, 0.05), QPointF(-0.12, 0.42), QPointF(0.5, -0.35)]
-        painter.drawPolyline(QPolygonF([center + p * r for p in check]))
+        if self._enabled:
+            check = [QPointF(-0.5, 0.05), QPointF(-0.12, 0.42), QPointF(0.5, -0.35)]
+            painter.drawPolyline(QPolygonF([center + p * r for p in check]))
+        else:
+            arm = CROSS_ARM * r
+            painter.drawLine(center + QPointF(-arm, -arm), center + QPointF(arm, arm))
+            painter.drawLine(center + QPointF(-arm, arm), center + QPointF(arm, -arm))
         painter.restore()

@@ -51,7 +51,10 @@ class CutHover(QObject):
         view.mouse_left.connect(self.clear)
 
     def set_net(self, net: Net, ignored: frozenset[HalfEdge] = frozenset()) -> None:
-        """Follow the cuts of `net`; those in `ignored` mean nothing, and don't highlight."""
+        """Follow the cuts of `net`; those in `ignored` mean nothing, and don't highlight. If that's what it follows
+        already, the mouse is still on the same cut, and nothing changes."""
+        if net is self._net and ignored == self._ignored:
+            return
         self._net = net
         self._ignored = ignored
         self.clear()

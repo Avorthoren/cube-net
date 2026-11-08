@@ -50,5 +50,5 @@ USELESS_CUT_PX = 1.5
 # Radius of the round "approve" button shown in the middle of the segment chosen for gluing.
 APPROVE_BUTTON_RADIUS_PX = 14.0
 
-# Width of the check mark on that button.
+# Width of the check mark or the "x" on that button, and of its outline.
 APPROVE_CHECK_WIDTH_PX = 3.0

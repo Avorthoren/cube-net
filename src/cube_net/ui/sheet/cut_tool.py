@@ -11,11 +11,13 @@
   cutting, and while dragging an inner point.
 - In CUT_EDITING, a click on a cut of the perimeter (not on a vertex, not on the new line) moves the half with its
   counterpart onto it: CUT_APPROVING.
-- In CUT_APPROVING, a round button in the middle of the chosen segment approves the rearrangement, if it's valid.
+- In CUT_APPROVING, a round button in the middle of the chosen segment approves the rearrangement, if it's valid. If
+  it isn't, the button undoes the rearrangement.
 - Anything that breaks the rules shows the offending segments in black for 200 ms and changes nothing.
 """
 
 import math
+from collections.abc import Callable
 
 from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
 
@@ -49,7 +51,14 @@ class CutTool(QObject):
     # The user clicked the approve button (it's up to the window to approve, as with the keyboard shortcut).
     approve_clicked = pyqtSignal()
 
-    # The halves were rearranged, or that was cancelled: the net to show has changed.
+    # The user clicked the button of a rearrangement that can't be approved (it's up to the window to undo, as with the
+    # keyboard shortcut).
+    undo_clicked = pyqtSignal()
+
+    # The halves were rearranged (not by undo or redo).
+    glued = pyqtSignal()
+
+    # The net to show has changed.
     net_changed = pyqtSignal()
 
     # The line on display changed in any way, including while a point is being dragged.
@@ -78,6 +87,7 @@ class CutTool(QObject):
         view.mouse_moved.connect(self._on_mouse_moved)
         view.mouse_left.connect(self._on_mouse_left)
         view.zoom_changed.connect(self._update_area)
+        self.net_changed.connect(self._update_area)
         ruler.points_changed.connect(self._on_ruler_changed)
         self._update_area()
         self.refresh()
@@ -97,11 +107,25 @@ class CutTool(QObject):
         self.refresh()
         self.net_changed.emit()
 
-    def cancel_rearrangement(self) -> None:
-        """Back from CUT_APPROVING to CUT_EDITING."""
-        self._editor.cancel_rearrangement()
+    def undo(self) -> None:
+        """Undo the last action (not while a point is being dragged)."""
+        if not self.dragging:
+            self._after_history_step(self._editor.undo)
+
+    def redo(self) -> None:
+        """Redo one undone action (not while a point is being dragged)."""
+        if not self.dragging:
+            self._after_history_step(self._editor.redo)
+
+    def _after_history_step(self, step: Callable[[], bool]) -> None:
+        shown = self._editor.display_net
+        if not step():
+            return
+        self.item.set_net(self._editor.net)
+        self.item.set_rubber_band(None)  # it may start at a point that's gone; the next mouse move draws it again
         self.refresh()
-        self.net_changed.emit()
+        if self._editor.display_net is not shown:
+            self.net_changed.emit()
 
     def refresh(self) -> None:
         """Show the editor's current cut line (with the point being dragged at its current place)."""
@@ -155,8 +179,11 @@ class CutTool(QObject):
             self._press_while_editing(x, y)
             return
         if self._editor.state is EditorState.CUT_APPROVING:
-            if self.approve_button.enabled() and self._on_approve_button(x, y):
-                self.approve_clicked.emit()
+            if self._on_approve_button(x, y):
+                if self.approve_button.enabled():
+                    self.approve_clicked.emit()
+                else:
+                    self.undo_clicked.emit()
             return
         p, cut, vertex, fold = self._hit(x, y)
         before = len(self._editor.cut_line.points) if self._editor.cut_line else 0
@@ -208,12 +235,16 @@ class CutTool(QObject):
         elif self._editor.state is EditorState.CUT_APPROVING:
             self.refresh()
             self.net_changed.emit()
+            self.glued.emit()
 
     def _on_left_released(self, x: float, y: float) -> None:
         i, target = self._drag_index, self._drag_target
         self._drag_index, self._drag_target = None, None
         self._highlight_fold(None)
-        if i is None or target is None:
+        if i is None:
+            return
+        if target is None:  # pressed and released without moving
+            self.line_changed.emit()
             return
         rejection = self._editor.move_point(i, target, self._drag_over_perimeter)
         self.refresh()

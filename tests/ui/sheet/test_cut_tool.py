@@ -414,7 +414,7 @@ def test_press_on_a_cut_rearranges(setup: tuple[SheetView, CutTool, RulerTool], 
     view.left_pressed.emit(11.5, 12.5)  # further clicks mean nothing for now
     assert tool.editor.state is EditorState.CUT_APPROVING
     with qtbot.waitSignal(tool.net_changed):
-        tool.cancel_rearrangement()
+        tool.undo()
     assert tool.editor.state is EditorState.CUT_EDITING
     assert len(tool.item.points()) == 3
 
@@ -438,13 +438,13 @@ class TestApproveButton:
         view.left_pressed.emit(11.75, 10 + net_style.CUT_HITBOX_PX / 2 / view.scale_factor())
         assert tool.approve_button.position() == Vec(F(47, 4), 10)
         assert tool.approve_button.enabled()
-        tool.cancel_rearrangement()
+        tool.undo()
         assert tool.approve_button.position() is None
 
     def test_click_asks_to_approve(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
         view, tool, _ = setup
         rearranged_corner_cut(view)
-        with qtbot.waitSignal(tool.approve_clicked):
+        with qtbot.assertNotEmitted(tool.undo_clicked), qtbot.waitSignal(tool.approve_clicked):
             view.left_pressed.emit(*MIDDLE_OF_X2_B3)
         assert tool.editor.state is EditorState.CUT_APPROVING  # approving itself is up to the window
 
@@ -452,7 +452,7 @@ class TestApproveButton:
         view, tool, _ = setup
         rearranged_corner_cut(view)
         away = net_style.APPROVE_BUTTON_RADIUS_PX * 2 / view.scale_factor()
-        with qtbot.assertNotEmitted(tool.approve_clicked):
+        with qtbot.assertNotEmitted(tool.approve_clicked), qtbot.assertNotEmitted(tool.undo_clicked):
             view.left_pressed.emit(MIDDLE_OF_X2_B3[0], MIDDLE_OF_X2_B3[1] + away)
 
     def test_overlap_makes_it_inactive(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
@@ -464,8 +464,9 @@ class TestApproveButton:
         assert tool.editor.rearranged is not None and not tool.editor.rearranged.valid
         assert tool.approve_button.position() == Vec(F(51, 4), 13)
         assert not tool.approve_button.enabled()
-        with qtbot.assertNotEmitted(tool.approve_clicked):
+        with qtbot.assertNotEmitted(tool.approve_clicked), qtbot.waitSignal(tool.undo_clicked):
             view.left_pressed.emit(12.75, 13.0)
+        assert tool.editor.state is EditorState.CUT_APPROVING  # undoing itself is up to the window
 
     def test_ruler_takes_the_click(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
         view, tool, ruler = setup
@@ -480,3 +481,51 @@ class TestApproveButton:
         view, tool, _ = setup
         rearranged_corner_cut(view)
         assert tool.claims(*MIDDLE_OF_X2_B3)
+
+
+class TestUndoRedo:
+    def test_undo_and_redo_follow_the_editor(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        assert len(tool.item.points()) == 3
+        tool.undo()
+        assert tool.editor.state is EditorState.CUTTING
+        assert len(tool.item.points()) == 2
+        tool.redo()
+        assert tool.editor.state is EditorState.CUT_EDITING
+        assert len(tool.item.points()) == 3
+
+    def test_net_changed_only_when_the_shown_net_changes(
+        self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
+    ) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        with qtbot.assertNotEmitted(tool.net_changed):
+            tool.undo()
+        with qtbot.assertNotEmitted(tool.net_changed):
+            tool.redo()
+        view.left_pressed.emit(11.75, 10 + net_style.CUT_HITBOX_PX / 2 / view.scale_factor())
+        with qtbot.waitSignal(tool.net_changed):
+            tool.undo()
+
+    def test_ignored_while_dragging(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        points = tool.editor.cut_line
+        assert points is not None
+        inner = points.points[1].position
+        view.left_pressed.emit(float(inner.x), float(inner.y))
+        assert tool.dragging
+        done = tool.editor.history.done_count
+        tool.undo()
+        assert tool.editor.history.done_count == done
+        assert tool.editor.state is EditorState.CUT_EDITING
+
+    def test_glued_is_for_rearranging_only(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        with qtbot.waitSignal(tool.glued):
+            view.left_pressed.emit(11.75, 10 + net_style.CUT_HITBOX_PX / 2 / view.scale_factor())
+        with qtbot.assertNotEmitted(tool.glued):
+            tool.undo()
+            tool.redo()

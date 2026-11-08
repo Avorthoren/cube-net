@@ -104,13 +104,14 @@ def test_recording_started_at_launch(qtbot: QtBot, tmp_path: Path) -> None:
     assert window.recorder is not None
     lines = session_lines(window.recorder.log.path)
     assert "# recording started: at app launch" in lines
-    assert lines[-6:] == [
+    assert lines[-7:] == [
         "state net default",
         "state labels on",
         f"state window {window.width()}x{window.height()}",
         "state bounds off",
         "state ruler off",
         "state cut default",
+        "state history 0 0",
     ]
     window.stop_recording("test over")
 
@@ -434,16 +435,14 @@ class TestRearrangement:
     def test_undo_goes_back_to_editing(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path, record=True)
         self.closed_corner_cut(window)
-        assert not window.undo_rearrangement_action.isEnabled()
         window.sheet_view.left_pressed.emit(*self.bottom_of_face_5(window))
-        assert window.undo_rearrangement_action.isEnabled()
-        window.undo_rearrangement_action.trigger()
+        window.undo_action.trigger()
         assert window.editor.state.value == "cut_editing"
         assert window.bounding.label.text() == "Area\n12.000"
         assert len(window.cut_tool.item.points()) == 3
         assert window.recorder is not None
         lines = session_lines(window.recorder.log.path)
-        assert lines[-2:] == ["cut glue 11.500,10.000 12.000,10.000 ok", "cut unglue"]
+        assert lines[-2:] == ["cut glue 11.500,10.000 12.000,10.000 ok", "cut undo cut_editing"]
         window.stop_recording("test over")
 
     def test_labels_keep_the_previewed_names_after_rearranging(self, qtbot: QtBot, tmp_path: Path) -> None:
@@ -516,7 +515,7 @@ class TestApproveButton:
         assert window.approve_action.isEnabled()
         item = window.sheet_view.net_item()
         assert item is not None and item.overlapping() == frozenset()
-        window.undo_rearrangement_action.trigger()
+        window.undo_action.trigger()
         assert not window.approve_action.isEnabled()
 
     def test_overlap_shown_black_and_not_approvable(self, qtbot: QtBot, tmp_path: Path) -> None:
@@ -528,8 +527,22 @@ class TestApproveButton:
         assert item is not None and item.overlapping()
         assert window.recorder is not None
         assert session_lines(window.recorder.log.path)[-1].endswith(" overlap")
-        window.undo_rearrangement_action.trigger()
+        window.undo_action.trigger()
         assert item.overlapping() == frozenset()
+        window.stop_recording("test over")
+
+    def test_click_on_the_x_acts_as_undo(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, record=True)
+        self.overlapping_rearrangement(window)
+        line = window.editor.cut_line
+        window.sheet_view.left_pressed.emit(12.75, 13.0)
+        assert window.editor.state.value == "cut_editing"
+        assert window.editor.cut_line is not None and window.editor.cut_line.points == line.points
+        assert window.net is window.editor.net
+        assert window.cut_tool.approve_button.position() is None
+        assert not window.redo_action.isEnabled()  # it overlapped: it's forgotten
+        assert window.recorder is not None
+        assert session_lines(window.recorder.log.path)[-1] == "cut undo cut_editing"
         window.stop_recording("test over")
 
     def test_shortcut_is_ctrl_enter(self, qtbot: QtBot, tmp_path: Path) -> None:
@@ -634,7 +647,7 @@ class TestDividedView:
         window.sheet_view.left_pressed.emit(11.75, 10 + h)
         assert window.editor.state.value == "cut_approving"
         assert not self.divided_on(window)
-        window.undo_rearrangement_action.trigger()
+        window.undo_action.trigger()
         assert not self.divided_on(window)  # the hover was reset; the next move decides
         window.sheet_view.mouse_moved.emit(11.75, 10 + h)
         assert self.divided_on(window)
@@ -667,7 +680,7 @@ class TestApproving:
         assert window.editor.state.value == "default"
         assert window.net is window.editor.net
         assert not window.approve_action.isEnabled()
-        assert not window.undo_rearrangement_action.isEnabled()
+        assert window.undo_action.isEnabled()
         assert window.bounding.label.text() == area
         item = window.sheet_view.net_item()
         assert item is not None
@@ -749,3 +762,226 @@ class TestApproveButtonOnTheSheet:
         qtbot.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=position)
         assert window.editor.state.value == "default"
         assert window.cut_tool.approve_button.position() is None
+
+
+class TestUndoRedo:
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        window.activateWindow()
+        qtbot.waitUntil(window.isActiveWindow)
+        return window
+
+    def hitbox(self, window: MainWindow) -> float:
+        from cube_net.ui.sheet import net_style
+
+        return net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+
+    def closed_line(self, window: MainWindow) -> None:
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+
+    def rearrange(self, window: MainWindow) -> None:
+        window.sheet_view.left_pressed.emit(11.75, 10 + self.hitbox(window))
+
+    def shown(self, window: MainWindow) -> tuple[object, ...]:
+        """What the user sees of the state."""
+        item = window.sheet_view.net_item()
+        assert item is not None
+        return (
+            window.editor.state,
+            window.net,
+            window.cut_tool.item.points(),
+            item.glue(),
+            item.overlapping(),
+            window.bounding.label.text(),
+            window.cut_tool.approve_button.position(),
+            window.approve_action.isEnabled(),
+        )
+
+    def test_nothing_to_undo_at_first(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert not window.undo_action.isEnabled()
+        assert not window.redo_action.isEnabled()
+
+    def test_shortcuts(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.closed_line(window)
+        qtbot.keyClick(window, Qt.Key.Key_Z, Qt.KeyboardModifier.ControlModifier)
+        assert window.editor.state.value == "cutting"
+        qtbot.keyClick(window, Qt.Key.Key_Y, Qt.KeyboardModifier.ControlModifier)
+        assert window.editor.state.value == "cut_editing"
+
+    def test_in_every_state_everything_on_screen_follows(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        view = window.sheet_view
+        h = self.hitbox(window)
+        steps = [
+            lambda: view.left_pressed.emit(11.5, 14 - h),
+            lambda: view.left_pressed.emit(11.5, 13.5),
+            lambda: view.left_pressed.emit(12 - h, 13.5),
+            lambda: self.rearrange(window),
+        ]
+        states = [self.shown(window)]
+        for step in steps:
+            step()
+            states.append(self.shown(window))
+        assert window.approve_action.isEnabled()
+        window.approve_action.trigger()
+        states.append(self.shown(window))
+        assert window.editor.state.value == "default"
+
+        window.undo_action.trigger()  # the approval and the rearrangement together
+        assert self.shown(window) == states[3]
+        for i in (2, 1, 0):
+            window.undo_action.trigger()
+            assert self.shown(window) == states[i]
+        assert not window.undo_action.isEnabled()
+        for i in range(1, 6):
+            assert window.redo_action.isEnabled()
+            window.redo_action.trigger()
+            assert self.shown(window) == states[i]
+        assert not window.redo_action.isEnabled()
+
+    def test_a_new_action_disables_redo(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.closed_line(window)
+        window.undo_action.trigger()
+        assert window.redo_action.isEnabled()
+        window.sheet_view.left_pressed.emit(11.7, 13.7)
+        assert not window.redo_action.isEnabled()
+
+    def test_not_while_dragging_a_point(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.closed_line(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 13.5)
+        assert window.cut_tool.dragging
+        assert not window.undo_action.isEnabled()
+        view.mouse_moved.emit(11.6, 13.6)
+        assert not window.undo_action.isEnabled()
+        view.left_released.emit(11.6, 13.6)
+        assert window.undo_action.isEnabled()
+        window.undo_action.trigger()
+        line = window.editor.cut_line
+        assert line is not None and float(line.points[1].position.x) == 11.5
+
+    def test_pressing_a_point_without_moving_it_gives_undo_back(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.closed_line(window)
+        done = window.editor.history.done_count
+        window.sheet_view.left_pressed.emit(11.5, 13.5)
+        window.sheet_view.left_released.emit(11.5, 13.5)
+        assert window.undo_action.isEnabled()
+        assert window.editor.history.done_count == done
+
+    def test_rubber_band_does_not_start_at_a_point_that_is_gone(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.mouse_moved.emit(11.7, 13.5)
+        window.undo_action.trigger()
+        assert window.cut_tool.item.rubber_band() is None
+        view.mouse_moved.emit(11.7, 13.5)
+        band = window.cut_tool.item.rubber_band()
+        assert band is not None and band[0].y == 14
+
+    def test_hover_follows_the_line_after_undo(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.closed_line(window)
+        view = window.sheet_view
+        view.mouse_moved.emit(10 + self.hitbox(window), 12.5)
+        item = view.net_item()
+        assert item is not None and item.divided() is not None
+        window.undo_action.trigger()  # the line isn't closed anymore: nothing to show
+        assert window.editor.state.value == "cutting"
+        assert item.divided() is None
+        window.redo_action.trigger()
+        view.mouse_moved.emit(7.0, 7.0)
+        view.mouse_moved.emit(10 + self.hitbox(window), 12.5)
+        assert item.divided() is window.editor.split()
+
+    def test_labels_come_back(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.closed_line(window)
+        self.rearrange(window)
+        item = window.sheet_view.net_item()
+        assert item is not None
+
+        def names() -> set[str]:
+            labels = item.labels()
+            assert labels is not None
+            return {str(label) for label in labels.values()}
+
+        window.approve_action.trigger()
+        approved = names()
+        window.undo_action.trigger()
+        window.redo_action.trigger()
+        window.redo_action.trigger()
+        assert names() == approved
+
+    def test_the_ruler_is_not_part_of_the_history(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.closed_line(window)
+        done = window.editor.history.done_count
+        window.ruler_tool.set_active(True)
+        window.sheet_view.left_pressed.emit(7.0, 7.0)
+        points = window.ruler_tool.ruler.points
+        assert len(points) == 1
+        assert window.editor.history.done_count == done
+        window.undo_action.trigger()
+        assert window.ruler_tool.ruler.points == points
+
+    def test_drawing_area_follows_the_net(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.closed_line(window)
+        self.rearrange(window)
+        window.undo_action.trigger()
+        area = window.cut_tool.item.boundingRect()
+        box = window.editor.display_net.bounding_box()
+        assert area.left() < float(box.lo.x) and area.bottom() > float(box.hi.y)
+
+    def test_recorded(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, record=True)
+        self.closed_line(window)
+        window.undo_action.trigger()
+        window.redo_action.trigger()
+        assert window.recorder is not None
+        assert session_lines(window.recorder.log.path)[-2:] == ["cut undo cutting", "cut redo cut_editing"]
+        window.stop_recording("test over")
+
+
+class TestFlashKeepsTheHover:
+    def test_useless_cuts_stay_thin_black_after_the_flash(self, qtbot: QtBot, tmp_path: Path) -> None:
+        """The mouse stays on a cut that can't be chosen: it flashes, and then everything is as it was."""
+        from cube_net.ui.sheet import net_style
+
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        view = window.sheet_view
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+        useless = 10.5, 12 + h  # E_2-H_1: its counterpart is in the same half
+        view.mouse_moved.emit(*useless)
+        item = view.net_item()
+        assert item is not None
+        hovered = window.cut_hover.hovered()
+        assert hovered is not None and item.divided() is not None
+
+        with qtbot.waitSignal(window.cut_tool.rejected):
+            view.left_pressed.emit(*useless)
+        assert item.divided() is not None
+        qtbot.waitUntil(lambda: window.cut_tool.item.flash() is None, timeout=2000)
+
+        assert window.cut_hover.hovered() is hovered
+        assert item.divided() is window.editor.split()

@@ -11,6 +11,8 @@ CUT_EDITING   click a segment's middle      -> a new point there
                                                (rejected if the counterpart is in the same half)
 CUT_APPROVING approve (if the halves don't overlap) -> they are glued for good: the new net -> DEFAULT
 
+Every one of these changes is an action that can be undone and redone (see `History`).
+
 The UI decides where a click lands: on a perimeter vertex (inside its circle), on a cut (inside its hitbox), on a fold
 line (inside its hitbox), or elsewhere; in that order of priority. A rejected click
 returns a `Rejection` with the segments to flash black.
@@ -36,6 +38,7 @@ from cube_net.core.cutting import (
     split_net,
 )
 from cube_net.core.geometry import Vec
+from cube_net.core.history import ActionKind, History
 from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_edge_from
 
 
@@ -44,6 +47,17 @@ class EditorState(Enum):
     CUTTING = "cutting"
     CUT_EDITING = "cut_editing"
     CUT_APPROVING = "cut_approving"
+
+
+@dataclass(frozen=True, slots=True)
+class EditorSnapshot:
+    """The editor's whole state at some moment. Nets and rearrangements are never changed once they're made, so holding
+    on to them is enough."""
+
+    net: Net
+    points: tuple[CutPoint, ...] | None
+    rearranged: Rearranged | None
+    approved_cuts: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +82,8 @@ class Editor:
 
         # How many cuts have been approved so far (0: this is still the net the editor started with).
         self.approved_cuts = 0
+
+        self.history: History[EditorSnapshot] = History()
 
     @property
     def state(self) -> EditorState:
@@ -111,7 +127,9 @@ class Editor:
         match self.state:
             case EditorState.DEFAULT:
                 if on_perimeter:
+                    before = self._snapshot()
                     self.cut_line = CutLine([self.candidate(p, cut, vertex)])
+                    self._record(ActionKind.ADD_POINT, before)
                 return None
             case EditorState.CUTTING:
                 return self._extend(self.candidate(p, cut, vertex, fold))
@@ -126,7 +144,9 @@ class Editor:
         a, b = line.points[i].position, line.points[i + 1].position
         if line.inner_count >= MAX_POINTS_AFTER_FIRST:
             return Rejection(((a, b),))
+        before = self._snapshot()
         line.points.insert(i + 1, CutPoint((a + b) / 2))
+        self._record(ActionKind.ADD_POINT, before)
         return None
 
     def delete_point(self, i: int) -> Rejection | None:
@@ -138,7 +158,9 @@ class Editor:
         remaining = [p for j, p in enumerate(line.points) if j != i]
         if not segment_valid(self.net, remaining, i - 1):
             return Rejection(((remaining[i - 1].position, remaining[i].position),), tuple(remaining))
+        before = self._snapshot()
         line.points[:] = remaining
+        self._record(ActionKind.DELETE_POINT, before)
         return None
 
     def drag_target(
@@ -188,7 +210,11 @@ class Editor:
         bad = [i - 1, i] if inner_over_perimeter else invalid_segments(self.net, moved, (i - 1, i))
         if bad:
             return Rejection(tuple((moved[j].position, moved[j + 1].position) for j in bad))
+        if target == line.points[i]:
+            return None  # it didn't really move
+        before = self._snapshot()
         line.points[:] = moved
+        self._record(ActionKind.MOVE_POINT, before)
         return None
 
     def split(self) -> SplitNet:
@@ -208,22 +234,54 @@ class Editor:
         rearranged = rearrange(split, clicked)
         if rearranged is None:
             return Rejection(((clicked.origin.position, clicked.destination.position),))
+        before = self._snapshot()
         self.rearranged = rearranged
+        self._record(ActionKind.REARRANGE, before, forget_on_undo=not rearranged.valid)
         return None
 
     def approve(self) -> None:
         """Glue the rearranged halves for good: their net becomes the current one, and it's DEFAULT again."""
         if self.rearranged is None:
             raise RuntimeError(f"nothing to approve in {self.state.name}")
+        before = self._snapshot()
         self.net = approve(self.rearranged)
         self.rearranged = None
         self.cut_line = None
         self._split = None
         self.approved_cuts += 1
+        self._record(ActionKind.APPROVE, before)
 
-    def cancel_rearrangement(self) -> None:
-        """Back from CUT_APPROVING to CUT_EDITING."""
-        self.rearranged = None
+    # --- undo and redo ----------------------------------------------------------------------------------------------
+
+    def undo(self) -> bool:
+        """Undo the last action (an approval together with its rearrangement). False if there's nothing to undo."""
+        state = self.history.undo()
+        if state is None:
+            return False
+        self._restore(state)
+        return True
+
+    def redo(self) -> bool:
+        """Redo exactly one undone action. False if there's nothing to redo."""
+        state = self.history.redo()
+        if state is None:
+            return False
+        self._restore(state)
+        return True
+
+    def _snapshot(self) -> EditorSnapshot:
+        points = tuple(self.cut_line.points) if self.cut_line is not None else None
+        return EditorSnapshot(self.net, points, self.rearranged, self.approved_cuts)
+
+    def _restore(self, state: EditorSnapshot) -> None:
+        self.net = state.net
+        self.cut_line = CutLine(list(state.points)) if state.points is not None else None
+        self.rearranged = state.rearranged
+        self.approved_cuts = state.approved_cuts
+        self._split = None
+
+    def _record(self, kind: ActionKind, before: EditorSnapshot, forget_on_undo: bool = False) -> None:
+        self.history.record(kind, before, self._snapshot(), forget_on_undo)
 
     # --- internals --------------------------------------------------------------------------------------------------
 
@@ -238,5 +296,7 @@ class Editor:
         too_many = line.inner_count >= MAX_POINTS_AFTER_FIRST and not point.on_perimeter
         if too_many or not segment_allowed(self.net, line, point):
             return Rejection(((line.last.position, point.position),))
+        before = self._snapshot()
         line.points.append(point)
+        self._record(ActionKind.ADD_POINT, before)
         return None

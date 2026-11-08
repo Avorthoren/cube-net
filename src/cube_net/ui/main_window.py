@@ -81,6 +81,7 @@ class MainWindow(QMainWindow):
         self.cut_tool.line_changed.connect(self._update_vertex_labels)
         self.cut_tool.line_changed.connect(self._update_hover_net)
         self.cut_tool.net_changed.connect(self._on_net_changed)
+        self.cut_tool.glued.connect(self._on_glued)
         self.cut_hover.hover_changed.connect(self._update_divided_view)
         self.cut_tool.rejected.connect(self._on_cut_rejected)
         self.sheet_view.set_net_hit_test(self._is_on_net)
@@ -143,6 +144,8 @@ class MainWindow(QMainWindow):
         line = self.editor.cut_line
         cut_points = [format_point(p.position) + ("p" if p.on_perimeter else "") for p in line.points] if line else []
         recorder.note("state", "cut", self.editor.state.value, *cut_points)  # "p": on the perimeter
+        history = self.editor.history
+        recorder.note("state", "history", history.done_count, history.undone_count)  # the actions themselves: M9
         if self.editor.rearranged is not None:
             kept = self.editor.rearranged.kept
             recorder.note("state", "glue", format_point(kept.origin.position), format_point(kept.destination.position))
@@ -212,10 +215,24 @@ class MainWindow(QMainWindow):
         if self.recorder is not None:
             self.recorder.note("cut", "approve")
 
-    def _on_undo_rearrangement(self) -> None:
-        self.cut_tool.cancel_rearrangement()
+    def _on_undo(self) -> None:
+        self.cut_tool.undo()
         if self.recorder is not None:
-            self.recorder.note("cut", "unglue")
+            self.recorder.note("cut", "undo", self.editor.state.value)
+
+    def _on_redo(self) -> None:
+        self.cut_tool.redo()
+        if self.recorder is not None:
+            self.recorder.note("cut", "redo", self.editor.state.value)
+
+    def _update_edit_actions(self) -> None:
+        """Undo and redo need something to undo or redo and no point being dragged; approving needs a valid
+        rearrangement."""
+        dragging = self.cut_tool.dragging
+        self.undo_action.setEnabled(self.editor.history.can_undo and not dragging)
+        self.redo_action.setEnabled(self.editor.history.can_redo and not dragging)
+        rearranged = self.editor.rearranged
+        self.approve_action.setEnabled(rearranged is not None and rearranged.valid)
 
     def _on_open_logs(self) -> None:
         if not open_session_log_folder(self._session_dir):
@@ -274,16 +291,20 @@ class MainWindow(QMainWindow):
         assert edit_menu is not None
         self.approve_action = QAction("&Approve cut", self)
         self.approve_action.setShortcuts(["Ctrl+Return", "Ctrl+Enter"])  # the main Enter key and the one on the keypad
-        self.approve_action.setEnabled(False)
         self.approve_action.triggered.connect(self._on_approve)
         self.cut_tool.approve_clicked.connect(self.approve_action.trigger)
         edit_menu.addAction(self.approve_action)
-        # Temporary, until the real undo/redo (M8): the only way back from CUT_APPROVING.
-        self.undo_rearrangement_action = QAction("&Undo rearrangement", self)
-        self.undo_rearrangement_action.setShortcut("Ctrl+Z")
-        self.undo_rearrangement_action.setEnabled(False)
-        self.undo_rearrangement_action.triggered.connect(self._on_undo_rearrangement)
-        edit_menu.addAction(self.undo_rearrangement_action)
+        self.undo_action = QAction("&Undo", self)
+        self.undo_action.setShortcut("Ctrl+Z")
+        self.undo_action.triggered.connect(self._on_undo)
+        self.cut_tool.undo_clicked.connect(self.undo_action.trigger)
+        edit_menu.addAction(self.undo_action)
+        self.redo_action = QAction("&Redo", self)
+        self.redo_action.setShortcut("Ctrl+Y")
+        self.redo_action.triggered.connect(self._on_redo)
+        edit_menu.addAction(self.redo_action)
+        self.cut_tool.line_changed.connect(self._update_edit_actions)
+        self._update_edit_actions()
 
     def _on_net_changed(self) -> None:
         """Show the net the editor has now (the rearranged one in CUT_APPROVING): the sheet, the bounding rectangle
@@ -296,11 +317,12 @@ class MainWindow(QMainWindow):
         assert item is not None
         item.set_glue((rearranged.kept, rearranged.moved) if rearranged is not None else ())
         item.set_overlapping(rearranged.overlapping if rearranged is not None else frozenset())
-        self.approve_action.setEnabled(rearranged is not None and rearranged.valid)
         self._update_bounding()
         self._update_hover_net()
         self._update_vertex_labels()
-        self.undo_rearrangement_action.setEnabled(rearranged is not None)
+
+    def _on_glued(self) -> None:
+        rearranged = self.editor.rearranged
         if self.recorder is not None and rearranged is not None:
             kept = rearranged.kept
             ends = format_point(kept.origin.position), format_point(kept.destination.position)

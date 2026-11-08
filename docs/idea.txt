@@ -352,7 +352,8 @@ to the next state (CUT_APPROVING):
    the same side of them; a vertex "pokes" through a segment into the cube net.
 3. In the middle of the segment user clicked on there should be a round button with a check mark (constant size in
    pixels). If there are no intersections, it is green, and clicking it (or the shortcut CTRL+ENTER) ends the process of
-   cutting the cube net, getting us in the DEFAULT state. If there are intersections, it is grey and does nothing.
+   cutting the cube net, getting us in the DEFAULT state. If there are intersections, it is grey, shows an "x" instead of the
+   check mark, and clicking it does the same as CTRL+z: it undoes the rearrangement. CTRL+ENTER does nothing then.
 
 Now let's describe actions that should be saved and be reversible (and redoable):
 1. Creating new point of new cut line.

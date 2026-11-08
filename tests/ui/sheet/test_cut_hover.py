@@ -80,10 +80,28 @@ def test_no_highlight_while_panning(setup: tuple[SheetView, CutHover, Net], qtbo
     assert hover.hovered() is not None
 
 
-def test_set_net_clears(setup: tuple[SheetView, CutHover, Net]) -> None:
+def test_another_net_clears(setup: tuple[SheetView, CutHover, Net]) -> None:
+    view, hover, _ = setup
+    hover.update_at(near_cut(view), 12.5)
+    hover.set_net(default_net())
+    assert hover.hovered() is None
+
+
+def test_the_same_net_keeps_the_hover(setup: tuple[SheetView, CutHover, Net]) -> None:
     view, hover, net = setup
     hover.update_at(near_cut(view), 12.5)
+    hovered = hover.hovered()
+    assert hovered is not None
     hover.set_net(net)
+    assert hover.hovered() is hovered
+
+
+def test_other_ignored_cuts_clear(setup: tuple[SheetView, CutHover, Net]) -> None:
+    view, hover, net = setup
+    hover.update_at(near_cut(view), 12.5)
+    hovered = hover.hovered()
+    assert hovered is not None
+    hover.set_net(net, frozenset({hovered}))
     assert hover.hovered() is None
 
 
