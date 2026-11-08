@@ -118,6 +118,17 @@ class CutTool(QObject):
         self.refresh()
         self.net_changed.emit()
 
+    def reload(self) -> None:
+        """The editor got a whole new state (a project was opened): forget everything that was going on."""
+        self._drag_index, self._drag_target, self._drag_over_perimeter = None, None, False
+        self._delete_press = None
+        self._flash_timer.stop()
+        self.item.set_flash(None)
+        self.item.set_net(self._editor.net)
+        self.item.set_rubber_band(None)
+        self.refresh()
+        self.net_changed.emit()
+
     def undo(self) -> None:
         """Undo the last action (not while a point is being dragged)."""
         if not self.dragging:

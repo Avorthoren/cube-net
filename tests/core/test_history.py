@@ -114,3 +114,28 @@ def test_counts() -> None:
     run(history, "p r a z:1")
     assert (history.can_undo, history.can_redo) == (True, True)
     assert (history.done_count, history.undone_count) == (1, 2)
+
+
+class TestRestored:
+    def test_goes_on_as_if_nothing_happened(self) -> None:
+        original: History[int] = History()
+        run(original, "p r a z:1")
+        history = History.restored(original.done_entries(), original.undone_entries())
+        assert (history.done_count, history.undone_count) == (1, 2)
+        assert history.redo() == 2
+        assert history.redo() == 3
+        assert history.redo() is None
+        assert history.undo() == 1
+
+    def test_the_entries_are_in_order(self) -> None:
+        history: History[int] = History()
+        run(history, "p d m z:2")
+        assert [e.after for e in history.done_entries()] == [1, 2]
+        assert [e.after for e in history.undone_entries()] == [3]
+
+    def test_keeps_the_limit(self) -> None:
+        original: History[int] = History()
+        run(original, "p " * 1000)
+        history = History.restored(original.done_entries(), ())
+        run(history, "p", start=1000)
+        assert history.done_count == 1000

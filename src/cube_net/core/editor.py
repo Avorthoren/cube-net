@@ -164,7 +164,7 @@ class Editor:
         match self.state:
             case EditorState.DEFAULT:
                 if on_perimeter:
-                    before = self._snapshot()
+                    before = self.snapshot()
                     self.cut_line = CutLine([self.candidate(p, cut, vertex)])
                     self._record(ActionKind.ADD_POINT, before)
                 return None
@@ -181,7 +181,7 @@ class Editor:
         a, b = line.points[i].position, line.points[i + 1].position
         if line.inner_count >= MAX_POINTS_AFTER_FIRST:
             return Rejection(((a, b),))
-        before = self._snapshot()
+        before = self.snapshot()
         line.points.insert(i + 1, CutPoint((a + b) / 2))
         self._record(ActionKind.ADD_POINT, before)
         return None
@@ -195,7 +195,7 @@ class Editor:
         remaining = [p for j, p in enumerate(line.points) if j != i]
         if not segment_valid(self.net, remaining, i - 1):
             return Rejection(((remaining[i - 1].position, remaining[i].position),), tuple(remaining))
-        before = self._snapshot()
+        before = self.snapshot()
         line.points[:] = remaining
         self._record(ActionKind.DELETE_POINT, before)
         return None
@@ -261,7 +261,7 @@ class Editor:
             return Rejection(tuple((moved[j].position, moved[j + 1].position) for j in bad))
         if target == line.points[i]:
             return None  # it didn't really move
-        before = self._snapshot()
+        before = self.snapshot()
         line.points[:] = moved
         self._record(ActionKind.MOVE_POINT, before)
         return None
@@ -283,7 +283,7 @@ class Editor:
         rearranged = rearrange(split, clicked)
         if rearranged is None:
             return Rejection(((clicked.origin.position, clicked.destination.position),))
-        before = self._snapshot()
+        before = self.snapshot()
         self.rearranged = rearranged
         self._record(ActionKind.REARRANGE, before, forget_on_undo=not rearranged.valid)
         return None
@@ -292,7 +292,7 @@ class Editor:
         """Glue the rearranged halves for good: their net becomes the current one, and it's DEFAULT again."""
         if self.rearranged is None:
             raise RuntimeError(f"nothing to approve in {self.state.name}")
-        before = self._snapshot()
+        before = self.snapshot()
         self.net = approve(self.rearranged)
         self.rearranged = None
         self.cut_line = None
@@ -318,9 +318,15 @@ class Editor:
         self._restore(state)
         return True
 
-    def _snapshot(self) -> EditorSnapshot:
+    def snapshot(self) -> EditorSnapshot:
+        """The editor's state as it is now."""
         points = tuple(self.cut_line.points) if self.cut_line is not None else None
         return EditorSnapshot(self.net, points, self.rearranged, self.approved_cuts)
+
+    def load(self, state: EditorSnapshot, history: History[EditorSnapshot]) -> None:
+        """Continue from a state and a history saved earlier."""
+        self._restore(state)
+        self.history = history
 
     def _restore(self, state: EditorSnapshot) -> None:
         self.net = state.net
@@ -330,7 +336,7 @@ class Editor:
         self._split = None
 
     def _record(self, kind: ActionKind, before: EditorSnapshot, forget_on_undo: bool = False) -> None:
-        self.history.record(kind, before, self._snapshot(), forget_on_undo)
+        self.history.record(kind, before, self.snapshot(), forget_on_undo)
 
     # --- internals --------------------------------------------------------------------------------------------------
 
@@ -345,7 +351,7 @@ class Editor:
         too_many = line.inner_count >= MAX_POINTS_AFTER_FIRST and not point.on_perimeter
         if too_many or not segment_allowed(self.net, line, point):
             return Rejection(((line.last.position, point.position),))
-        before = self._snapshot()
+        before = self.snapshot()
         line.points.append(point)
         self._record(ActionKind.ADD_POINT, before)
         return None

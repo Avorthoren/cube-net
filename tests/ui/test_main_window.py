@@ -1366,3 +1366,226 @@ class TestShiftInTheWindow:
         assert window.undo_action.isEnabled()
         window.undo_action.trigger()
         assert window.editor.cut_line is not None and len(window.editor.cut_line.points) == 3
+
+
+class TestProjects:
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def hitbox(self, window: MainWindow) -> float:
+        from cube_net.ui.sheet import net_style
+
+        return net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+
+    def close_line(self, window: MainWindow) -> None:
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+
+    def rearrange(self, window: MainWindow) -> None:
+        self.close_line(window)
+        window.sheet_view.left_pressed.emit(11.75, 10 + self.hitbox(window))
+
+    def shown(self, window: MainWindow) -> tuple[object, ...]:
+        item = window.sheet_view.net_item()
+        assert item is not None
+        labels = item.labels() or {}
+        return (
+            window.editor.state,
+            sorted(str(v.position) for v in window.net.vertices),
+            [p.position for p in window.cut_tool.item.points()],
+            len(item.glue()),
+            len(item.overlapping()),
+            window.bounding.label.text(),
+            window.cut_tool.approve_button.position(),
+            window.approve_action.isEnabled(),
+            window.undo_action.isEnabled(),
+            window.redo_action.isEnabled(),
+            sorted((str(v.position), str(name)) for v, name in labels.items()),
+            [(p, name) for p, name in window.cut_tool.item.labels()],
+        )
+
+    def reopened(self, qtbot: QtBot, tmp_path: Path, window: MainWindow) -> MainWindow:
+        """The project in another window, as after a restart."""
+        path = tmp_path / "cube.cubenet"
+        assert window.save_project_to(path)
+        other = self.make(qtbot, tmp_path)
+        assert other.open_project_from(path)
+        return other
+
+    def test_every_state_comes_back_as_it_was_shown(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        h = self.hitbox(window)
+        view = window.sheet_view
+        assert self.shown(self.reopened(qtbot, tmp_path, window)) == self.shown(window)
+        view.left_pressed.emit(11.5, 14 - h)
+        assert self.shown(self.reopened(qtbot, tmp_path, window)) == self.shown(window)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+        assert self.shown(self.reopened(qtbot, tmp_path, window)) == self.shown(window)
+        view.left_pressed.emit(11.75, 10 + h)
+        assert self.shown(self.reopened(qtbot, tmp_path, window)) == self.shown(window)
+        window.approve_action.trigger()
+        assert self.shown(self.reopened(qtbot, tmp_path, window)) == self.shown(window)
+        window.undo_action.trigger()
+        assert self.shown(self.reopened(qtbot, tmp_path, window)) == self.shown(window)
+
+    def test_undo_and_redo_work_after_reopening(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.rearrange(window)
+        window.approve_action.trigger()
+        other = self.reopened(qtbot, tmp_path, window)
+        other.undo_action.trigger()
+        window.undo_action.trigger()
+        assert self.shown(other) == self.shown(window)
+        for _ in range(2):
+            other.redo_action.trigger()
+            window.redo_action.trigger()
+            assert self.shown(other) == self.shown(window)
+        assert other.editor.state.value == "default"
+
+    def test_the_tools_work_on_the_opened_project(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.rearrange(window)
+        other = self.reopened(qtbot, tmp_path, window)
+        other.approve_action.trigger()
+        assert other.editor.state.value == "default"
+        assert other.net is other.editor.net
+        h = self.hitbox(other)
+        other.sheet_view.mouse_moved.emit(10 + h, 12.5)
+        assert other.cut_hover.hovered() is not None
+        other.sheet_view.left_pressed.emit(10 + h, 12.5)
+        assert other.editor.state.value == "cutting"
+
+    def test_an_overlap_comes_back(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        h = self.hitbox(window)
+        view = window.sheet_view
+        view.left_pressed.emit(12 - h, 13.5)
+        view.left_pressed.emit(11 + h, 11.5)
+        view.left_pressed.emit(12.75, 13 - h)
+        other = self.reopened(qtbot, tmp_path, window)
+        item = other.sheet_view.net_item()
+        assert item is not None and item.overlapping()
+        assert not other.cut_tool.approve_button.enabled()
+        other.sheet_view.left_pressed.emit(12.75, 13.0)  # the "x" undoes it, for good
+        assert other.editor.state.value == "cut_editing"
+        assert not other.redo_action.isEnabled()
+
+    def test_settings_come_back_and_are_used(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from fractions import Fraction
+
+        from cube_net.core.project_settings import ProjectSettings
+
+        window = self.make(qtbot, tmp_path)
+        window.project_settings = ProjectSettings(Fraction(5))
+        other = self.reopened(qtbot, tmp_path, window)
+        assert other.project_settings.area_threshold == 5
+
+    def test_a_drag_in_progress_is_forgotten(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        path = tmp_path / "cube.cubenet"
+        assert window.save_project_to(path)
+        window.sheet_view.left_pressed.emit(11.5, 13.5)
+        window.sheet_view.mouse_moved.emit(11.7, 13.7)
+        assert window.cut_tool.dragging
+        assert window.open_project_from(path)
+        assert not window.cut_tool.dragging
+        assert window.undo_action.isEnabled()
+        window.sheet_view.left_released.emit(11.7, 13.7)  # nothing happens
+        line = window.editor.cut_line
+        assert line is not None and float(line.points[1].position.x) == 11.5
+
+    def test_the_title_tells_the_file(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert "cube.cubenet" not in window.windowTitle()
+        window.save_project_to(tmp_path / "cube.cubenet")
+        assert window.windowTitle().startswith("cube.cubenet")
+        assert window.project_path == tmp_path / "cube.cubenet"
+
+    def test_opening_a_bad_file_tells_and_changes_nothing(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        before = self.shown(window)
+        told: list[str] = []
+        monkeypatch.setattr(QMessageBox, "critical", lambda _p, _t, text: told.append(text))
+        bad = tmp_path / "bad.cubenet"
+        bad.write_text("Hello!")
+        assert not window.open_project_from(bad)
+        assert len(told) == 1 and "bad.cubenet" in told[0]
+        assert self.shown(window) == before
+        assert window.project_path is None
+
+    def test_saving_to_a_bad_place_tells_and_changes_nothing(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        window = self.make(qtbot, tmp_path)
+        told: list[str] = []
+        monkeypatch.setattr(QMessageBox, "critical", lambda _p, _t, text: told.append(text))
+        assert not window.save_project_to(tmp_path / "nowhere" / "cube.cubenet")
+        assert len(told) == 1
+        assert window.project_path is None
+
+    def test_file_menu_comes_first(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        menu_bar = window.menuBar()
+        assert menu_bar is not None
+        assert menu_bar.actions()[0].text() == "&File"
+        assert window.open_action.shortcut().toString() == "Ctrl+O"
+        assert window.save_as_action.shortcut().toString() == "Ctrl+Shift+S"
+
+    def test_save_as_adds_the_ending(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+
+        window = self.make(qtbot, tmp_path)
+        monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_: (str(tmp_path / "cube"), ""))
+        window.save_as_action.trigger()
+        assert (tmp_path / "cube.cubenet").exists()
+
+    def test_cancelled_dialogs_do_nothing(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+
+        window = self.make(qtbot, tmp_path)
+        monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_: ("", ""))
+        monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_: ("", ""))
+        window.save_as_action.trigger()
+        window.open_action.trigger()
+        assert window.project_path is None
+
+    def test_open_through_the_menu(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+
+        window = self.make(qtbot, tmp_path)
+        self.close_line(window)
+        path = tmp_path / "cube.cubenet"
+        window.save_project_to(path)
+        other = self.make(qtbot, tmp_path)
+        monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_: (str(path), ""))
+        other.open_action.trigger()
+        assert other.editor.state.value == "cut_editing"
+
+    def test_recorded(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, record=True)
+        path = tmp_path / "cube.cubenet"
+        window.save_project_to(path)
+        assert window.recorder is not None
+        lines = session_lines(window.recorder.log.path)
+        assert lines[-1] == f"project saved {path}"
+        window.open_project_from(path)
+        lines = session_lines(window.recorder.log.path)
+        assert f"project opened {path}" in lines
+        assert f"state project {path}" in lines
+        window.stop_recording("test over")

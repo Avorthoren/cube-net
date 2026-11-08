@@ -4,7 +4,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QSizePolicy, QToolBar, QWidget
+from PyQt6.QtWidgets import QApplication, QFileDialog, QLabel, QMainWindow, QMessageBox, QSizePolicy, QToolBar, QWidget
 
 from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.cutting import CutLine
@@ -12,6 +12,7 @@ from cube_net.core.editor import Editor, EditorState
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, cut_line_labels, vertex_labels
 from cube_net.core.net import Net, default_net
+from cube_net.core.project import PROJECT_SUFFIX, Project, ProjectFileError, load_project, save_project
 from cube_net.core.project_settings import ProjectSettings
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
@@ -34,6 +35,7 @@ from cube_net.ui.sheet.sheet_view import SheetView
 
 APP_TITLE = "Cube Net"
 NO_COORDINATES = "x: —   y: —"
+PROJECT_FILES = f"Cube Net projects (*{PROJECT_SUFFIX})"
 
 
 def format_point(p: Vec) -> str:
@@ -64,6 +66,9 @@ class MainWindow(QMainWindow):
         self.settings = AppSettings() if settings is None else settings
         self.point_labels = PointLabels()
         self.project_settings = ProjectSettings()
+
+        # The file of the project, once it has one.
+        self.project_path: Path | None = None
         self.recorder: SessionRecorder | None = None
 
         self.net: Net = default_net()
@@ -137,6 +142,7 @@ class MainWindow(QMainWindow):
 
         In M9 the full project state will be written here.
         """
+        recorder.note("state", "project", self.project_path if self.project_path is not None else "untitled")
         self._record_net_state(recorder)
         recorder.note("state", "labels", "on" if self.settings.show_vertex_labels else "off")
         recorder.note("state", "window", f"{self.width()}x{self.height()}")
@@ -263,9 +269,69 @@ class MainWindow(QMainWindow):
         if self.recorder is not None:
             self.recorder.note("ruler", format_point(point))
 
+    def save_project_to(self, path: Path) -> bool:
+        """Save the project to `path`; from now on that's its file. Tells the user if it fails."""
+        project = Project(self.editor.snapshot(), self.editor.history, self.project_settings, self.point_labels)
+        try:
+            save_project(project, path)
+        except ProjectFileError as e:
+            QMessageBox.critical(self, APP_TITLE, str(e))
+            return False
+        self._set_project_path(path)
+        if self.recorder is not None:
+            self.recorder.note("project", "saved", path)
+        return True
+
+    def open_project_from(self, path: Path) -> bool:
+        """Show the project from `path` instead of the current one. If it fails, tells the user and nothing changes."""
+        try:
+            project = load_project(path)
+        except ProjectFileError as e:
+            QMessageBox.critical(self, APP_TITLE, str(e))
+            return False
+        self.editor.load(project.state, project.history)
+        self.point_labels = project.labels
+        self.project_settings = project.settings
+        self.cut_tool.reload()
+        self.sheet_view.show_initial_view(self.net.bounding_box())
+        self._set_project_path(path)
+        if self.recorder is not None:
+            self.recorder.note("project", "opened", path)
+            self._record_state(self.recorder)
+        return True
+
+    def _set_project_path(self, path: Path) -> None:
+        self.project_path = path
+        self.setWindowTitle(f"{path.name} — {APP_TITLE}")
+
+    def _dialog_folder(self) -> str:
+        return "" if self.project_path is None else str(self.project_path.parent)
+
+    def _on_open(self) -> None:
+        name, _ = QFileDialog.getOpenFileName(self, "Open project", self._dialog_folder(), PROJECT_FILES)
+        if name:
+            self.open_project_from(Path(name))
+
+    def _on_save_as(self) -> None:
+        name, _ = QFileDialog.getSaveFileName(self, "Save project as", self._dialog_folder(), PROJECT_FILES)
+        if name:
+            path = Path(name)
+            self.save_project_to(path if path.suffix else path.with_suffix(PROJECT_SUFFIX))
+
     def _create_menus(self) -> None:
         menu_bar = self.menuBar()
         assert menu_bar is not None
+        file_menu = menu_bar.addMenu("&File")
+        assert file_menu is not None
+        self.open_action = QAction("&Open...", self)
+        self.open_action.setShortcut("Ctrl+O")
+        self.open_action.triggered.connect(self._on_open)
+        file_menu.addAction(self.open_action)
+        self.save_as_action = QAction("Save &As...", self)
+        self.save_as_action.setShortcut("Ctrl+Shift+S")
+        self.save_as_action.triggered.connect(self._on_save_as)
+        file_menu.addAction(self.save_as_action)
+
         view_menu = menu_bar.addMenu("&View")
         assert view_menu is not None
         self.show_labels_action = QAction("Show vertex &labels (development)", self)

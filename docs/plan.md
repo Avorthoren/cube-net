@@ -89,7 +89,7 @@ cube_net/
 │   │   ├── bounding.py          # convex hull + minimum-area rectangle
 │   │   ├── editor.py            # state machine (DEFAULT/CUTTING/CUT_EDITING/CUT_APPROVING)
 │   │   ├── history.py           # undo/redo deque + redo stack with special rules
-│   │   └── project.py           # project = editor state + settings + history; (de)serialization
+│   │   └── project/             # project = editor state + settings + history + point names; file format
 │   └── ui/
 │       ├── main_window.py       # menus, instrument panel, status bar
 │       ├── sheet_view.py        # QGraphicsView: zoom, pan, scrollbars, coordinate mapping
@@ -292,7 +292,11 @@ Undo and redo are available in every state. Each public method either performs o
 - Tests: table-driven scenarios, including trimming at 1000 entries when the oldest entry is a #5 or a #4.
 
 ### 5.3 Project (`project.py`)
-- `Project = {format_version, editor_state, settings: {area_threshold: "7.100"}, history}`.
+- `Project = {state, history, settings, labels}`. The file (`.cubenet`) is gzipped JSON: `{format_version, settings:
+  {area_threshold: "7.100"}, labels, nets, rearranged, states, state, history}`.
+- Nets, rearrangements and states are stored once, in tables, and referred to by index. That keeps the file small, and
+  what was shared stays shared after loading. Element ids and order are kept, numbers are exact strings ("1/3").
+- The ruler and the view (zoom, position) aren't part of a project.
 - The threshold is stored as a decimal string, validated as positive, at most 3 decimals and at most 12.000.
 - Saving writes to a temp file, then renames it, so a crash can't corrupt the project.
 - Loading validates the version and structure and runs `validate_net`. Any failure is reported to the user
@@ -424,7 +428,7 @@ part is built right away**, before more logic is added. Every step marked 👁 e
 | M6  | Rearrange and the overlap check   | **Done.** 1. (**done**) Splitting the net along the cut line, the two halves (§4.3). 2. (**done**) Rearrangement (§4.4). 3. 👁 (**done**) Clicking a segment moves the other half (CUT_APPROVING), while hovering a perimeter edge in CUT_EDITING the parts that can't be chosen are thin and black, the glued segment is shown, a counterpart in the same half flashes black; the sheet and the bounding rectangle follow; Ctrl+Z goes back to CUT_EDITING (M8). 4. (**done**) Overlap check (§4.5), verified against the exact shared area. 5. 👁 (**done**) Overlapping segments in black, ✓ button in the middle of the chosen segment, green and clickable only when valid. Bounding rectangle follows the candidate. | The corner-cut example from `idea.txt` reproduces exactly in the app |
 | M7  | Approve                           | **Done.** 1. Gluing, auto-glue walk, cleanup (§4.6), `validate_net()` (§3.4). 2. 👁 The ✓ button on the sheet and Ctrl+Enter accept the cut; you can keep cutting the new net. | All **11 hexomino nets** are reachable from the cross (core scenario test) and in the app |
 | M8  | Undo / redo                       | **Done.** 1. `history.py` with every special rule (§5.2). 2. 👁 Ctrl+Z / Ctrl+Y and Edit menu items, in every state.                         | Table-driven history tests pass; works in the app |
-| M9  | Projects                          | 1. Serialization of the editor state and history, including the point names (`PointLabels`), so debug labels stay the same after reopening. The session-recording state snapshot (§6.7) becomes this serialized project. 2. 👁 File menu: New/Open/Save/Save As (Ctrl+S), unsaved-changes prompt, startup flow (reopen last saved project). 3. 👁 Project settings dialog (area threshold). | Save → restart → identical state with full undo/redo |
+| M9  | Projects                          | 1. 👁 (**done**) Serialization of the editor state, history and point names (`PointLabels`), so debug labels stay the same after reopening; File → Open…, Save As… 2. 👁 Save (Ctrl+S), New, the dirty flag and the unsaved-changes prompt (also on Quit). 3. 👁 Startup flow (reopen the last saved project). 4. 👁 Project settings dialog (area threshold). 5. The session-recording state snapshot (§6.7) becomes the serialized project. | Save → restart → identical state with full undo/redo |
 | M10 | Polish                            | Colour variants for the new cut line, cursor shapes, performance check at about 50 cuts, anything found while trying the app      | Smooth interaction with a heavily cut net |
 | M11 | Packaging                         | PyInstaller one-folder build → `.deb` and/or AppImage for Ubuntu 24; later macOS (`.app`/`.dmg`) and Windows                       | Install on a clean Ubuntu VM and run |
 

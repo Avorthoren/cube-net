@@ -12,6 +12,7 @@ An entry holds the state before and after the action, whatever the owner uses as
 from __future__ import annotations
 
 from collections import deque
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -41,6 +42,22 @@ class History[State]:
     def __init__(self, max_actions: int = MAX_ACTIONS) -> None:
         self._done: deque[HistoryEntry[State]] = deque(maxlen=max_actions)
         self._undone: list[HistoryEntry[State]] = []
+
+    @classmethod
+    def restored(
+        cls, done: Iterable[HistoryEntry[State]], undone: Iterable[HistoryEntry[State]], max_actions: int = MAX_ACTIONS
+    ) -> History[State]:
+        """A history with these entries (`done_entries` and `undone_entries` of a saved one)."""
+        history: History[State] = cls(max_actions)
+        history._done.extend(done)
+        history._undone.extend(undone)
+        return history
+
+    def done_entries(self) -> tuple[HistoryEntry[State], ...]:
+        return tuple(self._done)
+
+    def undone_entries(self) -> tuple[HistoryEntry[State], ...]:
+        return tuple(self._undone)
 
     @property
     def can_undo(self) -> bool:
