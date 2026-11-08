@@ -380,9 +380,10 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
   a bright lime such as #39D353 and tune it in M4 by looking at it next to face 3.
 
 ### 6.6 Startup and files
-- On start, open the last *saved* project path from `QSettings`:
-  - no path: start a new untitled project with the default net;
-  - loading fails: show the error and offer to create a new project (or Open…).
+- On start, reopen the project the user worked on last, kept in `QSettings` (saving or opening a project sets it):
+  - nothing there: start a new untitled project with the default net;
+  - loading fails: show why, and offer a new project or Open…. It's forgotten then, so that it isn't asked about at
+    every start.
 - New/Open/Quit when there are unsaved changes: ask "Save changes?" with Save / Don't save / Cancel. A project has
   unsaved changes when the history's revision differs from the one it was saved at. Every action, undo and redo changes
   it: the history is saved too, so an undo back to the saved state still isn't what's in the file. Closing the window
@@ -430,7 +431,7 @@ part is built right away**, before more logic is added. Every step marked 👁 e
 | M6  | Rearrange and the overlap check   | **Done.** 1. (**done**) Splitting the net along the cut line, the two halves (§4.3). 2. (**done**) Rearrangement (§4.4). 3. 👁 (**done**) Clicking a segment moves the other half (CUT_APPROVING), while hovering a perimeter edge in CUT_EDITING the parts that can't be chosen are thin and black, the glued segment is shown, a counterpart in the same half flashes black; the sheet and the bounding rectangle follow; Ctrl+Z goes back to CUT_EDITING (M8). 4. (**done**) Overlap check (§4.5), verified against the exact shared area. 5. 👁 (**done**) Overlapping segments in black, ✓ button in the middle of the chosen segment, green and clickable only when valid. Bounding rectangle follows the candidate. | The corner-cut example from `idea.txt` reproduces exactly in the app |
 | M7  | Approve                           | **Done.** 1. Gluing, auto-glue walk, cleanup (§4.6), `validate_net()` (§3.4). 2. 👁 The ✓ button on the sheet and Ctrl+Enter accept the cut; you can keep cutting the new net. | All **11 hexomino nets** are reachable from the cross (core scenario test) and in the app |
 | M8  | Undo / redo                       | **Done.** 1. `history.py` with every special rule (§5.2). 2. 👁 Ctrl+Z / Ctrl+Y and Edit menu items, in every state.                         | Table-driven history tests pass; works in the app |
-| M9  | Projects                          | 1. 👁 (**done**) Serialization of the editor state, history and point names (`PointLabels`), so debug labels stay the same after reopening; File → Open…, Save As… 2. 👁 (**done**) Save (Ctrl+S), New, the dirty flag and the unsaved-changes prompt (also on Quit). 3. 👁 Startup flow (reopen the last saved project). 4. 👁 Project settings dialog (area threshold). 5. The session-recording state snapshot (§6.7) becomes the serialized project. | Save → restart → identical state with full undo/redo |
+| M9  | Projects                          | 1. 👁 (**done**) Serialization of the editor state, history and point names (`PointLabels`), so debug labels stay the same after reopening; File → Open…, Save As… 2. 👁 (**done**) Save (Ctrl+S), New, the dirty flag and the unsaved-changes prompt (also on Quit). 3. 👁 (**done**) Startup flow (reopen the last project). 4. 👁 Project settings dialog (area threshold). 5. The session-recording state snapshot (§6.7) becomes the serialized project. | Save → restart → identical state with full undo/redo |
 | M10 | Polish                            | Colour variants for the new cut line, cursor shapes, performance check at about 50 cuts, anything found while trying the app      | Smooth interaction with a heavily cut net |
 | M11 | Packaging                         | PyInstaller one-folder build → `.deb` and/or AppImage for Ubuntu 24; later macOS (`.app`/`.dmg`) and Windows                       | Install on a clean Ubuntu VM and run |
 

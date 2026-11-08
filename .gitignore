@@ -17,3 +17,6 @@ build/
 .ruff_cache/
 .mypy_cache/
 .hypothesis/
+
+# Projects created by the user during development.
+/projects/

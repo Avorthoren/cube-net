@@ -13,4 +13,5 @@ def main(argv: list[str] | None = None) -> int:
     app.setOrganizationName("cube_net")
     window = MainWindow()
     window.show()
+    window.reopen_last_project()
     return app.exec()

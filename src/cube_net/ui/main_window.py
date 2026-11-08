@@ -24,6 +24,7 @@ from cube_net.core.project_settings import ProjectSettings
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.instruments.bounding_controls import BoundingControls
+from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.session.session_recorder import SessionRecorder
 from cube_net.ui.session.start import (
@@ -306,6 +307,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, APP_TITLE, str(e))
             return False
         self.project_path = path
+        self.settings.last_project = path
         self._saved_revision = self.editor.history.revision
         self._update_title()
         self.setWindowModified(False)
@@ -316,15 +318,45 @@ class MainWindow(QMainWindow):
     def open_project_from(self, path: Path) -> bool:
         """Show the project from `path` instead of the current one. If it fails, tells the user and nothing changes."""
         try:
-            project = load_project(path)
+            self._load_and_show(path)
         except ProjectFileError as e:
             QMessageBox.critical(self, APP_TITLE, str(e))
             return False
+        return True
+
+    def _load_and_show(self, path: Path) -> None:
+        project = load_project(path)
         self._show_project(project, path)
+        self.settings.last_project = path
         if self.recorder is not None:
             self.recorder.note("project", "opened", path)
             self._record_state(self.recorder)
-        return True
+
+    def reopen_last_project(self) -> None:
+        """At start: back to the project the user worked on last, if any (otherwise the window's new one stays)."""
+        path = self.settings.last_project
+        if path is None:
+            return
+        try:
+            self._load_and_show(path)
+        except ProjectFileError as e:
+            self.settings.last_project = None  # don't ask about it at every start from now on
+            if self.recorder is not None:
+                self.recorder.note("project", "reopening failed", path)
+            self._offer_another_project(str(e))
+
+    def _offer_another_project(self, message: str) -> None:
+        """The project that should be here can't be loaded: the user decides. The window has a new one until then."""
+        while ask_after_load_failed(self, message) is AfterLoadFailed.OPEN_ANOTHER:
+            name, _ = QFileDialog.getOpenFileName(self, "Open project", "", PROJECT_FILES)
+            if not name:
+                return
+            try:
+                self._load_and_show(Path(name))
+            except ProjectFileError as e:
+                message = str(e)
+            else:
+                return
 
     def start_new_project(self) -> None:
         """Show a new project instead of the current one."""

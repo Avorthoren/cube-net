@@ -26,3 +26,18 @@ def test_record_session_default_and_persisted(tmp_path: Path) -> None:
     assert s.record_session is DEFAULT_RECORD_SESSION
     s.record_session = False
     assert settings_at(tmp_path / "s.ini").record_session is False
+
+
+def test_last_project(tmp_path: Path) -> None:
+    s = settings_at(tmp_path / "s.ini")
+    assert s.last_project is None
+    s.last_project = tmp_path / "cube.cubenet"
+    assert settings_at(tmp_path / "s.ini").last_project == tmp_path / "cube.cubenet"
+    s.last_project = None
+    assert settings_at(tmp_path / "s.ini").last_project is None
+
+
+def test_last_project_reaches_the_file_at_once(tmp_path: Path) -> None:
+    s = settings_at(tmp_path / "s.ini")
+    s.last_project = tmp_path / "cube.cubenet"
+    assert "cube.cubenet" in (tmp_path / "s.ini").read_text()

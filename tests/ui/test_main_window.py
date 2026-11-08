@@ -2071,3 +2071,212 @@ class TestUnsavedChanges:
         assert "project new" in lines
         assert "state project untitled" in lines[lines.index("project new") :]
         window.stop_recording("test over")
+
+
+class TestReopeningAtStart:
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        """A window as after a restart: the settings are in the same place, the project is the new one for now."""
+        settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+        settings.record_session = record
+        window = MainWindow(settings=settings, session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def worked_on(self, qtbot: QtBot, tmp_path: Path, name: str = "cube.cubenet") -> Path:
+        """A session that ended with this file saved: a closed line in it."""
+        from cube_net.ui.sheet import net_style
+
+        window = self.make(qtbot, tmp_path)
+        h = net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+        path = tmp_path / name
+        assert window.save_project_to(path)
+        return path
+
+    def answers(self, monkeypatch: pytest.MonkeyPatch, *choices: object) -> list[str]:
+        """Make the question answer this; returns what it was told."""
+        remaining = list(choices)
+        told: list[str] = []
+
+        def ask(_parent: object, message: str) -> object:
+            told.append(message)
+            return remaining.pop(0)
+
+        monkeypatch.setattr("cube_net.ui.main_window.ask_after_load_failed", ask)
+        return told
+
+    def test_the_first_time_a_new_project(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        told = self.answers(monkeypatch)
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        assert told == []
+        assert window.editor.state.value == "default"
+        assert window.project_path is None
+        assert not window.is_dirty
+
+    def test_back_to_what_was_saved(self, qtbot: QtBot, tmp_path: Path) -> None:
+        path = self.worked_on(qtbot, tmp_path)
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        assert window.project_path == path
+        assert window.windowTitle().startswith("cube.cubenet")
+        assert window.editor.state.value == "cut_editing"
+        assert not window.is_dirty
+        window.undo_action.trigger()
+        assert window.editor.state.value == "cutting"
+
+    def test_a_window_alone_opens_nothing(self, qtbot: QtBot, tmp_path: Path) -> None:
+        self.worked_on(qtbot, tmp_path)
+        window = self.make(qtbot, tmp_path)
+        assert window.editor.state.value == "default"
+
+    def test_the_last_one_saved_wins(self, qtbot: QtBot, tmp_path: Path) -> None:
+        self.worked_on(qtbot, tmp_path, "a.cubenet")
+        b = self.worked_on(qtbot, tmp_path, "b.cubenet")
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        assert window.project_path == b
+
+    def test_the_last_one_opened_counts_too(self, qtbot: QtBot, tmp_path: Path) -> None:
+        a = self.worked_on(qtbot, tmp_path, "a.cubenet")
+        self.worked_on(qtbot, tmp_path, "b.cubenet")
+        self.make(qtbot, tmp_path).open_project_from(a)
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        assert window.project_path == a
+
+    def test_a_new_project_changes_nothing_until_it_is_saved(self, qtbot: QtBot, tmp_path: Path) -> None:
+        path = self.worked_on(qtbot, tmp_path)
+        self.make(qtbot, tmp_path).start_new_project()
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        assert window.project_path == path
+
+    def test_a_file_that_failed_to_open_is_not_remembered(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        path = self.worked_on(qtbot, tmp_path)
+        monkeypatch.setattr(QMessageBox, "critical", lambda *_: None)
+        window = self.make(qtbot, tmp_path)
+        assert not window.open_project_from(tmp_path / "missing.cubenet")
+        assert window.settings.last_project == path
+
+    def test_a_failed_save_is_not_remembered(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        path = self.worked_on(qtbot, tmp_path)
+        monkeypatch.setattr(QMessageBox, "critical", lambda *_: None)
+        window = self.make(qtbot, tmp_path)
+        assert not window.save_project_to(tmp_path / "nowhere" / "cube.cubenet")
+        assert window.settings.last_project == path
+
+    def test_it_is_gone_the_user_is_told_and_gets_a_new_project(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.load_failed_dialog import AfterLoadFailed
+
+        path = self.worked_on(qtbot, tmp_path)
+        path.unlink()
+        told = self.answers(monkeypatch, AfterLoadFailed.NEW_PROJECT)
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        assert len(told) == 1 and "cube.cubenet" in told[0]
+        assert window.editor.state.value == "default"
+        assert window.project_path is None
+        assert not window.is_dirty
+
+    def test_it_is_damaged_the_user_is_told_why(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.load_failed_dialog import AfterLoadFailed
+
+        path = self.worked_on(qtbot, tmp_path)
+        path.write_text("Hello!")
+        told = self.answers(monkeypatch, AfterLoadFailed.NEW_PROJECT)
+        self.make(qtbot, tmp_path).reopen_last_project()
+        assert "isn't a Cube Net project" in told[0]
+
+    def test_it_is_asked_only_once(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.load_failed_dialog import AfterLoadFailed
+
+        self.worked_on(qtbot, tmp_path).unlink()
+        told = self.answers(monkeypatch, AfterLoadFailed.NEW_PROJECT)
+        self.make(qtbot, tmp_path).reopen_last_project()
+        self.make(qtbot, tmp_path).reopen_last_project()
+        assert len(told) == 1
+
+    def test_open_another_instead(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+
+        from cube_net.ui.load_failed_dialog import AfterLoadFailed
+
+        other = self.worked_on(qtbot, tmp_path, "other.cubenet")
+        self.worked_on(qtbot, tmp_path).unlink()
+        self.answers(monkeypatch, AfterLoadFailed.OPEN_ANOTHER)
+        monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_: (str(other), ""))
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        assert window.project_path == other
+        assert window.editor.state.value == "cut_editing"
+        assert window.settings.last_project == other
+
+    def test_open_another_dialog_cancelled_leaves_a_new_project(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+
+        from cube_net.ui.load_failed_dialog import AfterLoadFailed
+
+        self.worked_on(qtbot, tmp_path).unlink()
+        told = self.answers(monkeypatch, AfterLoadFailed.OPEN_ANOTHER)
+        monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_: ("", ""))
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        assert len(told) == 1
+        assert window.project_path is None
+        assert window.settings.last_project is None
+
+    def test_the_other_one_fails_too_asks_again_with_the_new_reason(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+
+        from cube_net.ui.load_failed_dialog import AfterLoadFailed
+
+        self.worked_on(qtbot, tmp_path).unlink()
+        bad = tmp_path / "bad.cubenet"
+        bad.write_text("Hello!")
+        told = self.answers(monkeypatch, AfterLoadFailed.OPEN_ANOTHER, AfterLoadFailed.NEW_PROJECT)
+        monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_: (str(bad), ""))
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        assert len(told) == 2
+        assert "cube.cubenet" in told[0] and "bad.cubenet" in told[1]
+        assert window.project_path is None
+
+    def test_recorded(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.load_failed_dialog import AfterLoadFailed
+
+        path = self.worked_on(qtbot, tmp_path)
+        window = self.make(qtbot, tmp_path, record=True)
+        window.reopen_last_project()
+        assert window.recorder is not None
+        assert f"project opened {path}" in session_lines(window.recorder.log.path)
+        window.stop_recording("test over")
+        path.unlink()
+        self.answers(monkeypatch, AfterLoadFailed.NEW_PROJECT)
+        other = self.make(qtbot, tmp_path, record=True)
+        other.settings.last_project = path
+        other.reopen_last_project()
+        assert other.recorder is not None
+        assert f"project reopening failed {path}" in session_lines(other.recorder.log.path)
+        other.stop_recording("test over")
