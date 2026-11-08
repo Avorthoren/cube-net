@@ -11,6 +11,7 @@
   cutting, and while dragging an inner point.
 - In CUT_EDITING, a click on a cut of the perimeter (not on a vertex, not on the new line) moves the half with its
   counterpart onto it: CUT_APPROVING.
+- In CUT_APPROVING, a round button in the middle of the chosen segment approves the rearrangement, if it's valid.
 - Anything that breaks the rules shows the offending segments in black for 200 ms and changes nothing.
 """
 
@@ -25,6 +26,7 @@ from cube_net.core.net import HalfEdge, NetVertex
 from cube_net.core.sheet import SHEET_MARGIN
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
+from cube_net.ui.sheet.approve_button_item import ApproveButtonItem
 from cube_net.ui.sheet.cut_hover import fold_target, perimeter_target
 from cube_net.ui.sheet.cut_line_item import CutLineItem
 from cube_net.ui.sheet.ruler_tool import RulerTool
@@ -44,6 +46,9 @@ class CutTool(QObject):
     # The line was edited: "insert", "delete" or "move", the point's index, its position.
     edited = pyqtSignal(str, int, Vec)
 
+    # The user clicked the approve button (it's up to the window to approve, as with the keyboard shortcut).
+    approve_clicked = pyqtSignal()
+
     # The halves were rearranged, or that was cancelled: the net to show has changed.
     net_changed = pyqtSignal()
 
@@ -59,6 +64,8 @@ class CutTool(QObject):
         scene = view.scene()
         assert scene is not None
         scene.addItem(self.item)
+        self.approve_button = ApproveButtonItem()
+        scene.addItem(self.approve_button)
         self._flash_timer = QTimer(self)
         self._flash_timer.setSingleShot(True)
         self._flash_timer.setInterval(FLASH_MS)
@@ -83,6 +90,13 @@ class CutTool(QObject):
     def dragging(self) -> bool:
         return self._drag_index is not None
 
+    def approve(self) -> None:
+        """Glue the rearranged halves for good; from now on the tool works on the new net."""
+        self._editor.approve()
+        self.item.set_net(self._editor.net)
+        self.refresh()
+        self.net_changed.emit()
+
     def cancel_rearrangement(self) -> None:
         """Back from CUT_APPROVING to CUT_EDITING."""
         self._editor.cancel_rearrangement()
@@ -98,6 +112,13 @@ class CutTool(QObject):
             points[self._drag_index] = self._drag_target
         self.item.set_points(points)
         self.item.set_show_midpoints(self._editor.state is EditorState.CUT_EDITING)
+        rearranged = self._editor.rearranged
+        if rearranged is None:
+            self.approve_button.set_state(None, False)
+        else:
+            kept = rearranged.kept
+            middle = (kept.origin.position + kept.destination.position) / 2
+            self.approve_button.set_state(middle, rearranged.valid)
         if self._editor.state is not EditorState.CUTTING:
             self.item.set_rubber_band(None)
             if self._drag_index is None:
@@ -106,11 +127,19 @@ class CutTool(QObject):
 
     def claims(self, x: float, y: float) -> bool:
         """Would a press at sheet point (x, y) act on the cut line's points? (It must not start panning then.)"""
-        return (
-            not self._ruler.active
-            and self._editor.state is EditorState.CUT_EDITING
-            and (self._point_at(x, y) is not None or self._midpoint_at(x, y) is not None)
+        if self._ruler.active:
+            return False
+        if self._editor.state is EditorState.CUT_APPROVING:
+            return self._on_approve_button(x, y)
+        return self._editor.state is EditorState.CUT_EDITING and (
+            self._point_at(x, y) is not None or self._midpoint_at(x, y) is not None
         )
+
+    def _on_approve_button(self, x: float, y: float) -> bool:
+        position = self.approve_button.position()
+        if position is None:
+            return False
+        return self._closest(x, y, [position], net_style.APPROVE_BUTTON_RADIUS_PX) is not None
 
     def _hit(self, x: float, y: float) -> tuple[Vec, HalfEdge | None, NetVertex | None, HalfEdge | None]:
         """What's under the mouse: the point, then a cut or a perimeter vertex, or else a fold line."""
@@ -124,6 +153,10 @@ class CutTool(QObject):
             return  # the ruler takes the clicks
         if self._editor.state is EditorState.CUT_EDITING:
             self._press_while_editing(x, y)
+            return
+        if self._editor.state is EditorState.CUT_APPROVING:
+            if self.approve_button.enabled() and self._on_approve_button(x, y):
+                self.approve_clicked.emit()
             return
         p, cut, vertex, fold = self._hit(x, y)
         before = len(self._editor.cut_line.points) if self._editor.cut_line else 0
@@ -270,4 +303,6 @@ class CutTool(QObject):
     def _update_area(self, *_: object) -> None:
         # The sheet margin is always enough for the pixel-sized decorations at the allowed zoom levels.
         box = self._editor.display_net.bounding_box().expanded(SHEET_MARGIN)
-        self.item.set_area(QRectF(float(box.lo.x), float(box.lo.y), float(box.width), float(box.height)))
+        area = QRectF(float(box.lo.x), float(box.lo.y), float(box.width), float(box.height))
+        self.item.set_area(area)
+        self.approve_button.set_area(area)

@@ -1,5 +1,6 @@
 """Drawing a new cut line across the net (docs/idea.txt; docs/plan.md, section 4.2)."""
 
+from cube_net.core.cutting.approve import approve
 from cube_net.core.cutting.cut_line import CutLine, CutPoint
 from cube_net.core.cutting.images import CounterpartImage, counterpart_image, endpoint_point
 from cube_net.core.cutting.overlap import overlapping_cuts
@@ -23,6 +24,7 @@ __all__ = [
     "Piece",
     "Rearranged",
     "SplitNet",
+    "approve",
     "connected_regions",
     "counterpart_image",
     "crossings",

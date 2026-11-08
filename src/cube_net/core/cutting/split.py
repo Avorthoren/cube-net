@@ -30,10 +30,6 @@ class SplitNet:
     # The other cuts whose counterpart is in the same half: choosing them can't rearrange anything.
     same_half_cuts: frozenset[HalfEdge]
 
-    def half_of(self, region: Region) -> set[Region]:
-        """The regions of the half that contains `region`."""
-        return connected_regions(region)
-
 
 def connected_regions(start: Region) -> set[Region]:
     """All regions reachable from `start` across inner edges."""

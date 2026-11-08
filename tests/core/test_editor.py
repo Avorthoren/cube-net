@@ -381,3 +381,36 @@ class TestGlue:
         second = editing.split()
         assert second is not first
         assert any(w.position == v("11.5", "13.75") for w in second.net.vertices)
+
+
+class TestApprove:
+    def rearranged(self, editing: Editor) -> None:
+        cut = next(
+            he
+            for he in editing.split().net.boundary_edges()
+            if {he.origin.position, he.destination.position} == {v("11.5", "10"), Vec(12, 10)}
+        )
+        assert editing.glue(cut) is None
+
+    def test_makes_it_the_current_net_and_goes_to_default(self, editing: Editor) -> None:
+        self.rearranged(editing)
+        old = editing.net
+        assert editing.approved_cuts == 0
+        editing.approve()
+        assert editing.state is EditorState.DEFAULT
+        assert editing.net is not old
+        assert editing.display_net is editing.net
+        assert editing.cut_line is None and editing.rearranged is None
+        assert editing.approved_cuts == 1
+        assert len(editing.net.vertices) == 20
+
+    def test_nothing_to_approve(self, editing: Editor) -> None:
+        with pytest.raises(RuntimeError, match="nothing to approve"):
+            editing.approve()
+
+    def test_the_next_cut_works_on_the_new_net(self, editing: Editor) -> None:
+        self.rearranged(editing)
+        editing.approve()
+        new_cut = next(he for he in editing.net.boundary_edges() if he.origin.position == v("11.5", "9.5"))
+        assert editing.click(v("11.75", "9.5"), new_cut) is None  # on y_2-z_2, which didn't exist before
+        assert editing.state is EditorState.CUTTING

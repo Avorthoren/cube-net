@@ -417,3 +417,66 @@ def test_press_on_a_cut_rearranges(setup: tuple[SheetView, CutTool, RulerTool], 
         tool.cancel_rearrangement()
     assert tool.editor.state is EditorState.CUT_EDITING
     assert len(tool.item.points()) == 3
+
+
+def rearranged_corner_cut(view: SheetView) -> None:
+    corner_cut(view)
+    view.left_pressed.emit(11.75, 10 + net_style.CUT_HITBOX_PX / 2 / view.scale_factor())
+
+
+MIDDLE_OF_X2_B3 = 11.75, 10.0
+
+
+class TestApproveButton:
+    def test_only_in_approving_in_the_middle_of_the_chosen_segment(
+        self, setup: tuple[SheetView, CutTool, RulerTool]
+    ) -> None:
+        view, tool, _ = setup
+        assert tool.approve_button.position() is None
+        corner_cut(view)
+        assert tool.approve_button.position() is None
+        view.left_pressed.emit(11.75, 10 + net_style.CUT_HITBOX_PX / 2 / view.scale_factor())
+        assert tool.approve_button.position() == Vec(F(47, 4), 10)
+        assert tool.approve_button.enabled()
+        tool.cancel_rearrangement()
+        assert tool.approve_button.position() is None
+
+    def test_click_asks_to_approve(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        rearranged_corner_cut(view)
+        with qtbot.waitSignal(tool.approve_clicked):
+            view.left_pressed.emit(*MIDDLE_OF_X2_B3)
+        assert tool.editor.state is EditorState.CUT_APPROVING  # approving itself is up to the window
+
+    def test_click_beside_it_does_nothing(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        rearranged_corner_cut(view)
+        away = net_style.APPROVE_BUTTON_RADIUS_PX * 2 / view.scale_factor()
+        with qtbot.assertNotEmitted(tool.approve_clicked):
+            view.left_pressed.emit(MIDDLE_OF_X2_B3[0], MIDDLE_OF_X2_B3[1] + away)
+
+    def test_overlap_makes_it_inactive(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        view.left_pressed.emit(12 - h, 13.5)  # on D_1-B_1
+        view.left_pressed.emit(11 + h, 11.5)  # on H_1-E_1
+        view.left_pressed.emit(12.75, 13 - h)  # on z_3-B_2: the halves overlap
+        assert tool.editor.rearranged is not None and not tool.editor.rearranged.valid
+        assert tool.approve_button.position() == Vec(F(51, 4), 13)
+        assert not tool.approve_button.enabled()
+        with qtbot.assertNotEmitted(tool.approve_clicked):
+            view.left_pressed.emit(12.75, 13.0)
+
+    def test_ruler_takes_the_click(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, ruler = setup
+        rearranged_corner_cut(view)
+        ruler.set_active(True)
+        assert not tool.claims(*MIDDLE_OF_X2_B3)
+        with qtbot.assertNotEmitted(tool.approve_clicked):
+            view.left_pressed.emit(*MIDDLE_OF_X2_B3)
+        assert len(ruler.ruler.points) == 1
+
+    def test_no_panning_from_the_button(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        rearranged_corner_cut(view)
+        assert tool.claims(*MIDDLE_OF_X2_B3)

@@ -350,8 +350,9 @@ to the next state (CUT_APPROVING):
    - a vertex may touch a segment of the perimeter from outside.
    Self-intersection examples: two segments cross each other; two segments lie on each other with the cube net on
    the same side of them; a vertex "pokes" through a segment into the cube net.
-3. If there are no intersections - a button on the panel of the instruments should highlight (let it look like a green
-   checkmark), shortcut: CTRL+ENTER. It should end the process of cutting the cube net, getting us in the DEFAULT state.
+3. In the middle of the segment user clicked on there should be a round button with a check mark (constant size in
+   pixels). If there are no intersections, it is green, and clicking it (or the shortcut CTRL+ENTER) ends the process of
+   cutting the cube net, getting us in the DEFAULT state. If there are intersections, it is grey and does nothing.
 
 Now let's describe actions that should be saved and be reversible (and redoable):
 1. Creating new point of new cut line.

@@ -1,3 +1,4 @@
+from fractions import Fraction as F
 from pathlib import Path
 
 import pytest
@@ -5,6 +6,7 @@ from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtWidgets import QToolBar
 from pytestqt.qtbot import QtBot
 
+from cube_net.core.geometry import Vec
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.main_window import APP_TITLE, NO_COORDINATES, MainWindow, format_coordinates, format_ruler_total
 
@@ -636,3 +638,114 @@ class TestDividedView:
         assert not self.divided_on(window)  # the hover was reset; the next move decides
         window.sheet_view.mouse_moved.emit(11.75, 10 + h)
         assert self.divided_on(window)
+
+
+class TestApproving:
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        window.activateWindow()
+        qtbot.waitUntil(window.isActiveWindow)
+        return window
+
+    def rearranged(self, window: MainWindow) -> None:
+        from cube_net.ui.sheet import net_style
+
+        h = net_style.CUT_HITBOX_PX / 2 / window.sheet_view.scale_factor()
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+        view.left_pressed.emit(11.75, 10 + h)
+
+    def test_check_mark_accepts_and_everything_follows(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, record=True)
+        self.rearranged(window)
+        area = window.bounding.label.text()
+        window.approve_action.trigger()
+        assert window.editor.state.value == "default"
+        assert window.net is window.editor.net
+        assert not window.approve_action.isEnabled()
+        assert not window.undo_rearrangement_action.isEnabled()
+        assert window.bounding.label.text() == area
+        item = window.sheet_view.net_item()
+        assert item is not None
+        assert item.glue() == () and item.overlapping() == frozenset()
+        assert window.cut_tool.item.points() == ()
+        labels = item.labels()
+        assert labels is not None and len(labels) == 20
+        assert window.recorder is not None
+        assert session_lines(window.recorder.log.path)[-2:] == [
+            "cut glue 11.500,10.000 12.000,10.000 ok",
+            "cut approve",
+        ]
+        window.stop_recording("test over")
+
+    @pytest.mark.parametrize("key", [Qt.Key.Key_Return, Qt.Key.Key_Enter])
+    def test_ctrl_enter_accepts(self, qtbot: QtBot, tmp_path: Path, key: Qt.Key) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.rearranged(window)
+        qtbot.keyClick(window, key, Qt.KeyboardModifier.ControlModifier)
+        assert window.editor.state.value == "default"
+
+    def test_ctrl_enter_does_nothing_when_not_approvable(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        qtbot.keyClick(window, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+        assert window.editor.state.value == "default"
+        assert window.editor.approved_cuts == 0
+
+    def test_the_next_cut_starts_on_the_new_net(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.ui.sheet import net_style
+
+        window = self.make(qtbot, tmp_path)
+        self.rearranged(window)
+        window.approve_action.trigger()
+        view = window.sheet_view
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        assert view.is_on_net(11.75, 9.75)  # the moved piece, under face 5
+        assert not view.is_on_net(11.75, 13.75)  # where it was
+        window.cut_hover.update_at(11.75, 9.5 + h)
+        cut = window.cut_hover.hovered()
+        assert cut is not None  # y_2-z_2, a cut of the new net
+        view.left_pressed.emit(11.75, 9.5 + h)
+        assert window.editor.state.value == "cutting"
+        assert window.cut_tool.item.points()[0].position == Vec(F(47, 4), F(19, 2))
+
+    def test_state_snapshot_describes_the_new_net(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.rearranged(window)
+        window.approve_action.trigger()
+        window.record_session_action.setChecked(True)
+        assert window.recorder is not None
+        lines = session_lines(window.recorder.log.path)
+        assert "state net after 1 approved cuts" in lines
+        regions = [line for line in lines if line.startswith("state region ")]
+        assert len(regions) == 7
+        assert any(line.startswith("state region 1 0 11,9 ") and "23/2,19/2" in line for line in regions)  # the piece
+        window.stop_recording("test over")
+
+
+class TestApproveButtonOnTheSheet:
+    def test_clicking_it_approves_and_it_is_not_on_the_panel(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from PyQt6.QtCore import QPointF
+
+        from cube_net.ui.sheet import net_style
+
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        toolbar = window.findChild(QToolBar, "instruments")
+        assert toolbar is not None and window.approve_action not in toolbar.actions()
+        view = window.sheet_view
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+        view.left_pressed.emit(11.75, 10 + h)
+        assert window.editor.state.value == "cut_approving"
+        position = view.from_sheet(QPointF(11.75, 10)).toPoint()
+        qtbot.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=position)
+        assert window.editor.state.value == "default"
+        assert window.cut_tool.approve_button.position() is None

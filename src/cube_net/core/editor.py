@@ -9,7 +9,7 @@ CUT_EDITING   click a segment's middle      -> a new point there
                                                  inner points snap to fold lines and may not go near the perimeter)
               click a cut                   -> the half with its counterpart moves onto it -> CUT_APPROVING
                                                (rejected if the counterpart is in the same half)
-CUT_APPROVING (overlap check and approval: next steps of M6)
+CUT_APPROVING approve (if the halves don't overlap) -> they are glued for good: the new net -> DEFAULT
 
 The UI decides where a click lands: on a perimeter vertex (inside its circle), on a cut (inside its hitbox), on a fold
 line (inside its hitbox), or elsewhere; in that order of priority. A rejected click
@@ -27,6 +27,7 @@ from cube_net.core.cutting import (
     CutPoint,
     Rearranged,
     SplitNet,
+    approve,
     invalid_segments,
     project_onto,
     rearrange,
@@ -64,6 +65,9 @@ class Editor:
         self.cut_line: CutLine | None = None
         self.rearranged: Rearranged | None = None
         self._split: tuple[tuple[CutPoint, ...], SplitNet] | None = None
+
+        # How many cuts have been approved so far (0: this is still the net the editor started with).
+        self.approved_cuts = 0
 
     @property
     def state(self) -> EditorState:
@@ -206,6 +210,16 @@ class Editor:
             return Rejection(((clicked.origin.position, clicked.destination.position),))
         self.rearranged = rearranged
         return None
+
+    def approve(self) -> None:
+        """Glue the rearranged halves for good: their net becomes the current one, and it's DEFAULT again."""
+        if self.rearranged is None:
+            raise RuntimeError(f"nothing to approve in {self.state.name}")
+        self.net = approve(self.rearranged)
+        self.rearranged = None
+        self.cut_line = None
+        self._split = None
+        self.approved_cuts += 1
 
     def cancel_rearrangement(self) -> None:
         """Back from CUT_APPROVING to CUT_EDITING."""

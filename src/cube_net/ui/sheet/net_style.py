@@ -46,3 +46,9 @@ FOLD_HITBOX_PX = CUT_HITBOX_PX
 
 # Width of a part of a cut that can't be chosen for gluing (its counterpart is in the same half), while it's shown so.
 USELESS_CUT_PX = 1.5
+
+# Radius of the round "approve" button shown in the middle of the segment chosen for gluing.
+APPROVE_BUTTON_RADIUS_PX = 14.0
+
+# Width of the check mark on that button.
+APPROVE_CHECK_WIDTH_PX = 3.0

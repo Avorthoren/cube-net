@@ -14,7 +14,6 @@ from cube_net.core.labels import PointLabels, cut_line_labels, vertex_labels
 from cube_net.core.net import Net, boundary_vertex_at, default_net
 from cube_net.core.project_settings import ProjectSettings
 from cube_net.core.sheet import sheet_box
-from cube_net.ui import palette
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.instruments.bounding_controls import BoundingControls
 from cube_net.ui.session.session_recorder import SessionRecorder
@@ -133,10 +132,9 @@ class MainWindow(QMainWindow):
     def _record_state(self, recorder: SessionRecorder) -> None:
         """Everything needed to reproduce the session from this point on.
 
-        Until projects can be saved (M9) the only possible net is the default one; then the full project state will
-        be written here.
+        In M9 the full project state will be written here.
         """
-        recorder.note("state", "net", "default")
+        self._record_net_state(recorder)
         recorder.note("state", "labels", "on" if self.settings.show_vertex_labels else "off")
         recorder.note("state", "window", f"{self.width()}x{self.height()}")
         recorder.note("state", "bounds", "on" if self.bounding.action.isChecked() else "off")
@@ -149,6 +147,17 @@ class MainWindow(QMainWindow):
             kept = self.editor.rearranged.kept
             recorder.note("state", "glue", format_point(kept.origin.position), format_point(kept.destination.position))
         recorder.schedule_view_record()  # zoom and position, once the view has been laid out
+
+    def _record_net_state(self, recorder: SessionRecorder) -> None:
+        """The net: "default", or after approved cuts every region exactly (face, placement, corners)."""
+        if self.editor.approved_cuts == 0:
+            recorder.note("state", "net", "default")
+            return
+        recorder.note("state", "net", f"after {self.editor.approved_cuts} approved cuts")
+        for region in self.editor.net.regions:
+            corners = [f"{p.x},{p.y}" for p in self.editor.net.region_polygon(region)]
+            placement = region.placement
+            recorder.note("state", "region", region.face, placement.k, f"{placement.t.x},{placement.t.y}", *corners)
 
     def _is_on_net(self, x: float, y: float) -> bool:
         """On the net, or inside a perimeter vertex's circle (which sticks out of the net): no panning there."""
@@ -185,20 +194,6 @@ class MainWindow(QMainWindow):
         self.bounding.toggled.connect(self._on_bounding_toggled)
         self._update_bounding()
 
-        toolbar.addSeparator()
-        self.approve_action = QAction("✓", self)
-        self.approve_action.setShortcut("Ctrl+Return")
-        self.approve_action.setToolTip("Approve the rearrangement (Ctrl+Enter)")
-        self.approve_action.setEnabled(False)
-        self.approve_action.triggered.connect(self._on_approve)
-        toolbar.addAction(self.approve_action)
-        approve_button = toolbar.widgetForAction(self.approve_action)
-        if approve_button is not None:
-            green = palette.SUCCESS.name()
-            approve_button.setStyleSheet(
-                f"QToolButton:enabled {{ color: {green}; font-size: 20px; font-weight: bold; }}"
-            )
-
         spacer = QWidget(toolbar)  # pushes what follows to the bottom of the panel
         spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         toolbar.addWidget(spacer)
@@ -213,8 +208,14 @@ class MainWindow(QMainWindow):
         self.bounding.update(rectangle, self.project_settings.area_threshold)
 
     def _on_approve(self) -> None:
-        # Gluing the two halves for good is the next milestone (M7).
-        self.statusBar().showMessage("Approving is the next step of the development (M7)", 5000)
+        self.cut_tool.approve()
+        if self.recorder is not None:
+            self.recorder.note("cut", "approve")
+
+    def _on_undo_rearrangement(self) -> None:
+        self.cut_tool.cancel_rearrangement()
+        if self.recorder is not None:
+            self.recorder.note("cut", "unglue")
 
     def _on_open_logs(self) -> None:
         if not open_session_log_folder(self._session_dir):
@@ -271,11 +272,17 @@ class MainWindow(QMainWindow):
 
         edit_menu = menu_bar.addMenu("&Edit")
         assert edit_menu is not None
+        self.approve_action = QAction("&Approve cut", self)
+        self.approve_action.setShortcuts(["Ctrl+Return", "Ctrl+Enter"])  # the main Enter key and the one on the keypad
+        self.approve_action.setEnabled(False)
+        self.approve_action.triggered.connect(self._on_approve)
+        self.cut_tool.approve_clicked.connect(self.approve_action.trigger)
+        edit_menu.addAction(self.approve_action)
         # Temporary, until the real undo/redo (M8): the only way back from CUT_APPROVING.
         self.undo_rearrangement_action = QAction("&Undo rearrangement", self)
         self.undo_rearrangement_action.setShortcut("Ctrl+Z")
         self.undo_rearrangement_action.setEnabled(False)
-        self.undo_rearrangement_action.triggered.connect(self.cut_tool.cancel_rearrangement)
+        self.undo_rearrangement_action.triggered.connect(self._on_undo_rearrangement)
         edit_menu.addAction(self.undo_rearrangement_action)
 
     def _on_net_changed(self) -> None:
@@ -294,13 +301,10 @@ class MainWindow(QMainWindow):
         self._update_hover_net()
         self._update_vertex_labels()
         self.undo_rearrangement_action.setEnabled(rearranged is not None)
-        if self.recorder is not None:
-            if rearranged is not None:
-                kept = rearranged.kept
-                ends = format_point(kept.origin.position), format_point(kept.destination.position)
-                self.recorder.note("cut", "glue", *ends, "ok" if rearranged.valid else "overlap")
-            else:
-                self.recorder.note("cut", "unglue")
+        if self.recorder is not None and rearranged is not None:
+            kept = rearranged.kept
+            ends = format_point(kept.origin.position), format_point(kept.destination.position)
+            self.recorder.note("cut", "glue", *ends, "ok" if rearranged.valid else "overlap")
 
     def _update_divided_view(self) -> None:
         """While the user hovers a perimeter edge in CUT_EDITING (ruler off, nothing being dragged), show which parts
