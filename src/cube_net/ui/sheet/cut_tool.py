@@ -35,6 +35,7 @@ from cube_net.core.sheet import SHEET_MARGIN
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.approve_button_item import ApproveButtonItem
+from cube_net.ui.sheet.cursors import CursorKind
 from cube_net.ui.sheet.cut_hover import cut_hitbox, fold_target, perimeter_target
 from cube_net.ui.sheet.cut_line_item import CutLineItem
 from cube_net.ui.sheet.ruler_tool import RulerTool
@@ -200,6 +201,30 @@ class CutTool(QObject):
             p, _, near, _ = self._hit(x, y)
             return near is not None or net.contains(p)  # a click on the net adds a point
         return vertex is not None or cut is not None  # DEFAULT: only the perimeter can start a line
+
+    def cursor_at(self, x: float, y: float) -> CursorKind:
+        """What the mouse at sheet point (x, y) shows: what a click there would do (docs/idea.txt). Nothing special
+        while the ruler is active, which takes the clicks."""
+        if self._ruler.active:
+            return CursorKind.ARROW
+        if self.dragging:
+            return CursorKind.PENCIL
+        state = self._editor.state
+        if state is EditorState.CUT_APPROVING:
+            return CursorKind.BUTTON if self._on_approve_button(x, y) else CursorKind.ARROW
+        if state is EditorState.CUT_EDITING:
+            if self._point_at(x, y) is not None or self._midpoint_at(x, y) is not None:
+                return CursorKind.PENCIL
+            cut = self._glue_target(x, y)
+            choosable = cut is not None and cut not in self._editor.split().same_half_cuts
+            return CursorKind.GLUE if choosable else CursorKind.ARROW
+        return CursorKind.SCISSORS if self.claims(x, y) else CursorKind.ARROW  # DEFAULT and CUTTING
+
+    def tooltip_at(self, x: float, y: float) -> str:
+        """The tooltip of what's under the mouse: the approve button tells what it does."""
+        if self._ruler.active or not self._on_approve_button(x, y):
+            return ""
+        return "Approve" if self.approve_button.enabled() else "Cancel"
 
     def _on_approve_button(self, x: float, y: float) -> bool:
         position = self.approve_button.position()

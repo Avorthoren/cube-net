@@ -64,6 +64,9 @@ COUNTERPART_BLINK_MS = round(1000 / 6)
 # Radius of the round "approve" button shown in the middle of the segment chosen for gluing.
 APPROVE_BUTTON_RADIUS_PX = 14.0
 
+# How far below the approve button its shadow falls.
+APPROVE_BUTTON_SHADOW_PX = 2.0
+
 # Width of the check mark or the "x" on that button, and of its outline.
 APPROVE_CHECK_WIDTH_PX = 3.0
 

@@ -754,3 +754,76 @@ class TestShift:
         corner_cut(view)
         drag_to(view, (11.5, 13.5), (11.7, 13.2))
         assert positions(tool)[1] == Vec(F(117, 10), F(132, 10))
+
+
+class TestCursorAt:
+    """What the mouse shows is what a click would do."""
+
+    def h(self, view: SheetView) -> float:
+        return net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+
+    def test_default_scissors_on_a_cut_or_a_vertex(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.ui.sheet.cursors import CursorKind
+
+        view, tool, _ = setup
+        assert tool.cursor_at(10 + self.h(view), 12.5) is CursorKind.SCISSORS
+        assert tool.cursor_at(10, 13) is CursorKind.SCISSORS
+        assert tool.cursor_at(11.5, 12.5) is CursorKind.ARROW
+        assert tool.cursor_at(7, 7) is CursorKind.ARROW
+
+    def test_cutting_scissors_on_the_net(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.ui.sheet.cursors import CursorKind
+
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        assert tool.cursor_at(11.5, 12.5) is CursorKind.SCISSORS
+        assert tool.cursor_at(7, 7) is CursorKind.ARROW
+
+    def test_editing_pencil_glue_or_nothing(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.ui.sheet.cursors import CursorKind
+
+        view, tool, _ = setup
+        corner_cut(view)
+        h = self.h(view)
+        assert tool.cursor_at(11.5, 13.5) is CursorKind.PENCIL  # a point
+        assert tool.cursor_at(11.5, 13.75) is CursorKind.PENCIL  # a segment's middle
+        assert tool.cursor_at(11.75, 10 + h) is CursorKind.GLUE  # a cut that can be chosen
+        assert tool.cursor_at(10.5, 12 + h) is CursorKind.ARROW  # a useless one
+        assert tool.cursor_at(11.5, 12.5) is CursorKind.ARROW
+        assert tool.cursor_at(10, 13) is CursorKind.ARROW  # a vertex: nothing to click there
+
+    def test_pencil_while_dragging(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.ui.sheet.cursors import CursorKind
+
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(11.5, 13.5)
+        assert tool.cursor_at(7, 7) is CursorKind.PENCIL
+
+    def test_approving_a_hand_over_the_button_and_a_tooltip(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.ui.sheet.cursors import CursorKind
+
+        view, tool, _ = setup
+        rearranged_corner_cut(view)
+        assert tool.cursor_at(*MIDDLE_OF_X2_B3) is CursorKind.BUTTON
+        assert tool.tooltip_at(*MIDDLE_OF_X2_B3) == "Approve"
+        assert tool.cursor_at(11.5, 12.5) is CursorKind.ARROW
+        assert tool.tooltip_at(11.5, 12.5) == ""
+
+    def test_the_x_button_says_cancel(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        h = self.h(view)
+        view.left_pressed.emit(12 - h, 13.5)
+        view.left_pressed.emit(11 + h, 11.5)
+        view.left_pressed.emit(12.75, 13 - h)
+        assert not tool.approve_button.enabled()
+        assert tool.tooltip_at(12.75, 13.0) == "Cancel"
+
+    def test_nothing_while_the_ruler_is_active(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.ui.sheet.cursors import CursorKind
+
+        view, tool, ruler = setup
+        ruler.set_active(True)
+        assert tool.cursor_at(10 + self.h(view), 12.5) is CursorKind.ARROW
+        corner_cut(view)  # the ruler takes these clicks: still DEFAULT
+        assert tool.cursor_at(11.5, 13.5) is CursorKind.ARROW

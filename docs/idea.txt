@@ -487,3 +487,13 @@ sheet at once.
    - Vertices: radius of the vertex circles in pixels (1 to 30, now 10).
    - Grid: a white 10x10 square crossed in its middle by a vertical and a horizontal grid line, the colour of the
      grid, and the thickness of its lines in pixels (0 to 5; 0: no grid).
+
+Mouse pointer (while the ruler is not active; it tells the user what a click would do):
+1. DEFAULT: over a cut (or a vertex of the outer perimeter, where a cut can start too) - scissors.
+2. CUTTING: inside the cube net (or in a vertex circle, which can end the line) - scissors.
+3. CUT_EDITING: over a point of the new cut line that can be dragged, or the circle in the middle of a segment (a new
+   point there) - a pencil; over a segment of the outer perimeter that can be chosen for gluing (not a thin black
+   one) - a tube of glue. While a point is dragged, the pencil stays.
+4. CUT_APPROVING: over the round button - the pointing hand. The button looks raised (lit from above, with a soft
+   shadow), and its tooltip says "Approve", or "Cancel" when it shows the "x".
+Elsewhere it's the usual arrow; while the sheet is being dragged, the closed hand.

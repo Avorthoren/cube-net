@@ -55,6 +55,7 @@ from cube_net.ui.sheet.counterpart_blink import CounterpartBlink
 from cube_net.ui.sheet.cut_hover import CutHover
 from cube_net.ui.sheet.cut_tool import CutTool
 from cube_net.ui.sheet.ruler_tool import RulerTool
+from cube_net.ui.sheet.sheet_cursor import SheetCursor
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.style import Style, apply_style
 
@@ -136,6 +137,7 @@ class MainWindow(QMainWindow):
         self.cut_tool.rejected.connect(self._on_cut_rejected)
         self.cut_hover.set_target(self.cut_tool.hover_target)
         self.sheet_view.set_press_claim(self.cut_tool.claims)
+        self.sheet_cursor = SheetCursor(self.sheet_view, self.cut_tool, self.ruler_tool)
         self.sheet_view.show_initial_view(net_box)
         self.setCentralWidget(self.sheet_view)
         self.sheet_view.setFocus()  # it wants to know about SHIFT even before the first click

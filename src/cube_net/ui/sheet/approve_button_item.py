@@ -1,11 +1,11 @@
 """`ApproveButtonItem`: the round button in the middle of the segment chosen for gluing (CUT_APPROVING).
 
 A green check mark when the rearrangement can be approved, a grey "x" when it can't (clicking it undoes the
-rearrangement then). It has a constant size in pixels.
+rearrangement then). It looks raised, like a button, and has a constant size in pixels.
 """
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QPainter, QPen, QPolygonF
+from PyQt6.QtGui import QBrush, QLinearGradient, QPainter, QPen, QPolygonF
 from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 
 from cube_net.core.geometry import Vec
@@ -56,8 +56,16 @@ class ApproveButtonItem(QGraphicsItem):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         colour = palette.SUCCESS if self._enabled else palette.APPROVE_BUTTON_DISABLED
         r = net_style.APPROVE_BUTTON_RADIUS_PX
-        painter.setPen(QPen(colour, net_style.APPROVE_CHECK_WIDTH_PX))
-        painter.setBrush(palette.APPROVE_BUTTON_FILL)
+        # Raised: a soft shadow below it, lit from above, and a rim a little darker than the symbol.
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(palette.APPROVE_BUTTON_SHADOW)
+        shadow = net_style.APPROVE_BUTTON_SHADOW_PX
+        painter.drawEllipse(center + QPointF(0, shadow), r + shadow / 2, r + shadow / 2)
+        light = QLinearGradient(center + QPointF(0, -r), center + QPointF(0, r))
+        light.setColorAt(0, palette.APPROVE_BUTTON_FILL)
+        light.setColorAt(1, palette.APPROVE_BUTTON_SHADE)
+        painter.setPen(QPen(colour.darker(115), net_style.APPROVE_CHECK_WIDTH_PX))
+        painter.setBrush(QBrush(light))
         painter.drawEllipse(center, r, r)
         pen = QPen(colour, net_style.APPROVE_CHECK_WIDTH_PX)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)

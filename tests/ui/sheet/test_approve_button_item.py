@@ -41,7 +41,6 @@ def test_green_when_enabled_grey_when_not() -> None:
     item.set_state(Vec(2, 2), True)
     image, center = render(item)
     assert palette.SUCCESS in colours(image, center)
-    assert palette.APPROVE_BUTTON_FILL in colours(image, center)
     item.set_state(Vec(2, 2), False)
     image, center = render(item)
     assert palette.SUCCESS not in colours(image, center)
@@ -56,6 +55,12 @@ def test_constant_size_in_pixels() -> None:
     assert image.pixelColor(just_outside.toPoint()) == QColor("black")
 
 
+def is_fill(colour: QColor) -> bool:
+    """Part of the button's inside: from its light top to its shaded bottom (not the symbol, not the rim)."""
+    low, high = palette.APPROVE_BUTTON_SHADE.lightness(), palette.APPROVE_BUTTON_FILL.lightness()
+    return colour.saturation() < 20 and low - 5 <= colour.lightness() <= high
+
+
 def on_diagonals(image: QImage, center: QPointF) -> list[QColor]:
     """The pixels a quarter of the radius away from the centre, along both diagonals."""
     d = int(net_style.APPROVE_BUTTON_RADIUS_PX / 4)
@@ -67,11 +72,44 @@ def test_x_when_disabled() -> None:
     item = ApproveButtonItem()
     item.set_state(Vec(2, 2), False)
     image, center = render(item)
-    assert palette.APPROVE_BUTTON_FILL not in on_diagonals(image, center)  # both strokes of the "x" go through them
+    assert not any(is_fill(c) for c in on_diagonals(image, center))  # both strokes of the "x" go through them
 
 
 def test_check_mark_when_enabled() -> None:
     item = ApproveButtonItem()
     item.set_state(Vec(2, 2), True)
     image, center = render(item)
-    assert palette.APPROVE_BUTTON_FILL in on_diagonals(image, center)  # a check mark misses some of them
+    assert any(is_fill(c) for c in on_diagonals(image, center))  # a check mark misses some of them
+
+
+class TestLooksLikeAButton:
+    def render_enabled(self) -> tuple[QImage, QPointF]:
+        item = ApproveButtonItem()
+        item.set_state(Vec(2, 2), True)
+        return render(item)
+
+    def test_lit_from_above(self) -> None:
+        image, center = self.render_enabled()
+        r = int(net_style.APPROVE_BUTTON_RADIUS_PX)
+        x = int(center.x()) - r // 2  # left of the check mark
+        top, bottom = image.pixelColor(x, int(center.y()) - r // 2), image.pixelColor(x, int(center.y()) + r // 2)
+        assert is_fill(top) and is_fill(bottom)
+        assert top.lightness() > bottom.lightness()
+
+    def test_casts_a_shadow_below(self) -> None:
+        """On white, so that the shadow shows: darker below the button than above it."""
+        item = ApproveButtonItem()
+        item.set_state(Vec(2, 2), True)
+        image = QImage(200, 200, QImage.Format.Format_RGB32)
+        image.fill(QColor("white"))
+        world = QTransform().scale(SCALE, -SCALE).translate(0, -4)
+        painter = QPainter(image)
+        painter.setTransform(world)
+        item.paint(painter, None)
+        painter.end()
+        center = world.map(QPointF(2, 2))
+        reach = net_style.APPROVE_BUTTON_RADIUS_PX + net_style.APPROVE_CHECK_WIDTH_PX / 2 + 1
+        below = image.pixelColor(int(center.x()), int(center.y() + reach))
+        above = image.pixelColor(int(center.x()), int(center.y() - reach - 1))
+        assert above == QColor("white")
+        assert below.lightness() < above.lightness()

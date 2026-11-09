@@ -80,6 +80,11 @@ USELESS_CUT = QColor("#000000")
 # The round "approve" button: its inside, and its colour while the rearrangement can't be approved (when it can, it's
 # SUCCESS).
 APPROVE_BUTTON_FILL = QColor("#FFFFFF")
+
+# The approve button is lit from above: its fill goes from APPROVE_BUTTON_FILL at the top to this at the bottom, and it
+# casts a soft shadow.
+APPROVE_BUTTON_SHADE = QColor("#D5D8DC")
+APPROVE_BUTTON_SHADOW = QColor(0, 0, 0, 90)
 APPROVE_BUTTON_DISABLED = QColor("#9E9E9E")
 
 
