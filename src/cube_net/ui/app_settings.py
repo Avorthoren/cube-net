@@ -4,11 +4,12 @@ from pathlib import Path
 
 from PyQt6.QtCore import QSettings
 
-# Debug labels (A_1, x_2, ...) next to all vertices. ON while the app is being developed; switch to False later.
+# Labels (A_1, x_2, ...) next to all vertices: they stay in the app (they tell apart vertices on the same face).
+# ON while the app is being developed; False for releases.
 DEFAULT_SHOW_VERTEX_LABELS = True
 
 # Session recording: a compact log of user input (one file per launch), so that problems can be reproduced exactly.
-# ON while the app is being developed; switch to False later.
+# ON while the app is being developed; False for releases.
 DEFAULT_RECORD_SESSION = True
 
 _SHOW_VERTEX_LABELS = "debug/show_vertex_labels"

@@ -49,6 +49,9 @@ class RulerItem(QGraphicsItem):
         self._cursor = cursor
         self.update()
 
+    def cursor(self) -> Vec | None:
+        return self._cursor
+
     def boundingRect(self) -> QRectF:
         m = self._margin
         return self._rect.adjusted(-m, -m, m, m)

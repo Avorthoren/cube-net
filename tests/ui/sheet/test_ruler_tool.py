@@ -112,3 +112,52 @@ def test_total_length(view: SheetView, qtbot: QtBot) -> None:
     assert tool.total_length() == pytest.approx(6.0)
     tool.set_active(False)
     assert tool.total_length() is None
+
+
+class TestShift:
+    def placed(self, view: SheetView, *points: tuple[float, float]) -> RulerTool:
+        tool = RulerTool(view)
+        tool.set_active(True)
+        for p in points:
+            view.left_pressed.emit(*p)
+        return tool
+
+    def test_first_segment_goes_straight(self, view: SheetView, qtbot: QtBot) -> None:
+        tool = self.placed(view, (7.0, 7.0))
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        view.mouse_moved.emit(9.0, 7.4)
+        assert tool.item.cursor() == Vec(9, 7)
+        view.left_pressed.emit(9.0, 7.4)
+        assert tool.ruler.points[-1] == Vec(9, 7)
+
+    def test_next_one_parallel_or_perpendicular(self, view: SheetView, qtbot: QtBot) -> None:
+        tool = self.placed(view, (7.0, 7.0), (9.0, 8.0))
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        view.left_pressed.emit(10.1, 8.4)
+        a, b, c = tool.ruler.points
+        assert (b - a).cross(c - b) == 0
+        view.left_pressed.emit(9.5, 10.3)
+        d = tool.ruler.points[-1]
+        assert (c - b).dot(d - c) == 0
+
+    def test_it_acts_at_once(self, view: SheetView, qtbot: QtBot) -> None:
+        tool = self.placed(view, (7.0, 7.0))
+        view.mouse_moved.emit(9.0, 7.4)
+        free = tool.item.cursor()
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        assert tool.item.cursor() == Vec(9, 7)
+        qtbot.keyRelease(view, Qt.Key.Key_Shift)
+        assert tool.item.cursor() == free
+
+    def test_without_shift_nothing_changes(self, view: SheetView) -> None:
+        tool = self.placed(view, (7.0, 7.0), (9.0, 7.4))
+        assert tool.ruler.points[-1] == Vec(9, F(37, 5))
+
+    def test_not_off_the_sheet(self, view: SheetView, qtbot: QtBot) -> None:
+        """The mouse is on the sheet, but the restricted point would be off it."""
+        tool = self.placed(view, (6.0, 6.0), (5.5, 18.5))
+        qtbot.keyPress(view, Qt.Key.Key_Shift)
+        view.left_pressed.emit(5.2, 9.0)  # parallel to the previous segment: the line goes off the left edge here
+        assert len(tool.ruler.points) in (2, 3)
+        for p in tool.ruler.points:
+            assert view.sheet_rect().contains(QPointF(float(p.x), float(p.y)))

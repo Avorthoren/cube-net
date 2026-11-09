@@ -172,6 +172,12 @@ When we click in another location - next point is created, and now we see:
 6. Coordinates of current mouse location near the mouse pointer (in addition to what's shown in the footer of the app).
 7. Distance between second point and current location somewhere between those two points.
 And so on. Until we disable "ruler" instrument on the panel.
+While SHIFT is held, the segment from the last ruler point to the mouse is restricted:
+1. the first segment of the ruler: to horizontal or vertical (whichever is closer to the mouse), like the cut line;
+2. every next segment: to parallel or perpendicular to the previous segment of the ruler (whichever is closer to the
+   mouse; a previous segment of zero length doesn't count).
+It changes at once when SHIFT is pressed or released. Ruler points don't snap to anything else (no snapping to
+vertices, edges or the unit grid).
 
 Application should have "bounding rectangle" feature:
 Bounding rectangle - is the rectangle of the smallest area that encompasses the whole cube net. This rectangle is NOT
@@ -447,6 +453,8 @@ Few more notes:
      so it can never be an internal point of a flat net). Hence a cut line never passes through a vertex of the cube.
    - Every rearrangement is a rotation by a multiple of 90 degrees plus a translation.
    - Application stores models of both the cube's surface (points on it, cuts) and of the cube net (images of those
-     points and cuts on the plane). Labels (A_1, x_2, ...) are only for explanation, they are not shown to the user.
-     Several user-made vertices on the same cube's face may be hard to distinguish - we'll solve that later.
-   - "Snapping" of points (to vertices, edges, grid) is needed for precise work, but will be discussed later.
+     points and cuts on the plane). Labels (A_1, x_2, ...) are shown next to the vertices when the user switches them
+     on (View menu); that's also how several user-made vertices on the same cube's face are told apart. They stay in
+     the app, off by default in releases (session logs too).
+   - Snapping: points of the cut line snap to vertices and segments of the outer perimeter and to fold lines, and
+     SHIFT restricts segments (see above). Nothing snaps to the unit grid, and ruler points don't snap.

@@ -315,6 +315,7 @@ Undo and redo are available in every state. Each public method either performs o
   - bounding-rectangle toggle with the area label (3 decimals);
 - **View menu:** "Record sessions (development, from next launch)": see §6.7.
 - **View menu:** "Show vertex labels (development)", an app setting (`AppSettings`, stored with `QSettings`).
+  The feature stays in the app for good (it's how vertices on the same face are told apart);
   `DEFAULT_SHOW_VERTEX_LABELS` is True while developing and becomes False for releases.
 - **Status bar:** mouse coordinates in sheet units with 3 decimals, plus the current state name. The state name helps while
   developing and may stay.
@@ -355,6 +356,10 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
   - black overlap segments;
   - the bounding rectangle: thin black, or green under the threshold.
 - `RulerItem`: points, lines, coordinate labels and distance labels, all with 3 decimals.
+- Ruler with SHIFT (M10): the first segment goes horizontal or vertical; every next one parallel or perpendicular to
+  the previous segment, whichever is closer to the mouse (`restricted_point`). The point lands on a grid of at most
+  1/1000 along that direction, and the direction is reduced to the smallest integer vector, so coordinates stay small
+  however long a restricted ruler gets.
 - Line widths, hitbox widths and circle radii are in **pixels**, constant on screen at any zoom, as decided. They're
   converted to units for hit-testing at the current zoom. If the user zooms far out, lines can be wider than faces;
   that's accepted.
@@ -438,7 +443,7 @@ part is built right away**, before more logic is added. Every step marked 👁 e
 | M7  | Approve                           | **Done.** 1. Gluing, auto-glue walk, cleanup (§4.6), `validate_net()` (§3.4). 2. 👁 The ✓ button on the sheet and Ctrl+Enter accept the cut; you can keep cutting the new net. | All **11 hexomino nets** are reachable from the cross (core scenario test) and in the app |
 | M8  | Undo / redo                       | **Done.** 1. `history.py` with every special rule (§5.2). 2. 👁 Ctrl+Z / Ctrl+Y and Edit menu items, in every state.                         | Table-driven history tests pass; works in the app |
 | M9  | Projects                          | **Done.** 1. 👁 (**done**) Serialization of the editor state, history and point names (`PointLabels`), so debug labels stay the same after reopening; File → Open…, Save As… 2. 👁 (**done**) Save (Ctrl+S), New, the dirty flag and the unsaved-changes prompt (also on Quit). 3. 👁 (**done**) Startup flow (reopen the last project). 4. 👁 (**done**) Project settings dialog (area threshold). 5. (**done**) The session-recording state snapshot (§6.7) becomes the serialized project. | Save → restart → identical state with full undo/redo |
-| M10 | Polish                            | 1. (**done**) Performance check at about 50 cuts (below). 2. 👁 Cursor shapes. 3. Anything found while trying the app. Colour variants for the new cut line are in since M5 (halo and rings). | Smooth interaction with a heavily cut net |
+| M10 | Polish                            | 1. (**done**) Performance check at about 50 cuts (below). 2. 👁 Cursor shapes. 3. 👁 (**done**) Ruler with SHIFT: the first segment horizontal/vertical, every next one parallel/perpendicular to the previous segment. 4. Anything found while trying the app. Colour variants for the new cut line are in since M5 (halo and rings). | Smooth interaction with a heavily cut net |
 | M11 | Packaging                         | PyInstaller one-folder build → `.deb` and/or AppImage for Ubuntu 24; later macOS (`.app`/`.dmg`) and Windows                       | Install on a clean Ubuntu VM and run |
 
 M7's "all 11 nets" scenario is the main acceptance test for the whole topology engine. It's written against the
@@ -460,13 +465,15 @@ mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dr
 ## 8. Open questions and deferred topics
 
 Deferred on purpose (per `idea.txt`):
-- **Snapping** of points to vertices, edges and the grid. It plugs into `quantize()` and the hit-testing.
 - **Vertex circle sectors**: their orientation towards net faces, and possibly unequal sizes.
 - **Zoom limits**: revisit the provisional rules.
 - **Editing face colours** in app settings.
-- **Distinguishing** several user-made vertices that sit on the same cube face.
 
 Resolved:
+- Snapping: cut-line points snap to perimeter vertices, cuts and fold lines, and SHIFT restricts segments. No snapping
+  to the unit grid, none for the ruler (only its SHIFT restriction, M10).
+- Several user-made vertices on the same face are told apart by the vertex labels, which stay in the app (off by
+  default in releases).
 - "Save changes?" prompt on New/Open/Quit: yes (§6.6).
 - Line widths, hitbox widths and vertex radii: constant in pixels (§6.3).
 - Mouse input is rounded to 1/1000 unit until snapping exists (§1, `quantize()`).

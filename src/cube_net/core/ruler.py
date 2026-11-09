@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from fractions import Fraction
 from itertools import pairwise
 
-from cube_net.core.geometry import Vec
+from cube_net.core.geometry import QUANTUM, Vec
 
 
 def distance(a: Vec, b: Vec) -> float:
@@ -15,6 +15,45 @@ def distance(a: Vec, b: Vec) -> float:
 
 def squared_distance(a: Vec, b: Vec) -> Fraction:
     return (b - a).length_squared()
+
+
+def restricted_point(points: Sequence[Vec], p: Vec) -> Vec:
+    """Where the next ruler point goes for the mouse at `p` while SHIFT is held (docs/idea.txt, ruler).
+
+    The first segment is horizontal or vertical; every next one parallel or perpendicular to the previous segment
+    (the last one of non-zero length), whichever is closer to `p`, parallel if it's a tie. Without a point there's no
+    segment to restrict: `p` itself.
+
+    The point lands on a grid along that direction, with steps of at most `QUANTUM`. The direction is reduced to the
+    smallest integer vector: restricted segments keep the same direction (or its perpendicular), so their numbers stay
+    small however long the ruler gets.
+    """
+    if not points:
+        return p
+    anchor = points[-1]
+    previous = next((b - a for a, b in reversed(list(pairwise(points))) if a != b), None)
+    if previous is None:
+        offset = p - anchor
+        return Vec(p.x, anchor.y) if abs(offset.x) >= abs(offset.y) else Vec(anchor.x, p.y)
+    along = _primitive(previous)
+    across = Vec(-along.y, along.x)
+    candidates = [_on_line(anchor, u, p) for u in (along, across)]
+    return min(candidates, key=lambda q: (q - p).length_squared())
+
+
+def _primitive(d: Vec) -> Vec:
+    """The smallest vector with integer coordinates pointing the same way as `d` (which isn't zero)."""
+    scale = math.lcm(d.x.denominator, d.y.denominator)
+    x, y = int(d.x * scale), int(d.y * scale)
+    g = math.gcd(x, y)
+    return Vec(x // g, y // g)
+
+
+def _on_line(anchor: Vec, u: Vec, p: Vec) -> Vec:
+    """The point of the grid along the line through `anchor` in direction `u` that is closest to `p`."""
+    steps = math.ceil((abs(u.x) + abs(u.y)) / QUANTUM)  # u has integer coordinates: one step is at most QUANTUM long
+    t = (p - anchor).dot(u) / u.length_squared()
+    return anchor + u * Fraction(round(t * steps), steps)
 
 
 class Ruler:
