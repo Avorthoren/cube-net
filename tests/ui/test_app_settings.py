@@ -102,3 +102,17 @@ def test_blink_on_success_default_and_persisted(tmp_path: Path) -> None:
     assert s.blink_on_success is True
     s.blink_on_success = False
     assert settings_at(tmp_path / "s.ini").blink_on_success is False
+
+
+def test_settings_tab_default_and_persisted(tmp_path: Path) -> None:
+    s = settings_at(tmp_path / "s.ini")
+    assert s.settings_tab == ""
+    s.settings_tab = "Style"
+    assert settings_at(tmp_path / "s.ini").settings_tab == "Style"
+
+
+def test_settings_open_default_and_persisted(tmp_path: Path) -> None:
+    s = settings_at(tmp_path / "s.ini")
+    assert s.settings_open is False
+    s.settings_open = True
+    assert settings_at(tmp_path / "s.ini").settings_open is True

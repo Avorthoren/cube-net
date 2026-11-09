@@ -38,3 +38,21 @@ def test_at_most_a_third_of_the_screen(qtbot: QtBot) -> None:
     panel = make(qtbot)
     panel.place_over(QRect(0, 0, 1500, 700), 600)
     assert panel.width() <= 200
+
+
+def test_show_tab_by_name(qtbot: QtBot) -> None:
+    panel = make(qtbot)
+    assert panel.tab_name() == "Preferences"
+    panel.show_tab("Style")
+    assert panel.tab_name() == "Style"
+    panel.show_tab("No such tab")
+    assert panel.tab_name() == "Style"
+
+
+def test_hide_button(qtbot: QtBot) -> None:
+    panel = make(qtbot)
+    assert panel.tabs.cornerWidget() is panel.hide_button
+    assert panel.hide_button.text() not in ("x", "X", chr(0x00D7), chr(0x2715))  # nothing that looks like closing
+    assert panel.hide_button.toolTip() == "Hide settings"
+    with qtbot.waitSignal(panel.hide_requested):
+        panel.hide_button.click()

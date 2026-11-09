@@ -450,6 +450,9 @@ class MainWindow(QMainWindow):
         path = Path(name)
         return self.save_project_to(path if path.suffix else path.with_suffix(PROJECT_SUFFIX))
 
+    def _on_settings_tab_changed(self) -> None:
+        self.settings.settings_tab = self.settings_panel.tab_name()
+
     def _on_blink_changed(self, blink: bool) -> None:
         self.settings.blink_on_success = blink
         self.bounding.set_blink_enabled(blink)
@@ -492,6 +495,7 @@ class MainWindow(QMainWindow):
         if shown:
             self._place_settings_panel()
         self.settings_panel.setVisible(shown)
+        self.settings.settings_open = shown
 
     def eventFilter(self, watched: QObject | None, event: QEvent | None) -> bool:
         """The settings panel follows the sheet view when it moves or changes its size."""
@@ -499,7 +503,7 @@ class MainWindow(QMainWindow):
             watched is self.sheet_view
             and event is not None
             and event.type() in (QEvent.Type.Resize, QEvent.Type.Move)
-            and self.settings_panel.isVisible()
+            and not self.settings_panel.isHidden()  # switched on (not yet visible while the window is being shown)
         ):
             self._place_settings_panel()
         return super().eventFilter(watched, event)
@@ -577,6 +581,8 @@ class MainWindow(QMainWindow):
             self,
         )
         self.settings_panel.preferences.blink_changed.connect(self._on_blink_changed)
+        self.settings_panel.show_tab(self.settings.settings_tab)  # the one the user looked at last, even last time
+        self.settings_panel.tabs.currentChanged.connect(self._on_settings_tab_changed)
         self.settings_panel.preferences.max_zoom_changed.connect(self._on_max_zoom_changed)
         self.settings_panel.style_tab.style_changed.connect(self._on_style_changed)
         self.sheet_view.installEventFilter(self)
@@ -585,6 +591,9 @@ class MainWindow(QMainWindow):
         self.settings_action.setToolTip("Settings of the application (not of the project)")
         self.settings_action.toggled.connect(self._on_settings_toggled)
         menu_bar.addAction(self.settings_action)
+        self.settings_panel.hide_requested.connect(lambda: self.settings_action.setChecked(False))
+        # Open as the user left it. It gets its place when the window is laid out (the view's first resize).
+        self.settings_action.setChecked(self.settings.settings_open)
         self.cut_tool.line_changed.connect(self._update_edit_actions)
         self._update_edit_actions()
 

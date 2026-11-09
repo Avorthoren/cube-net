@@ -2988,3 +2988,77 @@ class TestBlinkSetting:
         assert not window.settings_panel.preferences.blink.isChecked()
         self.succeed(window)
         assert not window.bounding.blinking and window.bounding.success
+
+
+class TestLastSettingsTab:
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+        settings.record_session = False
+        window = MainWindow(settings=settings, session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def test_preferences_the_first_time(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.settings_action.trigger()
+        assert window.settings_panel.tab_name() == "Preferences"
+
+    def test_the_same_tab_when_opened_again(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.settings_action.trigger()
+        window.settings_panel.show_tab("Style")
+        window.settings_action.trigger()
+        window.settings_action.trigger()
+        assert window.settings_panel.tab_name() == "Style"
+
+    def test_and_in_the_next_run(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.settings_action.trigger()
+        window.settings_panel.show_tab("Style")
+        other = self.make(qtbot, tmp_path)
+        other.settings_action.trigger()
+        assert other.settings_panel.tab_name() == "Style"
+
+
+class TestSettingsPanelOpenAtStart:
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+        settings.record_session = False
+        window = MainWindow(settings=settings, session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.resize(1200, 800)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def test_closed_the_first_time(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert not window.settings_panel.isVisible()
+        assert not window.settings_action.isChecked()
+
+    def test_left_open_starts_open_in_its_place(self, qtbot: QtBot, tmp_path: Path) -> None:
+        self.make(qtbot, tmp_path).settings_action.trigger()
+        window = self.make(qtbot, tmp_path)
+        assert window.settings_action.isChecked()
+        assert window.settings_panel.isVisible()
+        view = window.sheet_view.geometry()
+        qtbot.waitUntil(lambda: window.settings_panel.geometry().right() == view.right())
+        assert window.settings_panel.height() == window.sheet_view.height()
+
+    def test_left_closed_starts_closed(self, qtbot: QtBot, tmp_path: Path) -> None:
+        first = self.make(qtbot, tmp_path)
+        first.settings_action.trigger()
+        first.settings_action.trigger()
+        assert not self.make(qtbot, tmp_path).settings_panel.isVisible()
+
+    def test_the_hide_button_is_like_clicking_settings(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.settings_action.trigger()
+        window.settings_panel.hide_button.click()
+        assert not window.settings_panel.isVisible()
+        assert not window.settings_action.isChecked()
+        assert window.settings.settings_open is False
+        window.settings_action.trigger()
+        assert window.settings_panel.isVisible()

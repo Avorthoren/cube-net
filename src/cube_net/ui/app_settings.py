@@ -24,6 +24,8 @@ _RECORD_SESSION = "debug/record_session"
 _BLINK_ON_SUCCESS = "view/blink_on_success"
 _LAST_PROJECT = "project/last"
 _MAX_ZOOM = "view/max_zoom"
+_SETTINGS_TAB = "view/settings_tab"
+_SETTINGS_OPEN = "view/settings_open"
 _STYLE = "style/"
 
 
@@ -55,6 +57,24 @@ class AppSettings:
     @blink_on_success.setter
     def blink_on_success(self, value: bool) -> None:
         self._settings.setValue(_BLINK_ON_SUCCESS, value)
+
+    @property
+    def settings_open(self) -> bool:
+        """Whether the settings panel was open when the user last showed or hid it (so that it's open at start)."""
+        return self._bool(_SETTINGS_OPEN, False)
+
+    @settings_open.setter
+    def settings_open(self, value: bool) -> None:
+        self._settings.setValue(_SETTINGS_OPEN, value)
+
+    @property
+    def settings_tab(self) -> str:
+        """The name of the settings panel's tab the user looked at last ("": none yet)."""
+        return str(self._settings.value(_SETTINGS_TAB, "", type=str))
+
+    @settings_tab.setter
+    def settings_tab(self, name: str) -> None:
+        self._settings.setValue(_SETTINGS_TAB, name)
 
     @property
     def last_project(self) -> Path | None:

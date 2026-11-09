@@ -466,7 +466,10 @@ Settings
 In the menu bar, to the right of Edit, there's "Settings": it opens a panel on the right side of the window, over the
 sheet (the sheet doesn't move, and the rest of it works as usual); clicking "Settings" again hides it. These are
 settings of the whole application, not of a project. The panel takes at most a third of the screen's width; its tabs
-are listed horizontally, and scroll if they don't fit. Every change is applied and saved at once, and shows on the
+are listed horizontally, and scroll if they don't fit. The panel opens on the tab the user looked at last (even in an
+earlier run of the application), and the application starts with the panel open if it was open when the user left it.
+A small button in the panel's upper right corner (a double chevron pointing right, not a cross, which would look like
+closing the application) hides the panel, like clicking "Settings" again. Every change is applied and saved at once, and shows on the
 sheet at once.
 1. Preferences:
    - Show vertex labels;
