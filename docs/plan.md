@@ -311,6 +311,8 @@ Undo and redo are available in every state. Each public method either performs o
 - **Menu:**
   - File: New (Ctrl+N), Open… (Ctrl+O), Save (Ctrl+S), Save As… (Ctrl+Shift+S), Quit (Ctrl+Q);
   - Edit: Approve cut (Ctrl+Enter), Undo (Ctrl+Z), Redo (Ctrl+Y);
+  - Help (after Settings): About (name, version 1.0, build, credits with a link to the puzzle; Escape closes it),
+    Help (to be decided, disabled for now), Check for updates ("Under development...");
   - Settings: shows or hides the settings panel (`ui/settings_panel/`), over the right side of the sheet, at most a
     third of the screen wide. Tabs: Preferences (vertex labels, session logs, blinking on success, maximum zoom) and Style (face colours,
     tiling, dashes and their thickness, vertex radius, grid colour and thickness; each section restores its defaults

@@ -34,6 +34,8 @@ from cube_net.core.project import (
 from cube_net.core.project_settings import ProjectSettings, format_threshold
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
+from cube_net.ui.help.about_dialog import AboutDialog
+from cube_net.ui.help.updates_dialog import UpdatesDialog
 from cube_net.ui.instruments.bounding_controls import BoundingControls
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
 from cube_net.ui.no_wheel import ignore_wheel
@@ -605,6 +607,17 @@ class MainWindow(QMainWindow):
         self.settings_action.setToolTip("Settings of the application (not of the project)")
         self.settings_action.toggled.connect(self._on_settings_toggled)
         menu_bar.addAction(self.settings_action)
+        help_menu = menu_bar.addMenu("&Help")
+        assert help_menu is not None
+        self.about_action = QAction("&About", self)
+        self.about_action.triggered.connect(lambda: AboutDialog(self).exec())
+        help_menu.addAction(self.about_action)
+        self.help_action = QAction("&Help", self)
+        self.help_action.setEnabled(False)  # what it shows is still to be decided
+        help_menu.addAction(self.help_action)
+        self.updates_action = QAction("Check for &updates", self)
+        self.updates_action.triggered.connect(lambda: UpdatesDialog(self).exec())
+        help_menu.addAction(self.updates_action)
         self.settings_panel.hide_requested.connect(lambda: self.settings_action.setChecked(False))
         # Open as the user left it. It gets its place when the window is laid out (the view's first resize).
         self.settings_action.setChecked(self.settings.settings_open)

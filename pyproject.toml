@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cube-net"
-version = "0.1.0"
+version = "1.0"
 description = "Desktop application to explore unit cube nets by cutting and re-gluing them."
 readme = "docs/idea.txt"
 requires-python = ">=3.14"

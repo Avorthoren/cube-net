@@ -2763,7 +2763,7 @@ class TestSettingsPanel:
         window = self.make(qtbot, tmp_path)
         menu_bar = window.menuBar()
         assert menu_bar is not None
-        assert [a.text() for a in menu_bar.actions()] == ["&File", "&Edit", "&Settings"]
+        assert [a.text() for a in menu_bar.actions()][:3] == ["&File", "&Edit", "&Settings"]
 
     def test_it_opens_and_closes(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
@@ -3093,3 +3093,36 @@ def test_no_number_field_of_the_window_takes_the_wheel(qtbot: QtBot, tmp_path: P
         QApplication.sendEvent(field, event)
     assert [field.text() for field in fields] == before
     assert not window.is_dirty
+
+
+class TestHelpMenu:
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        return window
+
+    def test_after_settings_with_three_items(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        menu_bar = window.menuBar()
+        assert menu_bar is not None
+        assert [a.text() for a in menu_bar.actions()] == ["&File", "&Edit", "&Settings", "&Help"]
+        help_menu = menu_bar.actions()[3].menu()
+        assert help_menu is not None
+        assert [a.text() for a in help_menu.actions()] == ["&About", "&Help", "Check for &updates"]
+
+    def test_help_waits_for_its_content(self, qtbot: QtBot, tmp_path: Path) -> None:
+        assert not self.make(qtbot, tmp_path).help_action.isEnabled()
+
+    def test_about_and_updates_open_their_windows(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.help.about_dialog import AboutDialog
+        from cube_net.ui.help.updates_dialog import UpdatesDialog
+
+        window = self.make(qtbot, tmp_path)
+        opened: list[str] = []
+        monkeypatch.setattr(AboutDialog, "exec", lambda self: opened.append(type(self).__name__) or 0)
+        monkeypatch.setattr(UpdatesDialog, "exec", lambda self: opened.append(type(self).__name__) or 0)
+        window.about_action.trigger()
+        window.updates_action.trigger()
+        assert opened == ["AboutDialog", "UpdatesDialog"]

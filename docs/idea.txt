@@ -497,3 +497,15 @@ Mouse pointer (while the ruler is not active; it tells the user what a click wou
 4. CUT_APPROVING: over the round button - the pointing hand. The button looks raised (lit from above, with a soft
    shadow), and its tooltip says "Approve", or "Cancel" when it shows the "x".
 Elsewhere it's the usual arrow; while the sheet is being dragged, the closed hand.
+
+Help menu (to the right of Settings): About, Help, Check for updates.
+1. About: a small window with the application's name ("Cube Net"), its version and date ("1.0, 10.11.2026" while
+   updates aren't handled), what
+   it runs on (Python, Qt, the system), and "by UNDEFEAT in attempts to solve this puzzle", where "this puzzle" is a link
+   to https://ru.braigam.com/?path=comments&puzzle=680. All its text can be selected and copied; the "Copy and close"
+   button at the bottom copies all of it (a line per line, with the link itself instead of "this puzzle") and closes
+   the window. Escape closes it, as does the close button in its corner. It has no minimize or maximize buttons (nor
+   does the next one): Ubuntu's GNOME draws them on every window it frames, so these two windows draw their own title
+   bar (title and close button; dragging it moves the window).
+2. Help: to be decided.
+3. Check for updates: a small window saying "Under development..." (with a traffic cone).
