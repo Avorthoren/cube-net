@@ -1,10 +1,12 @@
 """`AppSettings`: settings of the application as a whole (not of a project), stored with `QSettings`."""
 
+from dataclasses import fields, replace
 from pathlib import Path
 
 from PyQt6.QtCore import QSettings
 
 from cube_net.ui.sheet.zoom import DEFAULT_MAX_ZOOM, MAX_ZOOM_RANGE
+from cube_net.ui.style import DEFAULT_STYLE, Style, StyleError
 
 # Labels (A_1, x_2, ...) next to all vertices: they stay in the app (they tell apart vertices on the same face).
 # ON while the app is being developed; False for releases.
@@ -14,10 +16,15 @@ DEFAULT_SHOW_VERTEX_LABELS = True
 # ON while the app is being developed; False for releases.
 DEFAULT_RECORD_SESSION = True
 
+# The Bounds button blinks while the area is below the target (otherwise it's just green).
+DEFAULT_BLINK_ON_SUCCESS = True
+
 _SHOW_VERTEX_LABELS = "debug/show_vertex_labels"
 _RECORD_SESSION = "debug/record_session"
+_BLINK_ON_SUCCESS = "view/blink_on_success"
 _LAST_PROJECT = "project/last"
 _MAX_ZOOM = "view/max_zoom"
+_STYLE = "style/"
 
 
 class AppSettings:
@@ -40,6 +47,14 @@ class AppSettings:
     @record_session.setter
     def record_session(self, value: bool) -> None:
         self._settings.setValue(_RECORD_SESSION, value)
+
+    @property
+    def blink_on_success(self) -> bool:
+        return self._bool(_BLINK_ON_SUCCESS, DEFAULT_BLINK_ON_SUCCESS)
+
+    @blink_on_success.setter
+    def blink_on_success(self, value: bool) -> None:
+        self._settings.setValue(_BLINK_ON_SUCCESS, value)
 
     @property
     def last_project(self) -> Path | None:
@@ -73,5 +88,43 @@ class AppSettings:
             raise ValueError(f"the maximum zoom must be from {low} to {high} pixels per unit, got {value}")
         self._settings.setValue(_MAX_ZOOM, value)
 
+    @property
+    def style(self) -> Style:
+        """Settings -> Style. A stored value that's missing, out of range or not what it should be gives that value's
+        default (the others stay)."""
+        values = {
+            field.name: _read_style_value(
+                field.name, self._settings.value(_STYLE + field.name), getattr(DEFAULT_STYLE, field.name)
+            )
+            for field in fields(Style)
+        }
+        try:
+            return Style(**values)  # type: ignore[arg-type]
+        except StyleError:
+            return DEFAULT_STYLE
+
+    @style.setter
+    def style(self, style: Style) -> None:
+        for field in fields(Style):
+            value = getattr(style, field.name)
+            self._settings.setValue(_STYLE + field.name, ",".join(value) if isinstance(value, tuple) else value)
+
     def _bool(self, key: str, default: bool) -> bool:
         return bool(self._settings.value(key, default, type=bool))
+
+
+def _read_style_value(name: str, stored: object, fallback: object) -> object:
+    """One value of a stored style, or `fallback` if it isn't a valid one."""
+    if stored is None:
+        return fallback
+    try:
+        if isinstance(fallback, tuple):
+            value: object = tuple(str(stored).upper().split(","))
+        elif isinstance(fallback, str):
+            value = str(stored).upper()
+        else:
+            value = type(fallback)(stored)  # type: ignore[call-arg]
+        replace(DEFAULT_STYLE, **{name: value})  # checks it
+    except TypeError, ValueError:
+        return fallback
+    return value

@@ -96,7 +96,8 @@ cube_net/
 │       ├── items/               # QGraphicsItems: sheet+grid, net, cut line, overlays
 │       ├── painter/             # hatching, dashed edges, vertex circles, styles
 │       ├── controllers/         # input handling per state; ruler tool
-│       ├── dialogs.py           # project settings, error/unsaved dialogs
+│       ├── settings_panel/      # the settings panel (Preferences, Style)
+│       ├── style/               # the user's style, applied to net_style and palette
 │       └── palette.py           # face colours, highlight variants, UI colours
 └── tests/
     ├── core/ ...
@@ -308,13 +309,19 @@ Undo and redo are available in every state. Each public method either performs o
 
 ### 6.1 Main window
 - **Menu:**
-  - File: New (Ctrl+N), Open… (Ctrl+O), Save (Ctrl+S), Save As… (Ctrl+Shift+S), Project settings…, Quit (Ctrl+Q);
-  - Edit: Undo (Ctrl+Z), Redo (Ctrl+Y).
+  - File: New (Ctrl+N), Open… (Ctrl+O), Save (Ctrl+S), Save As… (Ctrl+Shift+S), Quit (Ctrl+Q);
+  - Edit: Approve cut (Ctrl+Enter), Undo (Ctrl+Z), Redo (Ctrl+Y);
+  - Settings: shows or hides the settings panel (`ui/settings_panel/`), over the right side of the sheet, at most a
+    third of the screen wide. Tabs: Preferences (vertex labels, session logs, blinking on success, maximum zoom) and Style (face colours,
+    tiling, dashes and their thickness, vertex radius, grid colour and thickness; each section restores its defaults
+    after a confirmation). App settings in `AppSettings`; changes apply at once.
 - **Instrument panel:**
   - Ruler toggle;
-  - bounding-rectangle toggle with the area label (3 decimals);
-- **View menu:** "Record sessions (development, from next launch)": see §6.7.
-- **View menu:** "Show vertex labels (development)", an app setting (`AppSettings`, stored with `QSettings`).
+  - the area label (3 decimals), the project's target area (an input, 0 to 20, 3 decimals), the bounding-rectangle
+    toggle;
+- **Style:** the defaults are in `net_style.py` and `palette.py`; `ui/style/` holds the user's `Style`, and
+  `apply_style` puts it into those modules, which everything reads when it paints or hit-tests.
+- **Vertex labels and session logs** (Settings → Preferences) are app settings (`AppSettings`, stored with `QSettings`).
   The feature stays in the app for good (it's how vertices on the same face are told apart);
   `DEFAULT_SHOW_VERTEX_LABELS` is True while developing and becomes False for releases.
 - **Status bar:** mouse coordinates in sheet units with 3 decimals, plus the current state name. The state name helps while
@@ -326,7 +333,7 @@ Undo and redo are available in every state. Each public method either performs o
 - **Zoom:**
   - mouse wheel, only while the cursor is over the sheet rectangle;
   - the point under the cursor stays fixed;
-  - limits (`zoom.zoom_limits`): in, up to the app setting `max_zoom` (Edit → Preferences…); out, until the shown
+  - limits (`zoom.zoom_limits`): in, up to the app setting `max_zoom` (Settings → Preferences); out, until the shown
     net takes `MIN_ZOOM_NET_SCREEN_FRACTION` (50%) of the screen, never beyond the zoom-in limit. When the net or the
     setting changes, the zoom is brought within the limits around the middle of the view.
 - **Initial zoom:** the default net (4 units tall) takes 50% of the *screen* height, using the screen the window is
@@ -445,7 +452,7 @@ part is built right away**, before more logic is added. Every step marked 👁 e
 | M7  | Approve                           | **Done.** 1. Gluing, auto-glue walk, cleanup (§4.6), `validate_net()` (§3.4). 2. 👁 The ✓ button on the sheet and Ctrl+Enter accept the cut; you can keep cutting the new net. | All **11 hexomino nets** are reachable from the cross (core scenario test) and in the app |
 | M8  | Undo / redo                       | **Done.** 1. `history.py` with every special rule (§5.2). 2. 👁 Ctrl+Z / Ctrl+Y and Edit menu items, in every state.                         | Table-driven history tests pass; works in the app |
 | M9  | Projects                          | **Done.** 1. 👁 (**done**) Serialization of the editor state, history and point names (`PointLabels`), so debug labels stay the same after reopening; File → Open…, Save As… 2. 👁 (**done**) Save (Ctrl+S), New, the dirty flag and the unsaved-changes prompt (also on Quit). 3. 👁 (**done**) Startup flow (reopen the last project). 4. 👁 (**done**) Project settings dialog (area threshold). 5. (**done**) The session-recording state snapshot (§6.7) becomes the serialized project. | Save → restart → identical state with full undo/redo |
-| M10 | Polish                            | 1. (**done**) Performance check at about 50 cuts (below). 2. 👁 Cursor shapes. 3. 👁 (**done**) Ruler with SHIFT: the first segment horizontal/vertical, every next one parallel/perpendicular to the previous segment. 4. Anything found while trying the app. Colour variants for the new cut line are in since M5 (halo and rings). | Smooth interaction with a heavily cut net |
+| M10 | Polish                            | 1. (**done**) Performance check at about 50 cuts (below). 2. 👁 Cursor shapes. 3. 👁 (**done**) Ruler with SHIFT: the first segment horizontal/vertical, every next one parallel/perpendicular to the previous segment. 4. 👁 (**done**) Settings panel (Preferences, Style) instead of the View menu; the target area on the instrument panel instead of File → Project settings. 5. Anything found while trying the app. Colour variants for the new cut line are in since M5 (halo and rings). | Smooth interaction with a heavily cut net |
 | M11 | Packaging                         | PyInstaller one-folder build → `.deb` and/or AppImage for Ubuntu 24; later macOS (`.app`/`.dmg`) and Windows                       | Install on a clean Ubuntu VM and run |
 
 M7's "all 11 nets" scenario is the main acceptance test for the whole topology engine. It's written against the
@@ -468,9 +475,9 @@ mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dr
 
 Deferred on purpose (per `idea.txt`):
 - **Vertex circle sectors**: their orientation towards net faces, and possibly unequal sizes.
-- **Editing face colours** in app settings.
 
 Resolved:
+- Face colours, tiling, dashes, line and circle sizes and the grid are app settings (Settings → Style).
 - Zoom limits: zooming in up to an app setting (1000 px per unit by default, 500 to 10000), zooming out until the net
   takes 50% of the screen (§6.2).
 - Snapping: cut-line points snap to perimeter vertices, cuts and fold lines, and SHIFT restricts segments. No snapping

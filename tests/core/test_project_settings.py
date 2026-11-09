@@ -16,7 +16,7 @@ def test_default_is_7_100() -> None:
     assert format_threshold(DEFAULT_AREA_THRESHOLD) == "7.100"
 
 
-@pytest.mark.parametrize("value", [F(1, 1000), F(6), MAX_AREA_THRESHOLD])
+@pytest.mark.parametrize("value", [F(0), F(1, 1000), F(6), F(12), MAX_AREA_THRESHOLD])
 def test_valid(value: F) -> None:
     assert ProjectSettings(value).area_threshold == value
 
@@ -24,9 +24,9 @@ def test_valid(value: F) -> None:
 @pytest.mark.parametrize(
     ("value", "message"),
     [
-        (F(0), "must be positive"),
-        (F(-1), "must be positive"),
-        (F(12001, 1000), "can't exceed 12.000"),
+        (F(-1, 1000), "can't be negative"),
+        (F(-1), "can't be negative"),
+        (F(20001, 1000), "can't exceed 20.000"),
         (F(71001, 10000), "at most 3 decimals"),
         (F(1, 3), "at most 3 decimals"),
     ],

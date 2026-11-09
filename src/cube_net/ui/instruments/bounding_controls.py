@@ -2,19 +2,26 @@
 
 - The area of the minimum-area bounding rectangle is always shown, with 3 decimals.
 - The toggle button shows / hides the rectangle on the sheet.
+- Below the area: the project's target area, which the user can edit there.
 - When the area is below the project's threshold, the area and the rectangle turn green, and the button blinks:
-  regular and fully green in equal parts, 6 changes per second.
+  regular and fully green in equal parts, 6 changes per second. Or, if the user switched blinking off, the button is
+  just green all the time.
 """
 
 from fractions import Fraction
 
-from PyQt6.QtCore import QObject, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QLocale, QObject, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QLabel, QToolBar, QWidget
+from PyQt6.QtWidgets import QDoubleSpinBox, QLabel, QToolBar, QWidget
 
 from cube_net.core.bounding import BoundingRectangle
+from cube_net.core.project_settings import MAX_AREA_THRESHOLD, MIN_AREA_THRESHOLD
 from cube_net.ui import palette
 from cube_net.ui.sheet.bounding_item import BoundingItem
+
+# The target area has at most 3 decimals; the field's arrows change it by this much.
+TARGET_DECIMALS = 3
+TARGET_STEP = 0.1
 
 # 6 changes per second: 3 times regular, 3 times green.
 BLINK_INTERVAL_MS = round(1000 / 6)
@@ -28,18 +35,34 @@ class BoundingControls(QObject):
     # The rectangle was shown (True) or hidden (False) by the user.
     toggled = pyqtSignal(bool)
 
+    # The user entered another target area (a Fraction with at most 3 decimals).
+    target_changed = pyqtSignal(object)
+
     def __init__(self, toolbar: QToolBar, item: BoundingItem) -> None:
         super().__init__(toolbar)
         self._item = item
         self._rectangle: BoundingRectangle | None = None
         self._success = False
         self._blink_on = False
+        self._blink_enabled = True
 
         toolbar.addSeparator()
         self.label = QLabel(toolbar)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.label.setToolTip("Area of the smallest rectangle (any orientation) that contains the net")
         toolbar.addWidget(self.label)
+        self.target_label = QLabel("Target area", toolbar)
+        self.target_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        toolbar.addWidget(self.target_label)
+        self.target = QDoubleSpinBox(toolbar)
+        self.target.setLocale(QLocale.c())  # always 7.100, never 7,100
+        self.target.setDecimals(TARGET_DECIMALS)
+        self.target.setRange(float(MIN_AREA_THRESHOLD), float(MAX_AREA_THRESHOLD))
+        self.target.setSingleStep(TARGET_STEP)
+        self.target.setKeyboardTracking(False)  # a value is taken when it's entered, not at every digit typed
+        self.target.setToolTip("The project's goal: an area below this is a success")
+        self.target.valueChanged.connect(self._on_target)
+        toolbar.addWidget(self.target)
         self.action = QAction("Bounds", toolbar)
         self.action.setCheckable(True)
         self.action.setShortcut("B")
@@ -60,18 +83,38 @@ class BoundingControls(QObject):
     def blinking(self) -> bool:
         return self._timer.isActive()
 
+    def set_blink_enabled(self, enabled: bool) -> None:
+        """Whether the button blinks on success; if it doesn't, it's just green while the area is below the target."""
+        self._blink_enabled = enabled
+        self._show_success()
+
+    def set_target(self, threshold: Fraction) -> None:
+        """Show this target area (without taking that for a change by the user)."""
+        self.target.blockSignals(True)
+        self.target.setValue(float(threshold))
+        self.target.blockSignals(False)
+
+    def _on_target(self, value: float) -> None:
+        scale = 10**TARGET_DECIMALS
+        self.target_changed.emit(Fraction(round(value * scale), scale))
+
     def update(self, rectangle: BoundingRectangle, threshold: Fraction) -> None:
         """Show the area of `rectangle` and react to whether it's below `threshold`."""
         self._rectangle = rectangle
         self._success = rectangle.area < threshold
         self.label.setText(f"Area\n{format_area(rectangle.area)}")
         self.label.setStyleSheet(f"color: {palette.SUCCESS.name()}; font-weight: bold;" if self._success else "")
-        if self._success and not self._timer.isActive():
-            self._timer.start()
-        elif not self._success and self._timer.isActive():
-            self._timer.stop()
-            self._set_blink(False)
+        self._show_success()
         self._refresh_item()
+
+    def _show_success(self) -> None:
+        """The button: blinking or steadily green on success (as the user chose), regular otherwise."""
+        blink = self._success and self._blink_enabled
+        if blink and not self._timer.isActive():
+            self._timer.start()
+        elif not blink:
+            self._timer.stop()
+            self._set_blink(self._success)
 
     def _on_toggled(self, checked: bool) -> None:
         self._refresh_item()

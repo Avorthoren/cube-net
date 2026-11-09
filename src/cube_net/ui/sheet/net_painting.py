@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen, QTransform
 
-from cube_net.core.cube import DASH_LENGTH, Face, SurfacePoint, dash_layout
+from cube_net.core.cube import Face, SurfacePoint, dash_layout
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import VertexLabel
 from cube_net.ui import palette
@@ -50,14 +50,16 @@ def prepare_dashed(a: Vec, b: Vec, a_point: SurfacePoint, b_point: SurfacePoint)
     layout = dash_layout(a_point, b_point)
     colours = [palette.FACE_COLORS[f] if f is not None else palette.WHITE for f in layout.faces]
     start, end = (qa, qb) if layout.start == a_point else (qb, qa)
-    pieces = dash_pieces(length, float(layout.offset), float(DASH_LENGTH))
+    pieces = dash_pieces(length, float(layout.offset), 1 / (2 * net_style.DASHES_PER_EDGE))
     return DashedSegment(start, end, QPointF(-d.y(), d.x()) / length, length, pieces, (colours[0], colours[1]))
 
 
 def paint_prepared(
-    painter: QPainter, world: QTransform, segment: DashedSegment, inset: float, width: float = net_style.EDGE_WIDTH_PX
+    painter: QPainter, world: QTransform, segment: DashedSegment, inset: float, width: float | None = None
 ) -> None:
-    """Paint the line `width` px wide, shifted by `inset` units to its left. All dashes of a colour go in one call."""
+    """Paint the line `width` px wide (the edge width by default), shifted by `inset` units to its left. All dashes of
+    a colour go in one call."""
+    width = net_style.EDGE_WIDTH_PX if width is None else width
     shift = segment.normal * inset
     start, end = world.map(segment.start + shift), world.map(segment.end + shift)
     x, y = start.x(), start.y()
@@ -81,7 +83,7 @@ def paint_dashed(
     a_point: SurfacePoint,
     b_point: SurfacePoint,
     inset: float = 0.0,
-    width: float = net_style.EDGE_WIDTH_PX,
+    width: float | None = None,
 ) -> None:
     """A dashed line painted just once: see `prepare_dashed` and `paint_prepared`."""
     segment = prepare_dashed(a, b, a_point, b_point)

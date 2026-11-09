@@ -18,3 +18,13 @@ def collect_garbage_only_between_tests() -> Iterator[None]:
     gc.disable()
     yield
     gc.enable()
+
+
+@pytest.fixture(autouse=True)
+def default_style() -> Iterator[None]:
+    """A test may change the style (it's global): the next one starts with the defaults again."""
+    from cube_net.ui.style import DEFAULT_STYLE, apply_style
+
+    apply_style(DEFAULT_STYLE)
+    yield
+    apply_style(DEFAULT_STYLE)

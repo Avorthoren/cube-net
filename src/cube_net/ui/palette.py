@@ -16,7 +16,7 @@ GRID = QColor("#D3D3D3")
 FACE_COLORS = MappingProxyType(
     {
         # Default face colours from docs/idea.txt. Look-alike colours are on opposite faces (1-6, 2-5, 3-4).
-        # Will become an application setting later.
+        # The user can change them (Settings -> Style): `set_colors` puts the user's colours in place.
         1: QColor("#0057B8"),  # deep blue
         2: QColor("#F28E00"),  # orange
         3: QColor("#008A4B"),  # green
@@ -25,6 +25,9 @@ FACE_COLORS = MappingProxyType(
         6: QColor("#00A6D6"),  # cyan
     }
 )
+
+# Outline of the grid's preview square in the settings.
+SWATCH_OUTLINE = QColor("#000000")
 
 # Second colour of the hatch pattern and of dashes of cuts inside a face.
 WHITE = QColor("#FFFFFF")
@@ -78,3 +81,10 @@ USELESS_CUT = QColor("#000000")
 # SUCCESS).
 APPROVE_BUTTON_FILL = QColor("#FFFFFF")
 APPROVE_BUTTON_DISABLED = QColor("#9E9E9E")
+
+
+def set_colors(face_colors: dict[int, QColor], grid: QColor) -> None:
+    """Use these colours from now on."""
+    global FACE_COLORS, GRID
+    FACE_COLORS = MappingProxyType(dict(face_colors))
+    GRID = grid

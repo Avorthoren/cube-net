@@ -1,8 +1,9 @@
 """Main application window."""
 
+from fractions import Fraction
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QEvent, QObject, Qt
 from PyQt6.QtGui import QAction, QCloseEvent
 from PyQt6.QtWidgets import QApplication, QFileDialog, QLabel, QMainWindow, QMessageBox, QSizePolicy, QToolBar, QWidget
 
@@ -25,8 +26,6 @@ from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.instruments.bounding_controls import BoundingControls
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
-from cube_net.ui.preferences_dialog import ask_max_zoom
-from cube_net.ui.project_settings_dialog import ask_project_settings
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.session.session_recorder import SessionRecorder
 from cube_net.ui.session.snapshots import snapshot_text
@@ -39,12 +38,14 @@ from cube_net.ui.session.start import (
     start_session_recording,
     stop_session_recording,
 )
+from cube_net.ui.settings_panel.panel import SettingsPanel
 from cube_net.ui.sheet.bounding_item import BoundingItem
 from cube_net.ui.sheet.counterpart_blink import CounterpartBlink
 from cube_net.ui.sheet.cut_hover import CutHover
 from cube_net.ui.sheet.cut_tool import CutTool
 from cube_net.ui.sheet.ruler_tool import RulerTool
 from cube_net.ui.sheet.sheet_view import SheetView
+from cube_net.ui.style import Style, apply_style
 
 APP_TITLE = "Cube Net"
 NO_COORDINATES = "x: —   y: —"
@@ -57,6 +58,15 @@ UNTITLED = "Untitled"
 def format_point(p: Vec) -> str:
     """A point in session recordings: x,y with 3 decimals (the input rounding)."""
     return f"{float(p.x):.3f},{float(p.y):.3f}"
+
+
+def format_style(style: Style) -> str:
+    """The style in session recordings, in one word."""
+    return (
+        f"faces={'/'.join(style.face_colors)};tiling={style.hatch_columns}x{style.hatch_rows};"
+        f"dashes={style.dashes_per_edge};edge={style.edge_width};radius={style.vertex_radius};"
+        f"grid={style.grid_color}/{style.grid_width}"
+    )
 
 
 def format_ruler_total(total: float | None) -> str:
@@ -79,6 +89,7 @@ class MainWindow(QMainWindow):
         """`session_dir`: where session recordings go (default: the app data folder)."""
         super().__init__(parent)
         self.settings = AppSettings() if settings is None else settings
+        apply_style(self.settings.style)  # before anything gets drawn
         self.point_labels = PointLabels()
         self.project_settings = ProjectSettings()
 
@@ -173,7 +184,9 @@ class MainWindow(QMainWindow):
             self._record_snapshot(recorder)
         self._record_net_state(recorder)
         recorder.note("state", "labels", "on" if self.settings.show_vertex_labels else "off")
+        recorder.note("state", "blink", "on" if self.settings.blink_on_success else "off")
         recorder.note("state", "max_zoom", self.settings.max_zoom)
+        recorder.note("state", "style", format_style(self.settings.style))
         recorder.note("state", "window", f"{self.width()}x{self.height()}")
         recorder.note("state", "bounds", "on" if self.bounding.action.isChecked() else "off")
         ruler_points = [format_point(p) for p in self.ruler_tool.ruler.points]
@@ -219,6 +232,9 @@ class MainWindow(QMainWindow):
         scene.addItem(self.bounding_item)
         self.bounding = BoundingControls(toolbar, self.bounding_item)
         self.bounding.toggled.connect(self._on_bounding_toggled)
+        self.bounding.set_target(self.project_settings.area_threshold)
+        self.bounding.set_blink_enabled(self.settings.blink_on_success)
+        self.bounding.target_changed.connect(self._on_target_changed)
         self._update_bounding()
 
         spacer = QWidget(toolbar)  # pushes what follows to the bottom of the panel
@@ -262,7 +278,6 @@ class MainWindow(QMainWindow):
             self.open_action,
             self.save_action,
             self.save_as_action,
-            self.project_settings_action,
             self.quit_action,
         ):
             action.setEnabled(not dragging)  # they may ask something, and the mouse button is still down
@@ -391,6 +406,7 @@ class MainWindow(QMainWindow):
         self.editor.load(project.state, project.history)
         self.point_labels = project.labels
         self.project_settings = project.settings
+        self.bounding.set_target(project.settings.area_threshold)
         self.project_path = path
         self._saved_revision = project.history.revision
         self._saved_settings = project.settings
@@ -434,24 +450,59 @@ class MainWindow(QMainWindow):
         path = Path(name)
         return self.save_project_to(path if path.suffix else path.with_suffix(PROJECT_SUFFIX))
 
-    def _on_preferences(self) -> None:
-        max_zoom = ask_max_zoom(self, self.settings.max_zoom)
-        if max_zoom is None or max_zoom == self.settings.max_zoom:
-            return
+    def _on_blink_changed(self, blink: bool) -> None:
+        self.settings.blink_on_success = blink
+        self.bounding.set_blink_enabled(blink)
+        if self.recorder is not None:
+            self.recorder.note("settings", "blink", "on" if blink else "off")
+
+    def _on_max_zoom_changed(self, max_zoom: int) -> None:
         self.settings.max_zoom = max_zoom
         self.sheet_view.set_max_zoom(max_zoom)
         if self.recorder is not None:
             self.recorder.note("settings", "max_zoom", max_zoom)
 
-    def _on_project_settings(self) -> None:
-        settings = ask_project_settings(self, self.project_settings)
-        if settings is None or settings == self.project_settings:
+    def _on_style_changed(self, style: Style) -> None:
+        self.settings.style = style
+        apply_style(style)
+        item = self.sheet_view.net_item()
+        if item is not None:
+            item.restyle()
+        scene = self.sheet_view.scene()
+        if scene is not None:
+            scene.update()
+        if self.recorder is not None:
+            self.recorder.note("settings", "style", format_style(style))
+
+    def _on_target_changed(self, threshold: Fraction) -> None:
+        if threshold == self.project_settings.area_threshold:
             return
-        self.project_settings = settings
+        self.project_settings = ProjectSettings(threshold)
         self._update_bounding()
         self.setWindowModified(self.is_dirty)
         if self.recorder is not None:
-            self.recorder.note("project", "threshold", format_threshold(settings.area_threshold))
+            self.recorder.note("project", "threshold", format_threshold(threshold))
+
+    def _place_settings_panel(self) -> None:
+        screen = self.screen()
+        width = screen.geometry().width() if screen is not None else 1920
+        self.settings_panel.place_over(self.sheet_view.geometry(), width)
+
+    def _on_settings_toggled(self, shown: bool) -> None:
+        if shown:
+            self._place_settings_panel()
+        self.settings_panel.setVisible(shown)
+
+    def eventFilter(self, watched: QObject | None, event: QEvent | None) -> bool:
+        """The settings panel follows the sheet view when it moves or changes its size."""
+        if (
+            watched is self.sheet_view
+            and event is not None
+            and event.type() in (QEvent.Type.Resize, QEvent.Type.Move)
+            and self.settings_panel.isVisible()
+        ):
+            self._place_settings_panel()
+        return super().eventFilter(watched, event)
 
     def closeEvent(self, event: QCloseEvent | None) -> None:
         """Closing the window is quitting: the project goes away."""
@@ -485,28 +536,20 @@ class MainWindow(QMainWindow):
         self.save_as_action.triggered.connect(lambda: self._save_as())
         file_menu.addAction(self.save_as_action)
         file_menu.addSeparator()
-        self.project_settings_action = QAction("Project se&ttings...", self)
-        self.project_settings_action.triggered.connect(self._on_project_settings)
-        file_menu.addAction(self.project_settings_action)
-        file_menu.addSeparator()
         self.quit_action = QAction("&Quit", self)
         self.quit_action.setShortcut("Ctrl+Q")
         self.quit_action.triggered.connect(self.close)
         file_menu.addAction(self.quit_action)
 
-        view_menu = menu_bar.addMenu("&View")
-        assert view_menu is not None
-        self.show_labels_action = QAction("Show vertex &labels (development)", self)
+        # The switches of the Preferences tab of the settings panel.
+        self.show_labels_action = QAction("Show vertex labels", self)
         self.show_labels_action.setCheckable(True)
         self.show_labels_action.setChecked(self.settings.show_vertex_labels)
         self.show_labels_action.toggled.connect(self._on_show_labels_toggled)
-        view_menu.addAction(self.show_labels_action)
-
-        self.record_session_action = QAction("&Record session (development)", self)
+        self.record_session_action = QAction("Log sessions", self)
         self.record_session_action.setCheckable(True)
         self.record_session_action.setChecked(self.settings.record_session)
         self.record_session_action.toggled.connect(self._on_record_session_toggled)
-        view_menu.addAction(self.record_session_action)
 
         edit_menu = menu_bar.addMenu("&Edit")
         assert edit_menu is not None
@@ -524,10 +567,24 @@ class MainWindow(QMainWindow):
         self.redo_action.setShortcut("Ctrl+Y")
         self.redo_action.triggered.connect(self._on_redo)
         edit_menu.addAction(self.redo_action)
-        edit_menu.addSeparator()
-        self.preferences_action = QAction("&Preferences...", self)
-        self.preferences_action.triggered.connect(self._on_preferences)
-        edit_menu.addAction(self.preferences_action)
+
+        self.settings_panel = SettingsPanel(
+            self.show_labels_action,
+            self.record_session_action,
+            self.settings.blink_on_success,
+            self.settings.max_zoom,
+            self.settings.style,
+            self,
+        )
+        self.settings_panel.preferences.blink_changed.connect(self._on_blink_changed)
+        self.settings_panel.preferences.max_zoom_changed.connect(self._on_max_zoom_changed)
+        self.settings_panel.style_tab.style_changed.connect(self._on_style_changed)
+        self.sheet_view.installEventFilter(self)
+        self.settings_action = QAction("&Settings", self)
+        self.settings_action.setCheckable(True)
+        self.settings_action.setToolTip("Settings of the application (not of the project)")
+        self.settings_action.toggled.connect(self._on_settings_toggled)
+        menu_bar.addAction(self.settings_action)
         self.cut_tool.line_changed.connect(self._update_edit_actions)
         self._update_edit_actions()
 

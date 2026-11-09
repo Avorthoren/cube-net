@@ -6,11 +6,10 @@ from fractions import Fraction
 # The goal of the application: a net that fits into a rectangle of less than this area (docs/idea.txt).
 DEFAULT_AREA_THRESHOLD = Fraction(71, 10)
 
-# The smallest threshold there can be: it's positive, with at most 3 decimals.
-MIN_AREA_THRESHOLD = Fraction(1, 1000)
+# The allowed thresholds, with at most 3 decimals (0: nothing is ever below it).
+MIN_AREA_THRESHOLD = Fraction(0)
 
-# The threshold can't exceed the area of the default net's bounding rectangle.
-MAX_AREA_THRESHOLD = Fraction(12)
+MAX_AREA_THRESHOLD = Fraction(20)
 
 
 class ProjectSettingsError(ValueError):
@@ -26,8 +25,8 @@ class ProjectSettings:
         t = self.area_threshold
         if not isinstance(t, Fraction):
             raise ProjectSettingsError(f"area threshold must be a Fraction, got {type(t).__name__}: {t!r}")
-        if t <= 0:
-            raise ProjectSettingsError(f"area threshold must be positive, got {format_threshold(t)}")
+        if t < MIN_AREA_THRESHOLD:
+            raise ProjectSettingsError(f"area threshold can't be negative, got {format_threshold(t)}")
         if t > MAX_AREA_THRESHOLD:
             raise ProjectSettingsError(f"area threshold can't exceed {format_threshold(MAX_AREA_THRESHOLD)}")
         if (t * 1000).denominator != 1:

@@ -66,3 +66,39 @@ def test_max_zoom_nonsense_in_the_file_gives_the_default(tmp_path: Path, stored:
 
     QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat).setValue("view/max_zoom", stored)
     assert settings_at(tmp_path / "s.ini").max_zoom == DEFAULT_MAX_ZOOM
+
+
+def test_style_default_and_persisted(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from cube_net.ui.style import DEFAULT_STYLE
+
+    s = settings_at(tmp_path / "s.ini")
+    assert s.style == DEFAULT_STYLE
+    changed = replace(DEFAULT_STYLE, edge_width=7.5, hatch_columns=3, face_colors=("#000000",) * 6)
+    s.style = changed
+    assert settings_at(tmp_path / "s.ini").style == changed
+
+
+@pytest.mark.parametrize(
+    ("key", "stored"),
+    [("edge_width", "99"), ("edge_width", "abc"), ("hatch_rows", "0"), ("grid_color", "#xyz"), ("face_colors", "#1")],
+)
+def test_a_bad_style_value_gives_just_its_default(tmp_path: Path, key: str, stored: str) -> None:
+    from dataclasses import replace
+
+    from cube_net.ui.style import DEFAULT_STYLE
+
+    s = settings_at(tmp_path / "s.ini")
+    s.style = replace(DEFAULT_STYLE, vertex_radius=20.0)
+    QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat).setValue(f"style/{key}", stored)
+    style = settings_at(tmp_path / "s.ini").style
+    assert getattr(style, key) == getattr(DEFAULT_STYLE, key)
+    assert style.vertex_radius == 20.0
+
+
+def test_blink_on_success_default_and_persisted(tmp_path: Path) -> None:
+    s = settings_at(tmp_path / "s.ini")
+    assert s.blink_on_success is True
+    s.blink_on_success = False
+    assert settings_at(tmp_path / "s.ini").blink_on_success is False

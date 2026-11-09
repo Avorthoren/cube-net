@@ -50,10 +50,10 @@ share an edge or a vertex, so those colors never appear together in one dashed e
 colors of faces that meet in the same cube vertex are very different.
 And that assignment should be stable:
 i.e. each time new project it started, we have the same assignment. So, every time we start a new project, face
-denoted as `1` above should have the same color assigned to it and so on. Maybe later we'll add feature for user to
-edit those colors, but it will be not the property of the project, but the property of the whole application, so that
-after the change is applied we will se it in every opened project. So we just should create an array of 6 colors,
-and apply them to faces using numbers I used for default cube net.
+denoted as `1` above should have the same color assigned to it and so on. The user can edit those colors
+(Settings -> Style), but they are not the property of the project, but the property of the whole application, so that
+after the change is applied we see it in every opened project. So we just have an array of 6 colors, and apply them to
+faces using numbers I used for default cube net.
 Color assigned to a face should be used in 3 ways:
 1. A face should be colored using its color and a white color. How? Each face should be divided into 50 equal rectangles,
    with width of 1/10 unit and height 1/5 unit. Each rectangle should be divided diagonally into two triangles,
@@ -127,7 +127,7 @@ not inside the "instruments panel", and not in the "main area" outside the "shee
 And the zoom center should be where the mouse is.
 Zoom should be limited to:
 1. Zooming in: at most 1000 pixels per unit by default. It's an application setting (not a project's one) the user
-   can change (Edit -> Preferences...), from 500 to 10000 pixels per unit.
+   can change (Settings -> Preferences), from 500 to 10000 pixels per unit.
 2. Zooming out: until the cube net takes 50% of the screen (of its height or its width, whichever the net takes more
    of). It's never more than the zoom-in limit, so there's always a valid zoom. The net it's about is the one shown
    (the rearranged one in CUT_APPROVING); when the net changes, the zoom is brought within the new limits if needed.
@@ -198,8 +198,9 @@ Of course, both the area value and (if the button is ON) the rectangle itself sh
 entering CUT_APPROVING state or reverting to CUT_EDITING state. This means, feature should calculate bounding rectangle
 even for invalid rearrangements, that can't be approved.
 In addition to visual differences for the button when it's ON and OFF there should be additional feature:
-In the settings of the project there should be configurable variable with default value of 7.100 (positive number,
-max 3 decimals, max value is 12.000), and if current area of the bounding rectangle is less than that number, the
+In the settings of the project there should be configurable variable, the target area, with default value of 7.100
+(from 0 to 20, max 3 decimals). It's edited on the instruments panel, below the area: the text "Target area" and an
+input for it. If current area of the bounding rectangle is less than that number, the
 button should blink, changing states of regular look and being fully green in equal durations, changing 6 times per
 second (so, 3 times being regular and 3 times being green). And the color of the displayed area value should be green,
 together with color of the bounding rectangle. This "success" green must be clearly different from the green of
@@ -456,7 +457,30 @@ Few more notes:
    - Every rearrangement is a rotation by a multiple of 90 degrees plus a translation.
    - Application stores models of both the cube's surface (points on it, cuts) and of the cube net (images of those
      points and cuts on the plane). Labels (A_1, x_2, ...) are shown next to the vertices when the user switches them
-     on (View menu); that's also how several user-made vertices on the same cube's face are told apart. They stay in
+     on (Settings -> Preferences); that's also how several user-made vertices on the same cube's face are told apart. They stay in
      the app, off by default in releases (session logs too).
    - Snapping: points of the cut line snap to vertices and segments of the outer perimeter and to fold lines, and
      SHIFT restricts segments (see above). Nothing snaps to the unit grid, and ruler points don't snap.
+
+Settings
+In the menu bar, to the right of Edit, there's "Settings": it opens a panel on the right side of the window, over the
+sheet (the sheet doesn't move, and the rest of it works as usual); clicking "Settings" again hides it. These are
+settings of the whole application, not of a project. The panel takes at most a third of the screen's width; its tabs
+are listed horizontally, and scroll if they don't fit. Every change is applied and saved at once, and shows on the
+sheet at once.
+1. Preferences:
+   - Show vertex labels;
+   - Log sessions;
+   - Blink when target area achieved (on by default): if it's off, the
+     "Bounds" button doesn't blink on success, it's just green while the area is below the target;
+   - Maximum zoom (pixels per unit, see the zoom section).
+2. Style. Every section starts with its name and a "Restore default" button to the right of it, which restores the
+   defaults of just that section after the user confirms it.
+   - Faces colors: 6 lines, the k-th for face k: a 10x10 square of its colour, then '#' and an input for the colour as
+     RGB hex digits.
+   - Faces tiling: the number of columns and rows each face is divided into (now 10 x 5), integers from 1 to 30.
+   - Cuts and folds: number of dashes of each colour along a whole cube edge (1 to 30, now 10), and their thickness
+     in pixels (1 to 15, now 5). Hovered elements are drawn 1.5 times as thick, as before.
+   - Vertices: radius of the vertex circles in pixels (1 to 30, now 10).
+   - Grid: a white 10x10 square crossed in its middle by a vertical and a horizontal grid line, the colour of the
+     grid, and the thickness of its lines in pixels (0 to 5; 0: no grid).

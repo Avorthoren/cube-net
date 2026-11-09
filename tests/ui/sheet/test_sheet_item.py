@@ -33,3 +33,18 @@ def test_white_sheet_with_grid_on_integer_lines() -> None:
 
 def test_empty_sheet_paints_nothing() -> None:
     SheetItem().paint(None, None)
+
+
+def test_grid_width_and_colour_follow_the_style() -> None:
+    from dataclasses import replace
+
+    from cube_net.ui.style import DEFAULT_STYLE, apply_style
+
+    item = SheetItem(QRectF(5, 5, 13, 14))
+    apply_style(replace(DEFAULT_STYLE, grid_color="#FF0000", grid_width=3.0))
+    image = render(item, 20)
+    assert image.pixelColor(40, 30) == QColor("#FF0000")
+    assert image.pixelColor(41, 30) == QColor("#FF0000")  # 3 px wide
+    apply_style(replace(DEFAULT_STYLE, grid_width=0.0))
+    image = render(item, 20)
+    assert image.pixelColor(40, 30) == palette.SHEET  # no grid

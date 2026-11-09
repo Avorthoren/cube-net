@@ -93,3 +93,50 @@ def test_blinking_does_not_change_the_size_of_the_button(qtbot: QtBot) -> None:
         qtbot.wait(BLINK_INTERVAL_MS + 20)
         sizes.add((controls.button.size().width(), controls.button.size().height(), toolbar.sizeHint().width()))
     assert sizes == {(regular.width(), regular.height(), width)}
+
+
+def test_target_area(controls: BoundingControls, qtbot: QtBot) -> None:
+    controls.set_target(F(71, 10))
+    assert controls.target.text() == "7.100"
+    with qtbot.waitSignal(controls.target_changed) as blocker:
+        controls.target.setValue(6.789)
+    assert blocker.args == [F(6789, 1000)]
+
+
+def test_set_target_tells_nobody(controls: BoundingControls, qtbot: QtBot) -> None:
+    with qtbot.assertNotEmitted(controls.target_changed):
+        controls.set_target(F(5))
+
+
+class TestBlinkSwitchedOff:
+    def green(self, controls: BoundingControls) -> bool:
+        assert controls.button is not None
+        return palette.SUCCESS.name() in controls.button.styleSheet()
+
+    def test_steadily_green_on_success(self, controls: BoundingControls, qtbot: QtBot) -> None:
+        controls.set_blink_enabled(False)
+        controls.update(rect(F(5)), F(6))
+        assert controls.success and not controls.blinking
+        for _ in range(3):
+            assert self.green(controls)
+            qtbot.wait(BLINK_INTERVAL_MS + 20)
+
+    def test_regular_without_success(self, controls: BoundingControls) -> None:
+        controls.set_blink_enabled(False)
+        controls.update(rect(F(5)), F(6))
+        controls.update(rect(F(7)), F(6))
+        assert not self.green(controls)
+
+    def test_switching_it_while_successful(self, controls: BoundingControls) -> None:
+        controls.update(rect(F(5)), F(6))
+        assert controls.blinking
+        controls.set_blink_enabled(False)
+        assert not controls.blinking and self.green(controls)
+        controls.set_blink_enabled(True)
+        assert controls.blinking
+
+    def test_switching_it_without_success_changes_nothing(self, controls: BoundingControls) -> None:
+        controls.update(rect(F(7)), F(6))
+        controls.set_blink_enabled(False)
+        controls.set_blink_enabled(True)
+        assert not controls.blinking and not self.green(controls)

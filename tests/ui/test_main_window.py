@@ -9,8 +9,16 @@ from pytestqt.qtbot import QtBot
 from cube_net.core.geometry import Vec
 from cube_net.core.project import project_from_bytes
 from cube_net.ui.app_settings import AppSettings
-from cube_net.ui.main_window import APP_TITLE, NO_COORDINATES, MainWindow, format_coordinates, format_ruler_total
+from cube_net.ui.main_window import (
+    APP_TITLE,
+    NO_COORDINATES,
+    MainWindow,
+    format_coordinates,
+    format_ruler_total,
+    format_style,
+)
 from cube_net.ui.session.snapshots import snapshots_in
+from cube_net.ui.style import DEFAULT_STYLE
 
 
 @pytest.fixture(autouse=True)
@@ -107,10 +115,12 @@ def test_recording_started_at_launch(qtbot: QtBot, tmp_path: Path) -> None:
     assert window.recorder is not None
     lines = session_lines(window.recorder.log.path)
     assert "# recording started: at app launch" in lines
-    assert lines[-8:] == [
+    assert lines[-10:] == [
         "state net default",
         "state labels on",
+        "state blink on",
         "state max_zoom 1000",
+        f"state style {format_style(DEFAULT_STYLE)}",
         f"state window {window.width()}x{window.height()}",
         "state bounds off",
         "state ruler off",
@@ -2041,7 +2051,6 @@ class TestUnsavedChanges:
             window.open_action,
             window.save_action,
             window.save_as_action,
-            window.project_settings_action,
             window.quit_action,
         )
         assert all(action.isEnabled() for action in actions)
@@ -2058,7 +2067,7 @@ class TestUnsavedChanges:
         assert window.quit_action.shortcut().toString() == "Ctrl+Q"
         menu = window.new_action.associatedObjects()[0]
         texts = [a.text() for a in menu.actions() if not a.isSeparator()]  # type: ignore[union-attr]
-        assert texts == ["&New", "&Open...", "&Save", "Save &As...", "Project se&ttings...", "&Quit"]
+        assert texts == ["&New", "&Open...", "&Save", "Save &As...", "&Quit"]
 
     def test_recorded(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from cube_net.ui.save_changes_dialog import SaveChoice
@@ -2287,7 +2296,9 @@ class TestReopeningAtStart:
         other.stop_recording("test over")
 
 
-class TestProjectSettings:
+class TestTargetArea:
+    """The project's target area, edited on the instruments panel."""
+
     def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
         window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
         qtbot.addWidget(window)
@@ -2295,142 +2306,87 @@ class TestProjectSettings:
         qtbot.waitExposed(window)
         return window
 
-    def answer(self, monkeypatch: pytest.MonkeyPatch, *answers: object) -> list[object]:
-        """Make the dialog answer this; returns the settings it was shown."""
-        remaining = list(answers)
-        shown: list[object] = []
+    def enter(self, qtbot: QtBot, window: MainWindow, text: str) -> None:
+        """Type it into the field and press Enter, as the user does."""
+        line = window.bounding.target.lineEdit()
+        assert line is not None
+        line.selectAll()
+        qtbot.keyClicks(line, text)
+        qtbot.keyClick(line, Qt.Key.Key_Return)
 
-        def ask(_parent: object, settings: object) -> object:
-            shown.append(settings)
-            return remaining.pop(0)
-
-        monkeypatch.setattr("cube_net.ui.main_window.ask_project_settings", ask)
-        return shown
-
-    def settings(self, threshold: int) -> object:
-        from fractions import Fraction
-
-        from cube_net.core.project_settings import ProjectSettings
-
-        return ProjectSettings(Fraction(threshold))
-
-    def test_it_shows_the_current_ones(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_it_shows_the_project_s_one(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
-        shown = self.answer(monkeypatch, None)
-        window.project_settings_action.trigger()
-        assert shown == [window.project_settings]
+        assert window.bounding.target.text() == "7.100"
+        assert window.bounding.target_label.text() == "Target area"
 
-    def test_a_new_threshold_is_used_at_once(
-        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from fractions import Fraction
-
+    def test_its_range_and_decimals(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
-        used: list[Fraction] = []
-        original = window.bounding.update
+        field = window.bounding.target
+        assert (field.minimum(), field.maximum(), field.decimals()) == (0, 20, 3)
 
-        def spy(rectangle: object, threshold: Fraction) -> None:
-            used.append(threshold)
-            original(rectangle, threshold)  # type: ignore[arg-type]
-
-        monkeypatch.setattr(window.bounding, "update", spy)
-        self.answer(monkeypatch, self.settings(5))
-        window.project_settings_action.trigger()
-        assert window.project_settings == self.settings(5)
-        assert used == [Fraction(5)]
-
-    def test_cancelled_changes_nothing(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_an_entered_value_is_used_at_once(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
-        before = window.project_settings
-        self.answer(monkeypatch, None)
-        window.project_settings_action.trigger()
-        assert window.project_settings is before
-        assert not window.is_dirty
+        assert not window.bounding.success
+        self.enter(qtbot, window, "12.5")  # the cross has 12.000
+        assert window.project_settings.area_threshold == F(25, 2)
+        assert window.bounding.success
+        self.enter(qtbot, window, "6.789")
+        assert window.project_settings.area_threshold == F(6789, 1000)
+        assert not window.bounding.success
 
-    def test_the_same_value_is_not_a_change(
-        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from cube_net.core.project_settings import ProjectSettings
-
+    def test_digits_count_only_once_entered(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
-        self.answer(monkeypatch, ProjectSettings())
-        window.project_settings_action.trigger()
-        assert not window.is_dirty
-        assert not window.isWindowModified()
+        line = window.bounding.target.lineEdit()
+        assert line is not None
+        line.selectAll()
+        qtbot.keyClicks(line, "13")
+        assert window.project_settings.area_threshold == F(71, 10)
 
-    def test_a_change_is_an_unsaved_change(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_out_of_range_cannot_get_through(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
-        self.answer(monkeypatch, self.settings(5))
-        window.project_settings_action.trigger()
-        assert window.is_dirty
-        assert window.isWindowModified()
+        self.enter(qtbot, window, "99")
+        assert 0 <= window.project_settings.area_threshold <= 20
+
+    def test_a_change_is_an_unsaved_change(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.enter(qtbot, window, "5")
+        assert window.is_dirty and window.isWindowModified()
         assert window.save_project_to(tmp_path / "cube.cubenet")
         assert not window.is_dirty
-        assert not window.isWindowModified()
+        self.enter(qtbot, window, "6")
+        self.enter(qtbot, window, "5")
+        assert not window.is_dirty  # back to what was saved
 
-    def test_back_to_what_was_saved_is_no_change(
-        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from cube_net.core.project_settings import ProjectSettings
-
+    def test_saved_with_the_project_and_shown_when_opened(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
-        self.answer(monkeypatch, self.settings(5), ProjectSettings())
-        window.project_settings_action.trigger()
-        window.project_settings_action.trigger()
-        assert not window.is_dirty
-        assert not window.isWindowModified()
-
-    def test_quitting_asks_about_it(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        from cube_net.ui.save_changes_dialog import SaveChoice
-
-        window = self.make(qtbot, tmp_path)
-        self.answer(monkeypatch, self.settings(5))
-        window.project_settings_action.trigger()
-        asked: list[str] = []
-
-        def ask(_parent: object, name: str) -> SaveChoice:
-            asked.append(name)
-            return SaveChoice.DISCARD
-
-        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", ask)
-        assert window.close()
-        assert asked == ["Untitled"]
-
-    def test_it_is_saved_with_the_project(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        window = self.make(qtbot, tmp_path)
-        self.answer(monkeypatch, self.settings(5))
-        window.project_settings_action.trigger()
+        self.enter(qtbot, window, "5")
         path = tmp_path / "cube.cubenet"
         window.save_project_to(path)
         other = self.make(qtbot, tmp_path)
         other.open_project_from(path)
-        assert other.project_settings == self.settings(5)
+        assert other.project_settings.area_threshold == 5
+        assert other.bounding.target.text() == "5.000"
+        assert not other.is_dirty
+        other.start_new_project()
+        assert other.bounding.target.text() == "7.100"
         assert not other.is_dirty
 
-    def test_undo_does_not_touch_it(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_undo_does_not_touch_it(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
         window.sheet_view.left_pressed.emit(10.0, 13.0)
-        self.answer(monkeypatch, self.settings(5))
-        window.project_settings_action.trigger()
+        self.enter(qtbot, window, "5")
         window.undo_action.trigger()
-        assert window.project_settings == self.settings(5)
+        assert window.project_settings.area_threshold == 5
 
-    def test_new_and_open_bring_their_own(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        from cube_net.core.project_settings import ProjectSettings
-
+    def test_no_more_project_settings_in_the_file_menu(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
-        self.answer(monkeypatch, self.settings(5))
-        window.project_settings_action.trigger()
-        window.start_new_project()
-        assert window.project_settings == ProjectSettings()
-        assert not window.is_dirty
+        assert not hasattr(window, "project_settings_action")
 
-    def test_recorded(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_recorded(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path, record=True)
         assert window.recorder is not None
         assert "state threshold 7.100" in session_lines(window.recorder.log.path)
-        self.answer(monkeypatch, self.settings(5))
-        window.project_settings_action.trigger()
+        self.enter(qtbot, window, "5")
         assert session_lines(window.recorder.log.path)[-1] == "project threshold 5.000"
         window.stop_recording("test over")
 
@@ -2794,47 +2750,109 @@ class TestSnapshotsAtLaunch:
         window.stop_recording("test over")
 
 
-class TestPreferences:
+class TestSettingsPanel:
     def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
         window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
         qtbot.addWidget(window)
+        window.resize(1200, 800)
         window.show()
         qtbot.waitExposed(window)
         return window
 
-    def answer(self, monkeypatch: pytest.MonkeyPatch, value: int | None) -> None:
-        monkeypatch.setattr("cube_net.ui.main_window.ask_max_zoom", lambda *_: value)
+    def test_the_menu_bar(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        menu_bar = window.menuBar()
+        assert menu_bar is not None
+        assert [a.text() for a in menu_bar.actions()] == ["&File", "&Edit", "&Settings"]
 
-    def test_the_setting_is_used_from_the_start(self, qtbot: QtBot, tmp_path: Path) -> None:
-        settings = settings_in(tmp_path, record=False)
-        settings.max_zoom = 3000
-        window = MainWindow(settings=settings, session_dir=tmp_path)
-        qtbot.addWidget(window)
-        assert window.sheet_view.zoom_limits()[1] == 3000
+    def test_it_opens_and_closes(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        panel = window.settings_panel
+        assert not panel.isVisible()
+        window.settings_action.trigger()
+        assert panel.isVisible()
+        window.settings_action.trigger()
+        assert not panel.isVisible()
 
-    def test_a_new_value_is_saved_and_used_at_once(
-        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_the_tabs(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        tabs = window.settings_panel.tabs
+        assert [tabs.tabText(i) for i in range(tabs.count())] == ["Preferences", "Style"]
+
+    def test_over_the_right_of_the_sheet_and_the_sheet_stays(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from PyQt6.QtCore import QPointF
+
+        window = self.make(qtbot, tmp_path)
+        view = window.sheet_view
+        before = view.from_sheet(QPointF(11, 12))
+        window.settings_action.trigger()
+        panel = window.settings_panel
+        assert panel.geometry().right() == view.geometry().right()
+        assert panel.geometry().top() == view.geometry().top()
+        assert panel.geometry().height() == view.geometry().height()
+        screen = window.screen()
+        assert screen is not None
+        assert panel.width() <= screen.geometry().width() / 3
+        assert view.from_sheet(QPointF(11, 12)) == before
+
+    def test_it_follows_the_window(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.settings_action.trigger()
+        window.resize(1000, 700)
+        qtbot.waitUntil(lambda: window.settings_panel.geometry().right() == window.sheet_view.geometry().right())
+        assert window.settings_panel.height() == window.sheet_view.height()
+
+    def test_the_sheet_works_while_it_is_open(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.settings_action.trigger()
+        window.sheet_view.left_pressed.emit(10.0, 13.0)
+        assert window.editor.state.value == "cutting"
+
+    def test_preferences_switches_are_the_same_as_before(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        tab = window.settings_panel.preferences
+        assert tab.show_labels.text() == "Show vertex labels"
+        assert tab.log_sessions.text() == "Log sessions"
+        assert tab.show_labels.isChecked() == window.settings.show_vertex_labels
+        tab.show_labels.setChecked(False)
+        assert not window.show_labels_action.isChecked()
+        assert window.settings.show_vertex_labels is False
+        item = window.sheet_view.net_item()
+        assert item is not None and item.labels() is None
+        window.show_labels_action.setChecked(True)
+        assert tab.show_labels.isChecked()
+
+    def test_log_sessions(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        tab = window.settings_panel.preferences
+        assert window.recorder is None and not tab.log_sessions.isChecked()
+        tab.log_sessions.setChecked(True)
+        assert window.recorder is not None
+        tab.log_sessions.setChecked(False)
+        assert window.recorder is None
+
+    def test_max_zoom(self, qtbot: QtBot, tmp_path: Path) -> None:
         from PyQt6.QtCore import QPointF
 
         window = self.make(qtbot, tmp_path, record=True)
         view = window.sheet_view
         view.zoom_by(1e6, QPointF(100, 100))
         assert view.scale_factor() == pytest.approx(1000)
-        self.answer(monkeypatch, 700)
-        window.preferences_action.trigger()
+        window.settings_panel.preferences.max_zoom.setValue(700)
         assert window.settings.max_zoom == 700
         assert view.scale_factor() == pytest.approx(700)
         assert window.recorder is not None
         assert session_lines(window.recorder.log.path)[-1] == "settings max_zoom 700"
+        assert not window.is_dirty  # not part of the project
         window.stop_recording("test over")
 
-    def test_cancelled_changes_nothing(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        window = self.make(qtbot, tmp_path)
-        self.answer(monkeypatch, None)
-        window.preferences_action.trigger()
-        assert window.settings.max_zoom == 1000
-        assert not window.is_dirty  # not part of the project
+    def test_the_max_zoom_setting_is_used_from_the_start(self, qtbot: QtBot, tmp_path: Path) -> None:
+        settings = settings_in(tmp_path, record=False)
+        settings.max_zoom = 3000
+        window = MainWindow(settings=settings, session_dir=tmp_path)
+        qtbot.addWidget(window)
+        assert window.sheet_view.zoom_limits()[1] == 3000
+        assert window.settings_panel.preferences.max_zoom.value() == 3000
 
     def test_the_start_zoom_is_as_far_out_as_it_goes(self, qtbot: QtBot, tmp_path: Path) -> None:
         """The default net takes 50% of the screen height at the start, which is also the zoom-out limit."""
@@ -2853,4 +2871,120 @@ class TestPreferences:
         view.left_pressed.emit(12 - h, 13.5)
         view.left_pressed.emit(11.75, 10 + h)
         assert window.editor.state.value == "cut_approving"
-        assert view.zoom_limits()[0] < before  # the rearranged net is taller: it can go further out
+        assert view.zoom_limits()[0] < before
+
+
+class TestStyle:
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def test_a_change_is_saved_and_used_at_once(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.ui import palette
+        from cube_net.ui.sheet import net_style
+
+        window = self.make(qtbot, tmp_path, record=True)
+        tab = window.settings_panel.style_tab
+        tab.edge_width.setValue(8)
+        assert net_style.EDGE_WIDTH_PX == 8
+        assert net_style.CUT_HITBOX_PX == 12  # still 1.5 times as wide: a hovered cut is drawn this wide too
+        assert window.settings.style.edge_width == 8
+        tab.face_fields[0].edit.setText("")
+        qtbot.keyClicks(tab.face_fields[0].edit, "123abc")
+        assert palette.FACE_COLORS[1].name().upper() == "#123ABC"
+        assert tab.face_swatches[0].color().name().upper() == "#123ABC"
+        assert window.recorder is not None
+        assert session_lines(window.recorder.log.path)[-1].startswith("settings style faces=#123ABC/")
+        assert not window.is_dirty
+        window.stop_recording("test over")
+
+    def test_it_comes_back_next_time(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.ui.sheet import net_style
+
+        window = self.make(qtbot, tmp_path)
+        window.settings_panel.style_tab.vertex_radius.setValue(15)
+        window.close()
+        net_style.set_sizes(5.0, 10.0, 10, 5, 10, 1.0)
+        other = self.make(qtbot, tmp_path)
+        assert net_style.VERTEX_RADIUS_PX == 15
+        assert other.settings_panel.style_tab.vertex_radius.value() == 15
+
+    def test_the_hitbox_follows_the_thickness(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.ui.sheet import net_style
+
+        window = self.make(qtbot, tmp_path)
+        window.settings_panel.style_tab.edge_width.setValue(15)
+        h = net_style.CUT_HITBOX_PX * 0.9 / window.sheet_view.scale_factor()
+        window.sheet_view.mouse_moved.emit(10 + h, 12.5)
+        assert window.cut_hover.hovered() is not None
+
+    def test_the_net_is_painted_anew(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        before = window.sheet_view.viewport().grab().toImage()
+        window.settings_panel.style_tab.hatch_columns.setValue(3)
+        qtbot.wait(20)
+        after = window.sheet_view.viewport().grab().toImage()
+        assert before != after
+
+    def test_restore_default_after_yes(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.settings_panel import style_tab as tabs
+        from cube_net.ui.style import DEFAULT_STYLE
+
+        window = self.make(qtbot, tmp_path)
+        tab = window.settings_panel.style_tab
+        tab.hatch_columns.setValue(3)
+        tab.edge_width.setValue(9)
+        asked: list[str] = []
+        monkeypatch.setattr("cube_net.ui.settings_panel.section.confirm_restore", lambda _p, name: asked.append(name))
+        tab.sections[tabs.FACE_TILING].restore_button.click()
+        assert asked == ["Faces tiling"]
+        assert window.settings.style.hatch_columns == 3  # said no
+        monkeypatch.setattr("cube_net.ui.settings_panel.section.confirm_restore", lambda *_: True)
+        tab.sections[tabs.FACE_TILING].restore_button.click()
+        assert window.settings.style.hatch_columns == DEFAULT_STYLE.hatch_columns
+        assert tab.hatch_columns.value() == DEFAULT_STYLE.hatch_columns
+        assert window.settings.style.edge_width == 9  # only that section
+
+
+class TestBlinkSetting:
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def succeed(self, window: MainWindow) -> None:
+        window.bounding.target.setValue(13)  # the cross has 12.000
+
+    def test_on_by_default(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert window.settings_panel.preferences.blink.isChecked()
+        self.succeed(window)
+        assert window.bounding.blinking
+
+    def test_off_means_steadily_green(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, record=True)
+        self.succeed(window)
+        window.settings_panel.preferences.blink.setChecked(False)
+        assert not window.bounding.blinking and window.bounding.success
+        assert window.settings.blink_on_success is False
+        window.save_project_to(tmp_path / "cube.cubenet")
+        window.settings_panel.preferences.blink.setChecked(True)
+        assert not window.is_dirty  # an app setting, not the project's
+        window.settings_panel.preferences.blink.setChecked(False)
+        assert window.recorder is not None
+        assert session_lines(window.recorder.log.path)[-1] == "settings blink off"
+        window.stop_recording("test over")
+
+    def test_used_from_the_start(self, qtbot: QtBot, tmp_path: Path) -> None:
+        settings = settings_in(tmp_path, record=False)
+        settings.blink_on_success = False
+        window = MainWindow(settings=settings, session_dir=tmp_path)
+        qtbot.addWidget(window)
+        assert not window.settings_panel.preferences.blink.isChecked()
+        self.succeed(window)
+        assert not window.bounding.blinking and window.bounding.success

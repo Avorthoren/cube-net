@@ -1,4 +1,8 @@
-"""Sizes of the net's drawing elements, in screen pixels (constant at any zoom, docs/idea.txt)."""
+"""Sizes of the net's drawing elements, in screen pixels (constant at any zoom, docs/idea.txt).
+
+The values here are the defaults. Some of them are app settings the user can change (Settings -> Style); `set_sizes`
+puts the user's values in place, and everything reads them from here when it paints or hit-tests.
+"""
 
 # Width of fold edges and cuts (cuts lie fully inside their face).
 EDGE_WIDTH_PX = 5.0
@@ -10,14 +14,21 @@ VERTEX_RADIUS_PX = 10.0
 HATCH_COLUMNS = 10
 HATCH_ROWS = 5
 
+# A whole cube edge has this many dashes of each of its 2 colours.
+DASHES_PER_EDGE = 10
+
+# Width of the grid lines on the sheet (0: no grid).
+GRID_WIDTH_PX = 1.0
+
 # Pixel size of debug vertex labels (the image index is drawn smaller, as a subscript).
 LABEL_FONT_PX = 13
 
 # Gap between a vertex circle and its label.
 LABEL_GAP_PX = 3.0
 
-# Hitbox of a cut: a strip of this width along the cut, inside its face (wider than the drawn line, easier to hit).
-CUT_HITBOX_PX = EDGE_WIDTH_PX * 1.5
+# Hitbox of a cut: a strip this many times as wide as the drawn line along the cut, inside its face (easier to hit).
+CUT_HITBOX_FACTOR = 1.5
+CUT_HITBOX_PX = EDGE_WIDTH_PX * CUT_HITBOX_FACTOR
 
 # A highlighted cut (under the mouse) is drawn this wide, still fully inside its face.
 HIGHLIGHT_WIDTH_PX = CUT_HITBOX_PX
@@ -55,3 +66,21 @@ APPROVE_BUTTON_RADIUS_PX = 14.0
 
 # Width of the check mark or the "x" on that button, and of its outline.
 APPROVE_CHECK_WIDTH_PX = 3.0
+
+
+def set_sizes(
+    edge_width: float,
+    vertex_radius: float,
+    hatch_columns: int,
+    hatch_rows: int,
+    dashes_per_edge: int,
+    grid_width: float,
+) -> None:
+    """Use these values from now on; the sizes that follow from the edge width follow it."""
+    global EDGE_WIDTH_PX, VERTEX_RADIUS_PX, HATCH_COLUMNS, HATCH_ROWS, DASHES_PER_EDGE, GRID_WIDTH_PX
+    global CUT_HITBOX_PX, HIGHLIGHT_WIDTH_PX, FOLD_HITBOX_PX
+    EDGE_WIDTH_PX, VERTEX_RADIUS_PX, GRID_WIDTH_PX = edge_width, vertex_radius, grid_width
+    HATCH_COLUMNS, HATCH_ROWS, DASHES_PER_EDGE = hatch_columns, hatch_rows, dashes_per_edge
+    CUT_HITBOX_PX = EDGE_WIDTH_PX * CUT_HITBOX_FACTOR
+    HIGHLIGHT_WIDTH_PX = CUT_HITBOX_PX
+    FOLD_HITBOX_PX = CUT_HITBOX_PX

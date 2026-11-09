@@ -86,6 +86,12 @@ class NetItem(QGraphicsItem):
         self._outward = None
         self.update()
 
+    def restyle(self) -> None:
+        """The style changed (colours, sizes, tiling, dashes): forget what was worked out with the old one."""
+        self._hatch = hatch_path()
+        self._dashes = {}
+        self.update()
+
     def set_highlight(self, cut: HalfEdge | None) -> None:
         """Draw this cut highlighted (None: no highlight)."""
         if cut is not self._highlight:
@@ -225,7 +231,7 @@ class NetItem(QGraphicsItem):
         return polygon
 
     def _paint_dashed(
-        self, painter: QPainter, world: QTransform, he: HalfEdge, inset: float, width: float = net_style.EDGE_WIDTH_PX
+        self, painter: QPainter, world: QTransform, he: HalfEdge, inset: float, width: float | None = None
     ) -> None:
         """Dashed line of `width` px along `he`, shifted by `inset` units to its left (into its region)."""
         if he in self._dashes:
