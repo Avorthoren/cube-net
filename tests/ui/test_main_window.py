@@ -3062,3 +3062,34 @@ class TestSettingsPanelOpenAtStart:
         assert window.settings.settings_open is False
         window.settings_action.trigger()
         assert window.settings_panel.isVisible()
+
+
+def test_no_number_field_of_the_window_takes_the_wheel(qtbot: QtBot, tmp_path: Path) -> None:
+    from PyQt6.QtCore import QPoint, QPointF
+    from PyQt6.QtGui import QWheelEvent
+    from PyQt6.QtWidgets import QAbstractSpinBox, QApplication
+
+    window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+    qtbot.addWidget(window)
+    window.show()
+    window.settings_action.trigger()
+    qtbot.waitExposed(window)
+    fields = window.findChildren(QAbstractSpinBox)
+    assert window.bounding.target in fields and window.settings_panel.style_tab.edge_width in fields
+    assert len(fields) == 8  # target area, max zoom, tiling (2), dashes, thickness, radius, grid
+    before = [field.text() for field in fields]
+    for field in fields:
+        pos = QPointF(field.width() / 2, field.height() / 2)
+        event = QWheelEvent(
+            pos,
+            field.mapToGlobal(pos),
+            QPoint(0, 0),
+            QPoint(0, 360),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False,
+        )
+        QApplication.sendEvent(field, event)
+    assert [field.text() for field in fields] == before
+    assert not window.is_dirty

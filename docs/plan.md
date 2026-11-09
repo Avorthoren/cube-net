@@ -319,6 +319,8 @@ Undo and redo are available in every state. Each public method either performs o
   - Ruler toggle;
   - the area label (3 decimals), the project's target area (an input, 0 to 20, 3 decimals), the bounding-rectangle
     toggle;
+- **Number fields** ignore the mouse wheel (`ignore_wheel`, applied to every one of the main window): scrolling over
+  one passes the wheel on to what's behind it.
 - **Style:** the defaults are in `net_style.py` and `palette.py`; `ui/style/` holds the user's `Style`, and
   `apply_style` puts it into those modules, which everything reads when it paints or hit-tests.
 - **Vertex labels and session logs** (Settings → Preferences) are app settings (`AppSettings`, stored with `QSettings`).

@@ -5,7 +5,17 @@ from pathlib import Path
 
 from PyQt6.QtCore import QEvent, QObject, Qt
 from PyQt6.QtGui import QAction, QCloseEvent
-from PyQt6.QtWidgets import QApplication, QFileDialog, QLabel, QMainWindow, QMessageBox, QSizePolicy, QToolBar, QWidget
+from PyQt6.QtWidgets import (
+    QAbstractSpinBox,
+    QApplication,
+    QFileDialog,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QSizePolicy,
+    QToolBar,
+    QWidget,
+)
 
 from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.cutting import CutLine
@@ -26,6 +36,7 @@ from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.instruments.bounding_controls import BoundingControls
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
+from cube_net.ui.no_wheel import ignore_wheel
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.session.session_recorder import SessionRecorder
 from cube_net.ui.session.snapshots import snapshot_text
@@ -139,6 +150,7 @@ class MainWindow(QMainWindow):
 
         self._create_instruments()
         self._create_menus()
+        ignore_wheel(self.findChildren(QAbstractSpinBox), self)  # every number field of the window
         self._update_title()
         self._update_vertex_labels()
         self._resize_to_screen()
