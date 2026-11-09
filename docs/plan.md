@@ -326,7 +326,9 @@ Undo and redo are available in every state. Each public method either performs o
 - **Zoom:**
   - mouse wheel, only while the cursor is over the sheet rectangle;
   - the point under the cursor stays fixed;
-  - the provisional limits from `idea.txt` are implemented as one replaceable function.
+  - limits (`zoom.zoom_limits`): in, up to the app setting `max_zoom` (Edit → Preferences…); out, until the shown
+    net takes `MIN_ZOOM_NET_SCREEN_FRACTION` (50%) of the screen, never beyond the zoom-in limit. When the net or the
+    setting changes, the zoom is brought within the limits around the middle of the view.
 - **Initial zoom:** the default net (4 units tall) takes 50% of the *screen* height, using the screen the window is
   on.
 - **Pan:**
@@ -466,10 +468,11 @@ mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dr
 
 Deferred on purpose (per `idea.txt`):
 - **Vertex circle sectors**: their orientation towards net faces, and possibly unequal sizes.
-- **Zoom limits**: revisit the provisional rules.
 - **Editing face colours** in app settings.
 
 Resolved:
+- Zoom limits: zooming in up to an app setting (1000 px per unit by default, 500 to 10000), zooming out until the net
+  takes 50% of the screen (§6.2).
 - Snapping: cut-line points snap to perimeter vertices, cuts and fold lines, and SHIFT restricts segments. No snapping
   to the unit grid, none for the ruler (only its SHIFT restriction, M10).
 - Several user-made vertices on the same face are told apart by the vertex labels, which stay in the app (off by

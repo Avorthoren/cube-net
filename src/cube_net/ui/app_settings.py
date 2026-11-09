@@ -4,6 +4,8 @@ from pathlib import Path
 
 from PyQt6.QtCore import QSettings
 
+from cube_net.ui.sheet.zoom import DEFAULT_MAX_ZOOM, MAX_ZOOM_RANGE
+
 # Labels (A_1, x_2, ...) next to all vertices: they stay in the app (they tell apart vertices on the same face).
 # ON while the app is being developed; False for releases.
 DEFAULT_SHOW_VERTEX_LABELS = True
@@ -15,6 +17,7 @@ DEFAULT_RECORD_SESSION = True
 _SHOW_VERTEX_LABELS = "debug/show_vertex_labels"
 _RECORD_SESSION = "debug/record_session"
 _LAST_PROJECT = "project/last"
+_MAX_ZOOM = "view/max_zoom"
 
 
 class AppSettings:
@@ -51,6 +54,24 @@ class AppSettings:
         else:
             self._settings.setValue(_LAST_PROJECT, str(path))
         self._settings.sync()  # it matters most when the app doesn't get to end normally
+
+    @property
+    def max_zoom(self) -> int:
+        """How far in the sheet can be zoomed: pixels per unit. A stored value that's out of range or not a number gives
+        the default."""
+        try:
+            value = int(self._settings.value(_MAX_ZOOM, DEFAULT_MAX_ZOOM))
+        except TypeError, ValueError:
+            return DEFAULT_MAX_ZOOM
+        low, high = MAX_ZOOM_RANGE
+        return value if low <= value <= high else DEFAULT_MAX_ZOOM
+
+    @max_zoom.setter
+    def max_zoom(self, value: int) -> None:
+        low, high = MAX_ZOOM_RANGE
+        if not low <= value <= high:
+            raise ValueError(f"the maximum zoom must be from {low} to {high} pixels per unit, got {value}")
+        self._settings.setValue(_MAX_ZOOM, value)
 
     def _bool(self, key: str, default: bool) -> bool:
         return bool(self._settings.value(key, default, type=bool))

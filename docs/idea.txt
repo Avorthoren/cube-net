@@ -126,9 +126,11 @@ of the screen height. Not the viewport, but the whole screen. Zooming should wor
 not inside the "instruments panel", and not in the "main area" outside the "sheet".
 And the zoom center should be where the mouse is.
 Zoom should be limited to:
-1. The smallest between sheet width/height should be at least 10% of the screen height.
-2. Screen height should be ta least 5% of the biggest between sheet width/height.
-These limits are provisional (just to prevent the image from "blowing up"), we'll revisit them later.
+1. Zooming in: at most 1000 pixels per unit by default. It's an application setting (not a project's one) the user
+   can change (Edit -> Preferences...), from 500 to 10000 pixels per unit.
+2. Zooming out: until the cube net takes 50% of the screen (of its height or its width, whichever the net takes more
+   of). It's never more than the zoom-in limit, so there's always a valid zoom. The net it's about is the one shown
+   (the rearranged one in CUT_APPROVING); when the net changes, the zoom is brought within the new limits if needed.
 Panning:
 1. The main area should have scroll bars.
 2. Click-and-hold mouse1 (no additional keys) and drag pans the view. It works whenever such click doesn't mean anything

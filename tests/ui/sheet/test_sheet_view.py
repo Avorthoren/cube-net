@@ -141,10 +141,32 @@ class TestSheet:
         r = view.sheet_rect()
         assert (r.left(), r.top(), r.width(), r.height()) == (5, 5, 13, 14)
 
-    def test_new_sheet_clamps_zoom(self, view: SheetView) -> None:
+    def test_lower_max_zoom_zooms_out_to_it(self, view: SheetView) -> None:
         view.zoom_by(1e6, center_of_viewport(view))
-        view.set_sheet(Box(Vec(0, 0), Vec(100, 100)))  # much bigger sheet: lower zoom-in limit
-        assert view.scale_factor() == pytest.approx(view.zoom_limits()[1])
+        view.set_max_zoom(600)
+        assert view.zoom_limits()[1] == 600
+        assert view.scale_factor() == pytest.approx(600)
+
+    def test_a_smaller_net_can_zoom_out_less(self, view: SheetView) -> None:
+        from cube_net.core.net import default_net
+
+        view.set_net(default_net())
+        low, _ = view.zoom_limits()
+        screen = view.screen()
+        assert screen is not None
+        w, h = screen.geometry().width(), screen.geometry().height()
+        assert max(3 * low / w, 4 * low / h) == pytest.approx(0.5)  # the default net is 3 x 4
+        view.zoom_by(1e-9, center_of_viewport(view))
+        assert view.scale_factor() == pytest.approx(low)
+
+    def test_a_new_net_brings_the_zoom_within_its_limits(self, view: SheetView) -> None:
+        from cube_net.core.net import default_net
+
+        view.zoom_by(1e-9, center_of_viewport(view))  # as far out as the sheet allows, before there's a net
+        before = view.scale_factor()
+        view.set_net(default_net())
+        assert view.scale_factor() > before
+        assert view.scale_factor() == pytest.approx(view.zoom_limits()[0])
 
 
 class TestNet:

@@ -25,6 +25,7 @@ from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.instruments.bounding_controls import BoundingControls
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
+from cube_net.ui.preferences_dialog import ask_max_zoom
 from cube_net.ui.project_settings_dialog import ask_project_settings
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.session.session_recorder import SessionRecorder
@@ -94,6 +95,7 @@ class MainWindow(QMainWindow):
         self.net: Net = default_net()
         net_box = self.net.bounding_box()
         self.sheet_view = SheetView(self)
+        self.sheet_view.set_max_zoom(self.settings.max_zoom)
         self.sheet_view.set_sheet(sheet_box(v.position for v in self.net.vertices))
         self.sheet_view.set_net(self.net)
         self.cut_hover = CutHover(self.sheet_view, self.net)
@@ -171,6 +173,7 @@ class MainWindow(QMainWindow):
             self._record_snapshot(recorder)
         self._record_net_state(recorder)
         recorder.note("state", "labels", "on" if self.settings.show_vertex_labels else "off")
+        recorder.note("state", "max_zoom", self.settings.max_zoom)
         recorder.note("state", "window", f"{self.width()}x{self.height()}")
         recorder.note("state", "bounds", "on" if self.bounding.action.isChecked() else "off")
         ruler_points = [format_point(p) for p in self.ruler_tool.ruler.points]
@@ -431,6 +434,15 @@ class MainWindow(QMainWindow):
         path = Path(name)
         return self.save_project_to(path if path.suffix else path.with_suffix(PROJECT_SUFFIX))
 
+    def _on_preferences(self) -> None:
+        max_zoom = ask_max_zoom(self, self.settings.max_zoom)
+        if max_zoom is None or max_zoom == self.settings.max_zoom:
+            return
+        self.settings.max_zoom = max_zoom
+        self.sheet_view.set_max_zoom(max_zoom)
+        if self.recorder is not None:
+            self.recorder.note("settings", "max_zoom", max_zoom)
+
     def _on_project_settings(self) -> None:
         settings = ask_project_settings(self, self.project_settings)
         if settings is None or settings == self.project_settings:
@@ -512,6 +524,10 @@ class MainWindow(QMainWindow):
         self.redo_action.setShortcut("Ctrl+Y")
         self.redo_action.triggered.connect(self._on_redo)
         edit_menu.addAction(self.redo_action)
+        edit_menu.addSeparator()
+        self.preferences_action = QAction("&Preferences...", self)
+        self.preferences_action.triggered.connect(self._on_preferences)
+        edit_menu.addAction(self.preferences_action)
         self.cut_tool.line_changed.connect(self._update_edit_actions)
         self._update_edit_actions()
 

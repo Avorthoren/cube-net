@@ -107,9 +107,10 @@ def test_recording_started_at_launch(qtbot: QtBot, tmp_path: Path) -> None:
     assert window.recorder is not None
     lines = session_lines(window.recorder.log.path)
     assert "# recording started: at app launch" in lines
-    assert lines[-7:] == [
+    assert lines[-8:] == [
         "state net default",
         "state labels on",
+        "state max_zoom 1000",
         f"state window {window.width()}x{window.height()}",
         "state bounds off",
         "state ruler off",
@@ -2791,3 +2792,65 @@ class TestSnapshotsAtLaunch:
         window.record_session_action.setChecked(True)
         assert len(self.snapshots(window)) == 1
         window.stop_recording("test over")
+
+
+class TestPreferences:
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def answer(self, monkeypatch: pytest.MonkeyPatch, value: int | None) -> None:
+        monkeypatch.setattr("cube_net.ui.main_window.ask_max_zoom", lambda *_: value)
+
+    def test_the_setting_is_used_from_the_start(self, qtbot: QtBot, tmp_path: Path) -> None:
+        settings = settings_in(tmp_path, record=False)
+        settings.max_zoom = 3000
+        window = MainWindow(settings=settings, session_dir=tmp_path)
+        qtbot.addWidget(window)
+        assert window.sheet_view.zoom_limits()[1] == 3000
+
+    def test_a_new_value_is_saved_and_used_at_once(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from PyQt6.QtCore import QPointF
+
+        window = self.make(qtbot, tmp_path, record=True)
+        view = window.sheet_view
+        view.zoom_by(1e6, QPointF(100, 100))
+        assert view.scale_factor() == pytest.approx(1000)
+        self.answer(monkeypatch, 700)
+        window.preferences_action.trigger()
+        assert window.settings.max_zoom == 700
+        assert view.scale_factor() == pytest.approx(700)
+        assert window.recorder is not None
+        assert session_lines(window.recorder.log.path)[-1] == "settings max_zoom 700"
+        window.stop_recording("test over")
+
+    def test_cancelled_changes_nothing(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.answer(monkeypatch, None)
+        window.preferences_action.trigger()
+        assert window.settings.max_zoom == 1000
+        assert not window.is_dirty  # not part of the project
+
+    def test_the_start_zoom_is_as_far_out_as_it_goes(self, qtbot: QtBot, tmp_path: Path) -> None:
+        """The default net takes 50% of the screen height at the start, which is also the zoom-out limit."""
+        window = self.make(qtbot, tmp_path)
+        assert window.sheet_view.scale_factor() == pytest.approx(window.sheet_view.zoom_limits()[0])
+
+    def test_the_rearranged_net_decides_how_far_out(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.ui.sheet import net_style
+
+        window = self.make(qtbot, tmp_path)
+        view = window.sheet_view
+        before = view.zoom_limits()[0]
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        view.left_pressed.emit(11.5, 14 - h)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - h, 13.5)
+        view.left_pressed.emit(11.75, 10 + h)
+        assert window.editor.state.value == "cut_approving"
+        assert view.zoom_limits()[0] < before  # the rearranged net is taller: it can go further out

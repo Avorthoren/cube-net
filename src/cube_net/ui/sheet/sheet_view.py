@@ -63,6 +63,8 @@ class SheetView(QGraphicsView):
 
         self._scale = 1.0
         self._sheet = QRectF()
+        self._net_box: Box | None = None
+        self._max_scale = zoom.DEFAULT_MAX_ZOOM
         self._press_claim: HitTest = lambda _x, _y: False
         self._pan_last: QPoint | None = None
         self._panning_enabled = True
@@ -88,12 +90,26 @@ class SheetView(QGraphicsView):
             self.pan_by(drift.x(), drift.y())
 
     def set_net(self, net: Net) -> None:
-        """Show `net` on the sheet (replacing the previous one)."""
+        """Show `net` on the sheet (replacing the previous one). How far out the view can zoom depends on it."""
         if self._net_item is None:
             self._net_item = NetItem(net)
             self._scene().addItem(self._net_item)
         else:
             self._net_item.set_net(net)
+        self._net_box = net.bounding_box()
+        self._keep_zoom_within_limits()
+
+    def set_max_zoom(self, scale: float) -> None:
+        """How far in the view can zoom: pixels per unit (an app setting)."""
+        self._max_scale = scale
+        self._keep_zoom_within_limits()
+
+    def _keep_zoom_within_limits(self) -> None:
+        """If the zoom is beyond the limits now, bring it back, around the middle of the view."""
+        limited = zoom.clamp_scale(self._scale, self.zoom_limits())
+        if limited != self._scale:
+            middle = QPointF(self.viewport().width() / 2, self.viewport().height() / 2)
+            self.zoom_by(limited / self._scale, middle)
 
     def set_vertex_labels(self, labels: dict[NetVertex, VertexLabel] | None) -> None:
         """Debug labels next to the net's vertices (None: hide them)."""
@@ -153,9 +169,15 @@ class SheetView(QGraphicsView):
         return self._press_claim(x, y)
 
     def zoom_limits(self) -> tuple[float, float]:
-        if self._sheet.isEmpty():
-            return (0.0, float("inf"))
-        return zoom.zoom_limits(self._screen_height(), self._sheet.width(), self._sheet.height())
+        """(min_scale, max_scale). Until there's a net, the sheet stands in for it."""
+        if self._net_box is not None:
+            net_width, net_height = float(self._net_box.width), float(self._net_box.height)
+        else:
+            net_width, net_height = self._sheet.width(), self._sheet.height()
+        if net_width <= 0 or net_height <= 0:
+            return (0.0, self._max_scale)
+        width, height = self._screen_size()
+        return zoom.zoom_limits(width, height, net_width, net_height, self._max_scale)
 
     def to_sheet(self, viewport_pos: QPointF) -> QPointF:
         """Viewport pixel position -> sheet coordinates (units, Y up)."""
@@ -295,8 +317,14 @@ class SheetView(QGraphicsView):
         return scene
 
     def _screen_height(self) -> float:
+        return self._screen_size()[1]
+
+    def _screen_size(self) -> tuple[float, float]:
+        """The size of the screen the view is on (the whole screen, not the window)."""
         screen = self.screen()
-        return float(screen.geometry().height()) if screen is not None else 1080.0
+        if screen is None:
+            return 1920.0, 1080.0
+        return float(screen.geometry().width()), float(screen.geometry().height())
 
     def _apply_transform(self) -> None:
         self.setTransform(QTransform.fromScale(self._scale, -self._scale))
