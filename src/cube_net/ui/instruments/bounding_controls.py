@@ -88,5 +88,9 @@ class BoundingControls(QObject):
     def _set_blink(self, on: bool) -> None:
         self._blink_on = on
         if self.button is not None:
+            if on and self.button.minimumSize() != self.button.maximumSize():
+                # A style sheet sizes the button differently: keep the size it has without one, or the whole panel
+                # would change its width with every blink.
+                self.button.setFixedSize(self.button.sizeHint())
             green = palette.SUCCESS.name()
             self.button.setStyleSheet(f"background-color: {green}; border: 1px solid {green};" if on else "")

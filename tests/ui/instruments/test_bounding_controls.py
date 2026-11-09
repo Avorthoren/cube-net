@@ -70,3 +70,26 @@ def test_toggle_shows_rectangle_on_item(controls: BoundingControls, qtbot: QtBot
     assert item.corners() == CORNERS and item.success()
     controls.action.setChecked(False)
     assert item.corners() == ()
+
+
+def test_blinking_does_not_change_the_size_of_the_button(qtbot: QtBot) -> None:
+    """The panel is as wide as its widest item: a button that changes its size makes the panel change its width."""
+    from PyQt6.QtWidgets import QMainWindow
+
+    window = QMainWindow()
+    qtbot.addWidget(window)
+    toolbar = QToolBar(window)
+    window.addToolBar(toolbar)
+    controls = BoundingControls(toolbar, BoundingItem())
+    window.show()
+    qtbot.waitExposed(window)
+    assert controls.button is not None
+    controls.update(rect(F(5)), F(4))  # not below the threshold: the label has its text, nothing blinks
+    regular = controls.button.sizeHint()
+    width = toolbar.sizeHint().width()
+    controls.update(rect(F(5)), F(6))
+    sizes = set()
+    for _ in range(4):
+        qtbot.wait(BLINK_INTERVAL_MS + 20)
+        sizes.add((controls.button.size().width(), controls.button.size().height(), toolbar.sizeHint().width()))
+    assert sizes == {(regular.width(), regular.height(), width)}
