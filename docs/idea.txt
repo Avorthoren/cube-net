@@ -321,6 +321,12 @@ when hovered. The exception: while the first/last point of the cut line is dragg
 highlighted (that's never a counterpart image: the point can't go to those).
 1. Here in the middle of every segment of the new cut line should be a small hollow circle (just a thin outline, with
    transparent inside), click on which should create new point of the new cut line.
+   Sizes: the hollow circles have 0.6 of the vertex radius, and the small dots of the line (the points where it
+   crosses cube edges, the images of its ends) half of it; but none of them is ever smaller across than 140% of the
+   edges' thickness (they keep that size when their share of the vertex radius would be less). The vertex circles
+   themselves are at least 140% of the edges' thickness across too: the vertex radius can't be set below 0.7 times the
+   edge thickness, and if the edges are made thicker, the vertex radius grows with them, just as much as needed (and
+   stays when they're made thinner again).
 2. SHIFT+click on any point of the new cut line (except for first and last one) should delete that point (when the mouse
    is released, if it has hardly moved: SHIFT+drag is a move, see below). CTRL+click does the same: while CTRL is held
    over such a point the mouse pointer is a red x; the point is deleted when the mouse button is released on it (CTRL
@@ -492,7 +498,7 @@ sheet at once.
    - Faces tiling: the number of columns and rows each face is divided into (now 10 x 5), integers from 1 to 30.
    - Cuts and folds: number of dashes of each colour along a whole cube edge (1 to 30, now 10), and their thickness
      in pixels (1 to 15, now 5). Hovered elements are drawn 1.5 times as thick, as before.
-   - Vertices: radius of the vertex circles in pixels (1 to 30, now 10).
+   - Vertices: radius of the vertex circles in pixels (from 0.7 times the edge thickness to 30, now 8).
    - Grid: a white 10x10 square crossed in its middle by a vertical and a horizontal grid line, the colour of the
      grid, and the thickness of its lines in pixels (0 to 5; 0: no grid).
 

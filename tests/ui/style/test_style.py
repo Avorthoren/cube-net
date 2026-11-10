@@ -52,3 +52,15 @@ def test_out_of_range(values: dict[str, object]) -> None:
 )
 def test_the_ends_of_the_ranges(values: dict[str, object]) -> None:
     replace(DEFAULT_STYLE, **values)  # type: ignore[arg-type]
+
+
+class TestFitted:
+    def test_too_small_vertices_are_raised_to_the_least(self) -> None:
+        from cube_net.ui.style.style import least_vertex_radius
+
+        style = replace(DEFAULT_STYLE, edge_width=4.3, vertex_radius=2.0)
+        assert least_vertex_radius(4.3) == 3.1  # 3.01, rounded up to the tenth the fields show
+        assert style.fitted().vertex_radius == 3.1
+
+    def test_large_enough_ones_stay(self) -> None:
+        assert DEFAULT_STYLE.fitted() is DEFAULT_STYLE

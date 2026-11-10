@@ -1,7 +1,8 @@
 """`Style`: the values of Settings -> Style, with their ranges. The defaults are what the style files say."""
 
+import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from cube_net.ui import palette
 from cube_net.ui.sheet import net_style
@@ -56,6 +57,18 @@ class Style:
         _check("edge width", self.edge_width, EDGE_WIDTH_RANGE)
         _check("vertex radius", self.vertex_radius, VERTEX_RADIUS_RANGE)
         _check("grid width", self.grid_width, GRID_WIDTH_RANGE)
+
+    def fitted(self) -> Style:
+        """This style with the vertex radius raised to the least its edge width allows, if it's below that (the edges
+        got thicker, or the style was saved before that rule)."""
+        least = least_vertex_radius(self.edge_width)
+        return self if self.vertex_radius >= least else replace(self, vertex_radius=least)
+
+
+def least_vertex_radius(edge_width: float) -> float:
+    """The least vertex radius with edges of `edge_width` (`net_style.least_vertex_radius`), rounded up to a tenth of
+    a pixel as the fields show it, so that it's never below the least."""
+    return math.ceil(round(net_style.least_vertex_radius(edge_width) * 10, 6)) / 10
 
 
 def _check(name: str, value: float, allowed: tuple[float, float]) -> None:

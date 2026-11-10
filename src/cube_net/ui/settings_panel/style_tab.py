@@ -16,6 +16,7 @@ from cube_net.ui.style.style import (
     GRID_WIDTH_RANGE,
     TILING_RANGE,
     VERTEX_RADIUS_RANGE,
+    least_vertex_radius,
 )
 
 # Between the two numbers of the tiling: the multiplication sign.
@@ -150,6 +151,8 @@ class StyleTab(QWidget):
             self.hatch_rows.setValue(style.hatch_rows)
             self.dashes.setValue(style.dashes_per_edge)
             self.edge_width.setValue(style.edge_width)
+            # A vertex circle is at least 140% of the edge width across.
+            self.vertex_radius.setMinimum(least_vertex_radius(style.edge_width))
             self.vertex_radius.setValue(style.vertex_radius)
             self.grid_swatch.set_color(style.grid_color)
             self.grid_swatch.set_line_width(style.grid_width)
@@ -166,7 +169,8 @@ class StyleTab(QWidget):
     def _change(self, **values: object) -> None:
         if self._filling:
             return
-        self._style = replace(self._style, **values)  # type: ignore[arg-type]
+        # Thicker edges may need larger vertices: they grow with them, just as much as needed.
+        self._style = replace(self._style, **values).fitted()  # type: ignore[arg-type]
         self._fill(self._style)  # the swatches follow
         self.style_changed.emit(self._style)
 

@@ -127,3 +127,13 @@ def test_language_default_and_persisted(tmp_path: Path) -> None:
     assert settings_at(tmp_path / "s.ini").language is Language.RUSSIAN
     QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat).setValue("view/language", "xx")
     assert settings_at(tmp_path / "s.ini").language is Language.ENGLISH
+
+
+def test_a_style_saved_with_too_small_vertices_gets_them_large_enough(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from cube_net.ui.style import DEFAULT_STYLE
+
+    s = settings_at(tmp_path / "s.ini")
+    s.style = replace(DEFAULT_STYLE, edge_width=5.0, vertex_radius=3.0)  # before vertices had their least size
+    assert settings_at(tmp_path / "s.ini").style.vertex_radius == 3.5

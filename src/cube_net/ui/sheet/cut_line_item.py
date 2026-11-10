@@ -1,7 +1,7 @@
 """`CutLineItem`: draws the cut line being created (docs/idea.txt, CUTTING state).
 
 Segments and points follow the usual colouring rules (two-colour dashes, sector circles), with a halo that marks them
-as new. Points the user can't edit themselves are drawn as small dots (half the vertex radius) instead: the
+as new. Points the user can't edit themselves are drawn as small dots (`net_style.derived_point_radius`) instead: the
 counterpart images of the endpoints (docs/idea.txt: z_3, black, on the counterpart cuts) and the points where the line
 crosses cube edges (grey; they become vertices of the new cuts). Once the line is applied they look like any other
 vertex.
@@ -226,7 +226,7 @@ class CutLineItem(QGraphicsItem):
     @staticmethod
     def _paint_midpoint(painter: QPainter, world: QTransform, p: Vec, pressed: bool = False) -> None:
         """Hollow; all black while pressed (the same size)."""
-        r = net_style.VERTEX_RADIUS_PX * net_style.MIDPOINT_RADIUS_FACTOR
+        r = net_style.midpoint_radius()
         painter.setPen(QPen(palette.PRESSED_MIDPOINT if pressed else palette.VERTEX_OUTLINE, 1))
         painter.setBrush(palette.PRESSED_MIDPOINT if pressed else Qt.BrushStyle.NoBrush)
         painter.drawEllipse(world.map(to_qpointf(p)), r, r)
@@ -234,7 +234,7 @@ class CutLineItem(QGraphicsItem):
     @staticmethod
     def _paint_dot(painter: QPainter, world: QTransform, p: Vec, colour: QColor) -> None:
         """A small dot for a point the user can't edit (it follows the line)."""
-        r = net_style.VERTEX_RADIUS_PX * net_style.DERIVED_POINT_RADIUS_FACTOR
+        r = net_style.derived_point_radius()
         painter.setPen(QPen(palette.VERTEX_OUTLINE, 1))
         painter.setBrush(colour)
         painter.drawEllipse(world.map(to_qpointf(p)), r, r)

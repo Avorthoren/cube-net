@@ -8,7 +8,7 @@ puts the user's values in place, and everything reads them from here when it pai
 EDGE_WIDTH_PX = 5.0
 
 # Radius of the vertex circles on the perimeter.
-VERTEX_RADIUS_PX = 10.0
+VERTEX_RADIUS_PX = 8.0
 
 # A face is divided into 10 x 5 rectangles of 1/10 x 1/5 units (docs/idea.txt).
 HATCH_COLUMNS = 10
@@ -46,11 +46,18 @@ RUBBER_BAND_PX = 1.5
 VERTEX_HIGHLIGHT_PX = 3.0
 
 # Points of the cut line the user can't edit (crossings with cube edges, counterpart images of endpoints) are drawn
-# smaller than the user's points while the line is being drawn and edited: this many times the vertex radius.
+# smaller than the user's points while the line is being drawn and edited: this many times the vertex radius (see
+# `derived_point_radius`).
 DERIVED_POINT_RADIUS_FACTOR = 0.5
 
-# The hollow circle in the middle of a cut-line segment (click: a new point there): this many times the vertex radius.
+# The hollow circle in the middle of a cut-line segment (click: a new point there): this many times the vertex radius
+# (see `midpoint_radius`).
 MIDPOINT_RADIUS_FACTOR = 0.6
+
+# No point is ever smaller across than this many times the width of the edges: neither the vertex circles (their
+# radius can't be set lower, `least_vertex_radius`) nor the cut line's small dots and circles, which keep this size
+# when the vertex radius is so small that their share of it would be less.
+SMALL_POINT_DIAMETER_FACTOR = 1.4
 
 # Total width of a fold line's hitbox, centered on the line (a click or a dragged point there lands on the fold).
 FOLD_HITBOX_PX = CUT_HITBOX_PX
@@ -87,3 +94,26 @@ def set_sizes(
     CUT_HITBOX_PX = EDGE_WIDTH_PX * CUT_HITBOX_FACTOR
     HIGHLIGHT_WIDTH_PX = CUT_HITBOX_PX
     FOLD_HITBOX_PX = CUT_HITBOX_PX
+
+
+def smallest_point_radius() -> float:
+    """The least radius of the cut line's small dots and hollow circles: a diameter of 140% of the edge width."""
+    return EDGE_WIDTH_PX * SMALL_POINT_DIAMETER_FACTOR / 2
+
+
+def derived_point_radius() -> float:
+    """The radius of the small dots of the cut line (crossings with cube edges, images of its ends): a share of the
+    vertex radius, but never less than `smallest_point_radius`."""
+    return max(VERTEX_RADIUS_PX * DERIVED_POINT_RADIUS_FACTOR, smallest_point_radius())
+
+
+def midpoint_radius() -> float:
+    """The radius of the hollow circles in the middle of the cut line's segments, drawn and clicked: a share of the
+    vertex radius, but never less than `smallest_point_radius`."""
+    return max(VERTEX_RADIUS_PX * MIDPOINT_RADIUS_FACTOR, smallest_point_radius())
+
+
+def least_vertex_radius(edge_width: float) -> float:
+    """The least vertex radius the user can choose (Settings -> Style) with edges of `edge_width`: a vertex circle is
+    at least 140% of the edge width across."""
+    return edge_width * SMALL_POINT_DIAMETER_FACTOR / 2

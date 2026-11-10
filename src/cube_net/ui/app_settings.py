@@ -132,7 +132,7 @@ class AppSettings:
             for field in fields(Style)
         }
         try:
-            return Style(**values)  # type: ignore[arg-type]
+            return Style(**values).fitted()  # type: ignore[arg-type]  # saved before vertices had their least size
         except StyleError:
             return DEFAULT_STYLE
 

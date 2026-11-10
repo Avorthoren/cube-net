@@ -468,7 +468,7 @@ class CutTool(QObject):
 
     def _midpoint_at(self, x: float, y: float) -> int | None:
         """The index of the segment whose middle circle contains sheet point (x, y); the closest one wins."""
-        radius = net_style.VERTEX_RADIUS_PX * net_style.MIDPOINT_RADIUS_FACTOR
+        radius = net_style.midpoint_radius()
         return self._closest(x, y, self.item.midpoints(), radius)
 
     def _closest(self, x: float, y: float, positions: list[Vec], radius_px: float) -> int | None:
