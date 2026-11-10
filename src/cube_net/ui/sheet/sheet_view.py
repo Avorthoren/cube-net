@@ -62,8 +62,11 @@ class SheetView(QGraphicsView):
     # The zoom changed: new scale in pixels per unit.
     zoom_changed = pyqtSignal(float)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, follow_keyboard: bool = True) -> None:
+        """`follow_keyboard`: whether SHIFT and CTRL are read from the keyboard; if not, only the modifiers that mouse
+        events carry count (an animation sends its own)."""
         super().__init__(parent)
+        self._follow_keyboard = follow_keyboard
         self.setScene(QGraphicsScene(self))
         self._sheet_item = SheetItem()
         self._scene().addItem(self._sheet_item)
@@ -89,10 +92,13 @@ class SheetView(QGraphicsView):
         self._shift_held = False
         self._ctrl_held = False
         self._pending_initial_view: Box | None = None
+
+        # A view that always shows this box, filling this share of it (see `show_fixed`).
+        self._fixed: tuple[Box, float] | None = None
         # Where the viewport's top-left corner was in the window, so the sheet can be kept in place when it moves.
         self._viewport_origin: QPoint | None = None
         app = QApplication.instance()
-        if app is not None:
+        if app is not None and follow_keyboard:
             app.installEventFilter(self)  # see `eventFilter`
         # While the mouse is over the sheet, the modifiers are also read this often: the desktop may take a key for
         # itself (GNOME's "Locate pointer" takes the left CTRL on X11), and then its presses never reach the app.
@@ -165,6 +171,23 @@ class SheetView(QGraphicsView):
         self.centerOn(float(net.center.x), float(net.center.y))
         self._viewport_origin = self._viewport_origin_in_window()
 
+    def show_fixed(self, box: Box, fill: float) -> None:
+        """Always show `box` in the middle, as large as `fill` (0 to 1) of the view allows, whatever the zoom limits;
+        the zoom doesn't change from then on (for a small view that shows the whole net, like an animation's)."""
+        self._fixed = (box, fill)
+        self._apply_fixed()
+
+    def _apply_fixed(self) -> None:
+        if self._fixed is None:
+            return
+        box, fill = self._fixed
+        area = self.contentsRect()
+        if area.width() <= 0 or area.height() <= 0:
+            return
+        self._scale = fill * min(area.width() / float(box.width), area.height() / float(box.height))
+        self._apply_transform()
+        self.centerOn(float(box.center.x), float(box.center.y))
+
     # --- queries ----------------------------------------------------------------------------------------------------
 
     def scale_factor(self) -> float:
@@ -207,7 +230,9 @@ class SheetView(QGraphicsView):
         return self._press_claim(x, y)
 
     def zoom_limits(self) -> tuple[float, float]:
-        """(min_scale, max_scale). Until there's a net, the sheet stands in for it."""
+        """(min_scale, max_scale). Until there's a net, the sheet stands in for it. A fixed view has its own zoom."""
+        if self._fixed is not None:
+            return self._scale, self._scale
         if self._net_box is not None:
             net_width, net_height = float(self._net_box.width), float(self._net_box.height)
         else:
@@ -252,6 +277,9 @@ class SheetView(QGraphicsView):
 
     def wheelEvent(self, event: QWheelEvent | None) -> None:
         if event is None:
+            return
+        if self._fixed is not None:  # nothing to zoom or scroll: for whatever is around the view
+            event.ignore()
             return
         pos = event.position()
         if self._sheet.contains(self.to_sheet(pos)):
@@ -316,7 +344,8 @@ class SheetView(QGraphicsView):
         return False
 
     def enterEvent(self, event: object) -> None:
-        self._modifier_poll.start()
+        if self._follow_keyboard:
+            self._modifier_poll.start()
         super().enterEvent(event)  # type: ignore[arg-type]
 
     def _poll_modifiers(self) -> None:
@@ -332,6 +361,7 @@ class SheetView(QGraphicsView):
         super().resizeEvent(event)
         self._update_scene_rect()
         self._keep_sheet_in_place()
+        self._apply_fixed()
 
     def moveEvent(self, event: QMoveEvent | None) -> None:
         super().moveEvent(event)
@@ -339,6 +369,7 @@ class SheetView(QGraphicsView):
 
     def showEvent(self, event: QShowEvent | None) -> None:
         super().showEvent(event)
+        self._apply_fixed()
         if self._pending_initial_view is not None:
             self.show_initial_view(self._pending_initial_view)
 

@@ -46,10 +46,10 @@ def english_and_own_settings(tmp_path_factory: pytest.TempPathFactory) -> Iterat
 
 
 @pytest.fixture(autouse=True)
-def no_modifiers_held() -> None:
+def no_modifiers_held(qapp: object) -> None:
     """The test platform remembers the modifiers of the latest input event, and a window that becomes active reads
     them (`SheetView.eventFilter`): a Shift+click of one test would hold SHIFT in the next. A key press without
-    modifiers forgets them."""
+    modifiers forgets them. (`qapp`: the application, which a widget needs, even in a test that has no window.)"""
     from PyQt6.QtCore import Qt
     from PyQt6.QtTest import QTest
     from PyQt6.QtWidgets import QWidget

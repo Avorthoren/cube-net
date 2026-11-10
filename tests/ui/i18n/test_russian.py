@@ -10,7 +10,17 @@ from cube_net.ui.i18n.russian import RUSSIAN
 SOURCE = pathlib.Path(cube_net.__file__).parent
 
 # Calls whose argument at this position is a text to translate.
-TEXT_ARGUMENTS = {"tr": 0, "bind": 2, "_section": 0, "Section": 0, "add_labelled_row": 0, "ProjectFileError": 0}
+TEXT_ARGUMENTS = {
+    "tr": 0,
+    "bind": 2,
+    "_section": 0,
+    "Section": 0,
+    "add_labelled_row": 0,
+    "ProjectFileError": 0,
+    "_paragraph": 0,
+    "_title": 0,
+    "_caption": 0,
+}
 
 
 def _constants(tree: ast.Module) -> dict[str, str]:

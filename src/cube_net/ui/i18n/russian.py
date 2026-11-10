@@ -96,4 +96,74 @@ RUSSIAN: dict[str, str] = {
     "Close": "Закрыть",
     "Check for updates": "Проверка обновлений",
     "Under development...": "В разработке...",
+    # Help -> Help.
+    "{name} Help": "{name} — справка",
+    "How it works": "Как это работает",
+    (
+        "This application lets you build cube nets: simple polygons (without self-intersections) that, when folded, "
+        "cover the whole surface of the unit cube without overlaps. So the area of such a polygon is always equal to "
+        "the surface area of the unit cube: 6 square units."
+    ): (
+        "Это приложение позволяет строить развёртки куба: простые многоугольники (без самопересечений), которые после "
+        "сгибания покрывают всю поверхность единичного куба без наложений. Поэтому площадь такого многоугольника "
+        "всегда равна площади поверхности единичного куба: 6 квадратных единиц."
+    ),
+    (
+        "If a cube net is cut into two pieces, they can be rearranged and glued together again along a pair of edges "
+        "that meet on the cube. That's exactly what the application is for:"
+    ): (
+        "Если разрезать развёртку на две части, их можно переставить и снова склеить по паре рёбер, которые сходятся "
+        "на кубе. Именно для этого и создано приложение:"
+    ),
+    "Make a cut": "Сделайте разрез",
+    (
+        "Click on any edge or vertex of the perimeter to start a cut: one or more segments joined end to end. A cut "
+        "starts and ends on the perimeter, and all its other points must lie strictly inside the net, so it ends as "
+        "soon as you click on the perimeter again."
+    ): (
+        "Щёлкните по любому ребру или вершине периметра, чтобы начать разрез: один или несколько отрезков, соединённых "
+        "друг за другом. Разрез начинается и заканчивается на периметре, а все остальные его точки должны лежать "
+        "строго внутри развёртки, поэтому он заканчивается, как только вы снова щёлкнете по периметру."
+    ),
+    "Adjust it": "Поправьте его",
+    (
+        "Adjust the cut if needed: drag any of its vertices, click the circle in the middle of a segment to add a "
+        "vertex there, or hold Ctrl and click a vertex to delete it."
+    ): (
+        "При необходимости поправьте разрез: перетащите любую его вершину, щёлкните по кружку в середине отрезка, "
+        "чтобы добавить там вершину, или щёлкните по вершине с нажатой Ctrl, чтобы удалить её."
+    ),
+    "Glue the halves together": "Склейте половины",
+    (
+        "Then click on a suitable edge of the perimeter to glue the other half of the net there. An edge is suitable "
+        "if its counterpart, the edge it meets on the cube's surface when the net is folded, is in the other half: "
+        "while you hover such an edge, its counterpart blinks. If the halves don't overlap after rearrangement, the "
+        "cut can be approved; if they do, the button cancels it."
+    ): (
+        "Затем щёлкните по подходящему ребру периметра, чтобы приклеить к нему другую половину развёртки. Ребро "
+        "подходит, если его пара (ребро, с которым оно сходится на поверхности куба, когда развёртка свёрнута) "
+        "находится в другой половине: пока указатель над таким ребром, его пара мигает. Если после перестановки "
+        "половины не накладываются друг на друга, разрез можно утвердить; если накладываются, кнопка его отменяет."
+    ),
+    "No overlaps: approved": "Без наложений: утверждено",
+    "Overlaps: cancelled": "С наложениями: отменено",
+    "Good to know": "Полезно знать",
+    "Undo and redo work for up to 1000 actions: use Ctrl+Z and Ctrl+Y.": (
+        "Можно отменить и повторить до 1000 действий: используйте Ctrl+Z и Ctrl+Y."
+    ),
+    (
+        "The application keeps track of the minimum-area bounding rectangle of the net. To see the rectangle itself, "
+        "press the {bounds} button on the instrument panel."
+    ): (
+        "Приложение следит за прямоугольником наименьшей площади, описанным вокруг развёртки. Чтобы увидеть сам "
+        "прямоугольник, нажмите кнопку {bounds} на панели инструментов."
+    ),
+    "Hold Shift while cutting or dragging a vertex to make the segment horizontal or vertical.": (
+        "Удерживайте Shift, когда делаете разрез или перетаскиваете вершину, чтобы отрезок был горизонтальным или "
+        "вертикальным."
+    ),
+    "Zoom with the mouse wheel; drag the sheet to move it.": (
+        "Масштаб меняется колёсиком мыши, а лист можно двигать, перетаскивая его."
+    ),
+    "Ctrl": "Ctrl",
 }

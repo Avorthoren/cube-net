@@ -519,5 +519,18 @@ Help menu (to the right of Settings): About, Help, Check for updates.
    the window. Escape closes it, as does the close button in its corner. It has no minimize or maximize buttons (nor
    does the next one): Ubuntu's GNOME draws them on every window it frames, so these two windows draw their own title
    bar (title and close button; dragging it moves the window).
-2. Help: to be decided.
+2. Help (F1): a big window (an ordinary one, it can be resized) that explains the application, with animations: what
+   a cube net is (a simple polygon that folds onto the whole surface of the unit cube without overlaps, so its area
+   is always 6); 1. make a cut (animation: a cut of two segments, not aligned, from A_1 to the middle of A_3-B_3);
+   2. adjust it (animation, from where the first ends: the end is dragged onto G_1-F_1, twice as close to F_1 as to
+   G_1; a new point in the middle of a segment is dragged aside so that the line zigzags; one more point is added,
+   dragged down and left almost to E_1, and deleted with CTRL); 3. glue the halves (two animations side by side, from
+   where the second ends: one glue that is approved, one that overlaps, shown for 5 s from the click on the cut to the
+   click that cancels it); then good to know: undo and redo of up to 1000 actions, the Bounds button, SHIFT, zoom
+   and moving the sheet. An animation shows its first picture with a play button (a triangle) in the middle; played,
+   it stays still for 2 s after its end, then a replay button (a circular arrow) appears, which plays it from the
+   beginning. The animations use the style chosen in the settings and show the vertex labels if they're switched on
+   (and follow both when they change). The mouse wheel scrolls the page wherever the mouse is, over the animations
+   too. All the text can be selected and copied, across paragraphs too (but not across an animation). Escape closes
+   the window.
 3. Check for updates: a small window saying "Under development..." (with a traffic cone).

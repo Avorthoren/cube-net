@@ -312,7 +312,7 @@ Undo and redo are available in every state. Each public method either performs o
   - File: New (Ctrl+N), Open… (Ctrl+O), Save (Ctrl+S), Save As… (Ctrl+Shift+S), Quit (Ctrl+Q);
   - Edit: Approve cut (Ctrl+Enter), Undo (Ctrl+Z), Redo (Ctrl+Y);
   - Help (after Settings): About (name, version 1.0, build, credits with a link to the puzzle; Escape closes it),
-    Help (to be decided, disabled for now), Check for updates ("Under development...");
+    Help (F1: `ui/help/help_window.py`), Check for updates ("Under development...");
   - Settings: shows or hides the settings panel (`ui/settings_panel/`), over the right side of the sheet, at most a
     third of the screen wide. Tabs: Preferences (vertex labels, session logs, blinking on success, maximum zoom) and Style (face colours,
     tiling, dashes and their thickness, vertex radius, grid colour and thickness; each section restores its defaults
@@ -398,6 +398,20 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
   may take a key for itself (GNOME's "Locate pointer" grabs the left CTRL on X11), and then no key events come.
 - CTRL is tracked like SHIFT (`ctrl_changed`): over an inner point it shows the red x, and Ctrl+press on one arms
   it like a button (no drag); released on the same point, it's deleted (the usual check and black flash).
+
+### 6.4a Help -> Help animations (`ui/help/demo/`)
+- No video files: an animation is a script of mouse input in sheet coordinates (`steps.py`: move, press, release,
+  modifier keys, wait), in `scenes.py`. `DemoSheet` plays it on its own `SheetView` + `Workspace` (the same wiring as
+  the main window's sheet, `ui/sheet/workspace.py`) by sending real mouse events, so the real editor and tools react,
+  in the current style. The user's own mouse and keyboard are filtered out there (`SheetView(follow_keyboard=False)`).
+- The pointer is drawn (`pointer.py`) with the app's cursors, a ring on each click and a "Ctrl" key cap while CTRL is
+  held. The view shows a fixed box (`SheetView.show_fixed`), whatever the zoom limits.
+- An animation that starts where others end runs their scripts at once first (`DemoPlayer(before=...)`); a replay
+  starts on a fresh sheet.
+- The vertex labels follow the app setting (`Workspace.show_labels`, the same as the main window's), with names of
+  their own for the new points. The wheel isn't the sheet's there (a fixed view leaves it alone), so the page scrolls.
+- The text between two animations is one `TextBlock` (a read-only `QTextBrowser` as tall as its text), so it can be
+  selected across paragraphs; the step numbers are pictures it draws itself.
 
 ### 6.5 Blinking and colours (`palette.py`)
 - Face colours come from `QSettings`, with the defaults from `idea.txt`. Each colour also has a derived

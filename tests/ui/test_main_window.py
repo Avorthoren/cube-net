@@ -3127,8 +3127,39 @@ class TestHelpMenu:
         assert help_menu is not None
         assert [a.text() for a in help_menu.actions()] == ["&About", "&Help", "Check for &updates"]
 
-    def test_help_waits_for_its_content(self, qtbot: QtBot, tmp_path: Path) -> None:
-        assert not self.make(qtbot, tmp_path).help_action.isEnabled()
+    def test_help_opens_one_window_with_f1(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert window.help_action.isEnabled()
+        assert window.help_action.shortcut().toString() == "F1"
+        window.help_action.trigger()
+        first = window.help_window
+        assert first is not None and first.isVisible()
+        first.close()
+        window.help_action.trigger()
+        assert window.help_window is first and first.isVisible()  # the same one again
+
+    def test_its_animations_follow_the_vertex_labels_setting(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.show_labels_action.setChecked(True)
+        window.help_action.trigger()
+        assert window.help_window is not None
+        item = window.help_window.players[0].sheet.view.net_item()
+        assert item is not None and item.labels() is not None
+        window.show_labels_action.setChecked(False)
+        assert item.labels() is None
+
+    def test_its_animations_follow_the_style(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.help.help_window import HelpWindow
+        from cube_net.ui.style import DEFAULT_STYLE
+
+        window = self.make(qtbot, tmp_path)
+        window.help_action.trigger()
+        restyled: list[bool] = []
+        monkeypatch.setattr(HelpWindow, "restyle", lambda self: restyled.append(True))
+        window._on_style_changed(DEFAULT_STYLE)
+        assert restyled == [True]
 
     def test_about_and_updates_open_their_windows(
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

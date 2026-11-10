@@ -19,10 +19,8 @@ from PyQt6.QtWidgets import (
 )
 
 from cube_net.core.bounding import min_area_rectangle
-from cube_net.core.cutting import CutLine
-from cube_net.core.editor import Editor, EditorState
 from cube_net.core.geometry import Vec
-from cube_net.core.labels import PointLabels, cut_line_labels, vertex_labels
+from cube_net.core.labels import PointLabels
 from cube_net.core.net import Net, default_net
 from cube_net.core.project import (
     PROJECT_SUFFIX,
@@ -36,6 +34,7 @@ from cube_net.core.project_settings import ProjectSettings, format_threshold
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.help.about_dialog import AboutDialog
+from cube_net.ui.help.help_window import HelpWindow
 from cube_net.ui.help.updates_dialog import UpdatesDialog
 from cube_net.ui.i18n import TRANSLATIONS, Language, bind, tr
 from cube_net.ui.i18n.errors import error_text
@@ -57,12 +56,8 @@ from cube_net.ui.session.start import (
 )
 from cube_net.ui.settings_panel.panel import SettingsPanel
 from cube_net.ui.sheet.bounding_item import BoundingItem
-from cube_net.ui.sheet.counterpart_blink import CounterpartBlink
-from cube_net.ui.sheet.cut_hover import CutHover
-from cube_net.ui.sheet.cut_tool import CutTool
-from cube_net.ui.sheet.ruler_tool import RulerTool
-from cube_net.ui.sheet.sheet_cursor import SheetCursor
 from cube_net.ui.sheet.sheet_view import SheetView
+from cube_net.ui.sheet.workspace import Workspace
 from cube_net.ui.style import Style, apply_style
 
 APP_TITLE = "Cube Net"
@@ -126,29 +121,30 @@ class MainWindow(QMainWindow):
         self._saved_settings = self.project_settings
         self.recorder: SessionRecorder | None = None
 
+        # Help -> Help, once it has been opened.
+        self.help_window: HelpWindow | None = None
+
         self.net: Net = default_net()
         net_box = self.net.bounding_box()
         self.sheet_view = SheetView(self)
         self.sheet_view.set_max_zoom(self.settings.max_zoom)
         self.sheet_view.set_sheet(sheet_box(v.position for v in self.net.vertices))
         self.sheet_view.set_net(self.net)
-        self.cut_hover = CutHover(self.sheet_view, self.net)
-        self.counterpart_blink = CounterpartBlink(self.sheet_view)
-        self.ruler_tool = RulerTool(self.sheet_view)
+        self.workspace = Workspace(self.sheet_view, self.net)
+        self.cut_hover = self.workspace.cut_hover
+        self.counterpart_blink = self.workspace.counterpart_blink
+        self.ruler_tool = self.workspace.ruler_tool
         self.ruler_tool.point_added.connect(self._on_ruler_point)
-        self.editor = Editor(self.net)
-        self.cut_tool = CutTool(self.sheet_view, self.editor, self.ruler_tool)
+        self.editor = self.workspace.editor
+        self.cut_tool = self.workspace.cut_tool
         self.cut_tool.point_added.connect(self._on_cut_point)
         self.cut_tool.edited.connect(self._on_cut_edited)
         self.cut_tool.line_changed.connect(self._update_vertex_labels)
-        self.cut_tool.line_changed.connect(self._update_hover_net)
-        self.cut_tool.net_changed.connect(self._on_net_changed)
+        self.workspace.net_changed.connect(self._on_net_changed)
         self.cut_tool.glued.connect(self._on_glued)
-        self.cut_hover.hover_changed.connect(self._update_divided_view)
         self.cut_tool.rejected.connect(self._on_cut_rejected)
-        self.cut_hover.set_target(self.cut_tool.hover_target)
-        self.sheet_view.set_press_claim(self.cut_tool.claims)
-        self.sheet_cursor = SheetCursor(self.sheet_view, self.cut_tool, self.ruler_tool)
+        assert self.workspace.sheet_cursor is not None
+        self.sheet_cursor = self.workspace.sheet_cursor
         self.sheet_view.show_initial_view(net_box)
         self.setCentralWidget(self.sheet_view)
         self.sheet_view.setFocus()  # it wants to know about SHIFT even before the first click
@@ -342,7 +338,7 @@ class MainWindow(QMainWindow):
 
     def _on_ruler_toggled(self, checked: bool) -> None:
         self.ruler_tool.set_active(checked)
-        self._update_divided_view()
+        self.workspace.update_divided_view()
         if self.recorder is not None:
             self.recorder.note("ruler", "on" if checked else "off")
 
@@ -514,12 +510,22 @@ class MainWindow(QMainWindow):
         if self.recorder is not None:
             self.recorder.note("settings", "max_zoom", max_zoom)
 
+    def show_help(self) -> None:
+        """Help -> Help: one window, brought to the front if it's open already."""
+        if self.help_window is None:
+            self.help_window = HelpWindow(self, self.settings.show_vertex_labels)
+        self.help_window.show()
+        self.help_window.raise_()
+        self.help_window.activateWindow()
+
     def _on_style_changed(self, style: Style) -> None:
         self.settings.style = style
         apply_style(style)
         item = self.sheet_view.net_item()
         if item is not None:
             item.restyle()
+        if self.help_window is not None:
+            self.help_window.restyle()
         scene = self.sheet_view.scene()
         if scene is not None:
             scene.update()
@@ -671,7 +677,8 @@ class MainWindow(QMainWindow):
         help_menu.addAction(self.about_action)
         self.help_action = QAction(self)
         bind(self.help_action, self.help_action.setText, "&Help")
-        self.help_action.setEnabled(False)  # what it shows is still to be decided
+        self.help_action.setShortcut("F1")
+        self.help_action.triggered.connect(self.show_help)
         help_menu.addAction(self.help_action)
         self.updates_action = QAction(self)
         bind(self.updates_action, self.updates_action.setText, "Check for &updates")
@@ -684,18 +691,10 @@ class MainWindow(QMainWindow):
         self._update_edit_actions()
 
     def _on_net_changed(self) -> None:
-        """Show the net the editor has now (the rearranged one in CUT_APPROVING): the sheet, the bounding rectangle
-        and the labels follow it, and what's on screen stays where it was."""
+        """The view shows the editor's new net (the rearranged one in CUT_APPROVING): the bounding rectangle and the
+        labels follow it."""
         self.net = self.editor.display_net
-        self.sheet_view.set_sheet(sheet_box(v.position for v in self.net.vertices))
-        self.sheet_view.set_net(self.net)
-        rearranged = self.editor.rearranged
-        item = self.sheet_view.net_item()
-        assert item is not None
-        item.set_glue((rearranged.kept, rearranged.moved) if rearranged is not None else ())
-        item.set_overlapping(rearranged.overlapping if rearranged is not None else frozenset())
         self._update_bounding()
-        self._update_hover_net()
         self._update_vertex_labels()
 
     def _on_glued(self) -> None:
@@ -705,43 +704,11 @@ class MainWindow(QMainWindow):
             ends = format_point(kept.origin.position), format_point(kept.destination.position)
             self.recorder.note("cut", "glue", *ends, "ok" if rearranged.valid else "overlap")
 
-    def _update_divided_view(self) -> None:
-        """While the user hovers a perimeter edge in CUT_EDITING (ruler off, nothing being dragged), show which parts
-        of the cuts can't be chosen for gluing; if the hovered one can be, its counterpart blinks."""
-        item = self.sheet_view.net_item()
-        if item is None:
-            return
-        show = (
-            self.editor.state is EditorState.CUT_EDITING
-            and not self.ruler_tool.active
-            and not self.cut_tool.dragging
-            and self.cut_hover.hovered() is not None
-        )
-        split = self.editor.split() if show else None
-        item.set_divided(split)
-        hovered = self.cut_hover.hovered()
-        if split is None or hovered is None or hovered in split.same_half_cuts:
-            self.counterpart_blink.set_cut(None)
-        else:
-            self.counterpart_blink.set_cut(split.net.counterpart(hovered))
-
-    def _update_hover_net(self) -> None:
-        """Which cuts follow the mouse: in CUT_EDITING the parts of the net as divided by the line, because that's what
-        a click chooses (the line itself means nothing there); in CUT_APPROVING none, as only the button can be
-        clicked."""
-        if self.editor.state is EditorState.CUT_EDITING:
-            if not self.cut_tool.dragging:
-                split = self.editor.split()
-                self.cut_hover.set_net(split.net, split.line_edges, vertices=False)
-        elif self.editor.state is EditorState.CUT_APPROVING:
-            self.cut_hover.set_net(self.net, frozenset(self.net.boundary_edges()), vertices=False)
-        else:
-            self.cut_hover.set_net(self.net)
-        self._update_divided_view()
-
     def _on_show_labels_toggled(self, checked: bool) -> None:
         self.settings.show_vertex_labels = checked
         self._update_vertex_labels()
+        if self.help_window is not None:
+            self.help_window.set_labels_shown(checked)
         if self.recorder is not None:
             self.recorder.note("labels", "on" if checked else "off")
 
@@ -769,15 +736,7 @@ class MainWindow(QMainWindow):
 
     def _update_vertex_labels(self) -> None:
         """Debug labels of the net's vertices and of the cut line's new points and images (if switched on)."""
-        show = self.settings.show_vertex_labels
-        shown = self.editor.display_net
-        self.sheet_view.set_vertex_labels(vertex_labels(shown, self.point_labels) if show else None)
-        points = self.cut_tool.item.points()
-        try:
-            cut_labels = cut_line_labels(self.editor.net, CutLine(list(points)), self.point_labels) if show else []
-        except ValueError:  # a point is being dragged off the net: it has no cube point to name for now
-            cut_labels = []
-        self.cut_tool.item.set_labels(cut_labels)
+        self.workspace.show_labels(self.point_labels if self.settings.show_vertex_labels else None)
 
     def _resize_to_screen(self, fraction: float = 0.8) -> None:
         screen = self.screen()

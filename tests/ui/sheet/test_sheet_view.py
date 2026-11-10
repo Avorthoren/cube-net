@@ -1,7 +1,7 @@
 import pytest
 from PyQt6.QtCore import QEvent, QPoint, QPointF, Qt
 from PyQt6.QtGui import QMouseEvent, QWheelEvent
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QFrame
 from pytestqt.qtbot import QtBot
 
 from cube_net.core.geometry import Box, Vec
@@ -357,3 +357,34 @@ class TestShift:
         view.left_pressed.connect(lambda _x, _y: seen.append(view.shift_held()))
         self.send(view, QEvent.Type.MouseButtonPress, Qt.MouseButton.LeftButton, True)
         assert seen == [True]
+
+
+class TestFixed:
+    def test_shows_the_box_in_the_middle_and_keeps_its_zoom(self, qtbot: QtBot) -> None:
+        view = SheetView()
+        qtbot.addWidget(view)
+        view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        view.setFrameShape(QFrame.Shape.NoFrame)
+        view.setFixedSize(400, 300)
+        view.set_sheet(Box(Vec(0, 0), Vec(20, 20)))
+        view.show_fixed(Box(Vec(8, 8), Vec(12, 11)), 1.0)
+        view.show()
+        qtbot.waitExposed(view)
+        assert view.scale_factor() == pytest.approx(100)  # 4 x 3 units in 400 x 300 px
+        middle = view.to_sheet(QPointF(view.viewport().width() / 2, view.viewport().height() / 2))
+        assert (middle.x(), middle.y()) == (pytest.approx(10, abs=0.02), pytest.approx(9.5, abs=0.02))
+        assert not view.zoom_by(2, QPointF(10, 10))  # no zooming
+
+
+def test_a_view_that_does_not_follow_the_keyboard(qtbot: QtBot) -> None:
+    from PyQt6.QtWidgets import QSpinBox
+
+    view = SheetView(follow_keyboard=False)
+    qtbot.addWidget(view)
+    other = QSpinBox()
+    qtbot.addWidget(other)
+    with qtbot.assertNotEmitted(view.ctrl_changed):
+        qtbot.keyPress(other, Qt.Key.Key_Control)
+        qtbot.keyRelease(other, Qt.Key.Key_Control)
+    assert not view.ctrl_held()
