@@ -72,8 +72,9 @@ class AppSettings:
 
     @property
     def settings_open(self) -> bool:
-        """Whether the settings panel was open when the user last showed or hid it (so that it's open at start)."""
-        return self._bool(_SETTINGS_OPEN, False)
+        """Whether the settings panel was open when the user last showed or hid it (so that it's open at start). It's
+        open at the very first start, so that the user sees what can be set."""
+        return self._bool(_SETTINGS_OPEN, True)
 
     @settings_open.setter
     def settings_open(self, value: bool) -> None:

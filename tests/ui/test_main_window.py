@@ -101,6 +101,7 @@ def test_labels_off_at_start_when_disabled_in_settings(qtbot: QtBot, tmp_path: P
 def settings_in(tmp_path: Path, record: bool) -> AppSettings:
     settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
     settings.record_session = record
+    settings.settings_open = False  # as the user left it; it's open only at the very first start
     return settings
 
 
@@ -3050,13 +3051,15 @@ class TestSettingsPanelOpenAtStart:
         qtbot.waitExposed(window)
         return window
 
-    def test_closed_the_first_time(self, qtbot: QtBot, tmp_path: Path) -> None:
+    def test_open_the_first_time(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
-        assert not window.settings_panel.isVisible()
-        assert not window.settings_action.isChecked()
+        assert window.settings_panel.isVisible()
+        assert window.settings_action.isChecked()
 
     def test_left_open_starts_open_in_its_place(self, qtbot: QtBot, tmp_path: Path) -> None:
-        self.make(qtbot, tmp_path).settings_action.trigger()
+        first = self.make(qtbot, tmp_path)
+        first.settings_action.trigger()
+        first.settings_action.trigger()  # hidden and shown again: left open
         window = self.make(qtbot, tmp_path)
         assert window.settings_action.isChecked()
         assert window.settings_panel.isVisible()
@@ -3065,9 +3068,7 @@ class TestSettingsPanelOpenAtStart:
         assert window.settings_panel.height() == window.sheet_view.height()
 
     def test_left_closed_starts_closed(self, qtbot: QtBot, tmp_path: Path) -> None:
-        first = self.make(qtbot, tmp_path)
-        first.settings_action.trigger()
-        first.settings_action.trigger()
+        self.make(qtbot, tmp_path).settings_action.trigger()  # open the first time: this hides it
         assert not self.make(qtbot, tmp_path).settings_panel.isVisible()
 
     def test_the_hide_button_is_like_clicking_settings(self, qtbot: QtBot, tmp_path: Path) -> None:

@@ -113,9 +113,9 @@ def test_settings_tab_default_and_persisted(tmp_path: Path) -> None:
 
 def test_settings_open_default_and_persisted(tmp_path: Path) -> None:
     s = settings_at(tmp_path / "s.ini")
-    assert s.settings_open is False
-    s.settings_open = True
-    assert settings_at(tmp_path / "s.ini").settings_open is True
+    assert s.settings_open is True  # open at the very first start
+    s.settings_open = False
+    assert settings_at(tmp_path / "s.ini").settings_open is False
 
 
 def test_language_default_and_persisted(tmp_path: Path) -> None:
