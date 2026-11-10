@@ -65,3 +65,11 @@ def test_qt_own_texts_too(qtbot: QtBot, russian: None) -> None:
 
 def test_in_every_language() -> None:
     assert in_every_language("Language") == ["Language", "Язык"]
+
+
+def test_the_user_s_wording(russian: None) -> None:
+    assert tr("Maximum zoom:") == "Макс. масштаб:"
+    assert tr("px per unit") == "пикс. на ед."
+    assert tr("by UNDEFEAT in attempts to solve {puzzle}", puzzle=tr("this puzzle")) == (
+        "разработано UNDEFEAT в попытках решить эту задачу"
+    )

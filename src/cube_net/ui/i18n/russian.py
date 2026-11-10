@@ -69,8 +69,8 @@ RUSSIAN: dict[str, str] = {
     "Show vertex labels": "Показывать метки вершин",
     "Log sessions": "Вести журнал сеансов",
     "Blink when target area achieved": "Мигать, когда цель достигнута",
-    "Maximum zoom:": "Наибольший масштаб:",
-    "px per unit": "пикс. на единицу",
+    "Maximum zoom:": "Макс. масштаб:",
+    "px per unit": "пикс. на ед.",
     "How far in the sheet can be zoomed: how many pixels the edge of the cube takes": (
         "Насколько можно приблизить лист: сколько пикселей занимает ребро куба"
     ),
@@ -88,8 +88,8 @@ RUSSIAN: dict[str, str] = {
     # The Help menu's windows.
     "About {name}": "О программе {name}",
     "Version {version}, {date}": "Версия {version}, {date}",
-    "by UNDEFEAT in attempts to solve {puzzle}": "от UNDEFEAT в попытках решить {puzzle}",
-    "this puzzle": "эту головоломку",
+    "by UNDEFEAT in attempts to solve {puzzle}": "разработано UNDEFEAT в попытках решить {puzzle}",
+    "this puzzle": "эту задачу",
     "Copy and close": "Скопировать и закрыть",
     "Close": "Закрыть",
     "Check for updates": "Проверка обновлений",
