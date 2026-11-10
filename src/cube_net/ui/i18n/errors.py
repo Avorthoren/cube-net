@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Why a project can't be saved or opened, in the user's language."""
 
 from cube_net.core.project import ProjectFileError

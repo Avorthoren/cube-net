@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`NetItem`: paints the cube net (docs/idea.txt colouring rules; docs/plan.md, section 6.3).
 
 Painted bottom to top:

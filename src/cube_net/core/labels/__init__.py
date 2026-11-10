@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Letter labels of points and their images (development aid, docs/idea.txt)."""
 
 from cube_net.core.labels.cut_line_labels import cut_line_labels

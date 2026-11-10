@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`CubeTopology`: faces, vertices, edges of the unit cube and how face frames connect (docs/plan.md, section 3.2).
 
 Every face has its own local frame: `(u, v)` in `[0, 1]^2`, with the face seen from outside the cube and `u`, `v`

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`build_net()`: assemble a `Net` from region polygons (used for the default net and in tests).
 
 All consistency checks of the input happen here, once, with readable `NetBuildError`s.

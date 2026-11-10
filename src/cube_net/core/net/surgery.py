@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Local changes of the net's DCEL: new vertices, splitting an edge, adding an edge across a region.
 
 These are building blocks: they keep the half-edge links right, but the net as a whole may be incomplete in between

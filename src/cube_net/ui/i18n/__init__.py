@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The application's languages (Settings -> Preferences -> Language): English and Russian.
 
 Every text the user sees goes through `tr` (or `bind`, which also retranslates it when the language changes). The

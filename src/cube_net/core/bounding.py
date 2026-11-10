@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The minimum-area bounding rectangle of the net (docs/idea.txt, "bounding rectangle"; docs/plan.md, section 4.7).
 
 The smallest rectangle around a convex polygon has one side on a hull edge, so it's enough to try a rectangle aligned

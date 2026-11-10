@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Exact convex hull (Andrew's monotone chain)."""
 
 from collections.abc import Iterable

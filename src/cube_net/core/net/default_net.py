@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`default_net()`: the cross from docs/idea.txt, the starting point of every new project."""
 
 from cube_net.core.cube import CUBE, LOCAL_CORNERS

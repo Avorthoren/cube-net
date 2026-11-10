@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Counterpart images of the cut line's endpoints (docs/idea.txt: the z_3 case).
 
 An endpoint that lies inside a cut X-Y is a cube point that also lies on the cut's counterpart (the other image of

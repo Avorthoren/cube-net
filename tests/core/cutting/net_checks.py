@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """A structural consistency check for nets, shared by the tests in this folder."""
 
 from collections.abc import Sequence

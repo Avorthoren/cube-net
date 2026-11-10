@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Mouse cursors that tell what a click on the sheet would do (docs/idea.txt): scissors (start or go on cutting), a
 pencil (edit the cut line), a glue tube (glue the halves onto this cut), a plus (add a point), an x (delete one). Qt
 has none of them, so they're drawn here:

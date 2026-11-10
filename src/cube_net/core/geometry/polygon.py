@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Exact helpers for simple polygons given as vertex lists (no repeated closing vertex)."""
 
 from collections.abc import Sequence

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`validate_net`: everything that must hold for a finished cube net (docs/plan.md, section 3.4). Raises
 `NetInvariantError` with a readable message. For use after a structural change, not in anything called often."""
 

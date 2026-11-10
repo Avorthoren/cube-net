@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The steps of an animation's script: what the mouse and the modifier keys do, in sheet coordinates (units)."""
 
 from dataclasses import dataclass

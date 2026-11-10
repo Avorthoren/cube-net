@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The building blocks of the net's DCEL (doubly connected edge list): vertices, half-edges, regions.
 
 They reference each other, so they live together in one module. They are plain mutable objects compared by

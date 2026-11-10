@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Starting and stopping session recording.
 
 A recording starts either when the app is launched with recording on, or later when the user turns it on. Either way

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`BoundingItem`: draws the minimum-area bounding rectangle (docs/idea.txt): a thin line, green on success."""
 
 from collections.abc import Sequence

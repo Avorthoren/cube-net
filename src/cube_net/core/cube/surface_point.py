@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`SurfacePoint`: a point on the surface of the cube in canonical form (docs/plan.md, section 3.2).
 
 A point on an edge belongs to 2 faces and a cube vertex to 3, so the same point can be written in several face frames.

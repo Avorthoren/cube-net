@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`tr` and `bind`: the texts in the current language, and keeping widgets' texts in it when it changes."""
 
 from collections.abc import Callable

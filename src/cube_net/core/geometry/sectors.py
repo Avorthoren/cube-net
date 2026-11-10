@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Exact comparison of angular sectors around a point. A sector is the open arc going counter-clockwise from one
 direction to another; directions are non-zero vectors of any length, so everything stays rational."""
 

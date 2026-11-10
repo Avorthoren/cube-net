@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`Box`: an exact axis-aligned rectangle (bounding boxes, the sheet)."""
 
 from __future__ import annotations

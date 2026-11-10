@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The cube surface: topology of faces/edges/vertices and points on the surface (docs/plan.md, section 3.2)."""
 
 from cube_net.core.cube.dashes import DASH_LENGTH, DashLayout, dash_layout

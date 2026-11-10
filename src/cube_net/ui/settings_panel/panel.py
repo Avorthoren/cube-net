@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`SettingsPanel`: the tabs of the settings, over the right side of the sheet (docs/idea.txt, settings).
 
 It's a child of the main window placed over the sheet, so the sheet doesn't move when it opens or closes, and the rest

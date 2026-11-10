@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`DemoPlayer`: an animation of Help -> Help with its play and replay button.
 
 Before it's played, it shows its first picture with a play button in the middle. Played, it runs its script; after

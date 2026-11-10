@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Exact 2D geometry (docs/plan.md, section 3.1). One closely related group of definitions per module."""
 
 from cube_net.core.geometry.box import Box

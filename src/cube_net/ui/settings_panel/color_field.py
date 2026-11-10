@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`ColorField`: a colour as RGB hex digits, after a `#` that's already there."""
 
 from PyQt6.QtCore import QRegularExpression, pyqtSignal

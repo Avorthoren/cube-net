@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The sheet: the rectangle the cube net lies on (docs/idea.txt; docs/plan.md, section 4.8)."""
 
 from collections.abc import Iterable

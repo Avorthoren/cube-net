@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`CutLineItem`: draws the cut line being created (docs/idea.txt, CUTTING state).
 
 Segments and points follow the usual colouring rules (two-colour dashes, sector circles), with a halo that marks them

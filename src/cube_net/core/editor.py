@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`Editor`: the state machine of the main feature (docs/idea.txt; docs/plan.md, section 5.1). No Qt.
 
 DEFAULT       click on a cut or a vertex    -> the cut line starts there              -> CUTTING

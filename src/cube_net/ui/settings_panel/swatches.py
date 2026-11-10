@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Small squares that show a colour: a plain one, and one that looks like a piece of the grid."""
 
 from PyQt6.QtCore import QPointF, QSize, Qt

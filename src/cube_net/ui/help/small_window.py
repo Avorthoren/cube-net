@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`SmallWindow`: what the Help menu's small windows have in common: their own title bar, with just the title and a
 close button.
 

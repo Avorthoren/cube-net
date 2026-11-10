@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`History`: undo and redo (docs/idea.txt, the actions list; docs/plan.md, section 5.2).
 
 - At most `MAX_ACTIONS` actions are kept; the oldest ones are forgotten.

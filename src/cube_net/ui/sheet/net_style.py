@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Sizes of the net's drawing elements, in screen pixels (constant at any zoom, docs/idea.txt).
 
 The values here are the defaults. Some of them are app settings the user can change (Settings -> Style); `set_sizes`

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The single entry point for inexact user input into the exact core (docs/plan.md, section 1, principle 3).
 
 Every point that comes from the UI (mouse positions in sheet units, as floats) goes through `quantize()`. For now it

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """A project file: gzipped JSON (docs/plan.md, section 5.3)."""
 
 import gzip

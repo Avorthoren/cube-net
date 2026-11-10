@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`Net`: the cube net on the sheet as a DCEL of `NetVertex`, `HalfEdge` and `Region` (docs/plan.md, section 3.3).
 
 Build one with `build_net()` (or `default_net()`). Queries return fresh lists; lookup indices are rebuilt by

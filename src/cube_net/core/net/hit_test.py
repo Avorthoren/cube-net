@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Finding the cut, the perimeter vertex or the fold line under the mouse (docs/plan.md, section 4.1).
 
 A cut's hitbox lies inside the region it bounds (docs/idea.txt, note 4): a strip of width `max_distance` along the

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`TextBlock`: the text of Help -> Help between two animations: titles and paragraphs in one document, so that any of
 it can be selected at once and copied (Ctrl+C), across paragraphs too.
 

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """What the tests of saving projects have in common: editors in all sorts of states, and comparing what's in them."""
 
 import json

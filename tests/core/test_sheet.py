@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from cube_net.core.cube import CUBE, FACES, LOCAL_CORNERS
 from cube_net.core.geometry import Box, Vec
 from cube_net.core.sheet import SHEET_MARGIN, sheet_box

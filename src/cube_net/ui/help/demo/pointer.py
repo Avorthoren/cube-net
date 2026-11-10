@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`Pointer`: the mouse pointer of an animation, drawn over its sheet.
 
 It looks like the real one would at that spot (the cursors of `cursors.py`; an arrow where the app shows the system's

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`SheetView`: shows the sheet; handles zoom, scrolling, panning and mouse coordinates (docs/plan.md, section 6.2).
 
 Scene coordinates are cube units with the Y axis pointing up (the view's transform is `scale(s, -s)`), so positions

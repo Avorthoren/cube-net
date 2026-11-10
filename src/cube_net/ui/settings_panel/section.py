@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`Section`: a titled part of a settings tab, with a button that restores its defaults (after asking)."""
 
 from PyQt6.QtCore import pyqtSignal

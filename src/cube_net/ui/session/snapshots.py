@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The state of the project in a session log: one line with the whole project, so that a log can be reproduced exactly.
 
 The line holds the bytes of a project file, in base64. To get them back as files that the app can open:

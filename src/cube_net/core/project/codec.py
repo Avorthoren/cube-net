@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """A `Project` as plain JSON data, and back (docs/plan.md, section 5.3).
 
 All numbers are exact: fractions are written as strings ("1/3"). Nets, rearrangements and states are stored once each,

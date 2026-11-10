@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`CutLine`: the cut line being drawn (docs/idea.txt, "how to allow user to make new cuts")."""
 
 from __future__ import annotations

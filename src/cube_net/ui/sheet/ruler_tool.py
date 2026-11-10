@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`RulerTool`: the ruler instrument (docs/idea.txt).
 
 While active, every left click on the sheet adds a measured point (rounded to 1/1000 unit like all input), and

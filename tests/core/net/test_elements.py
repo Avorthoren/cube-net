@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from cube_net.core.cube import SurfacePoint
 from cube_net.core.geometry import Rigid90, Vec
 from cube_net.core.net import EdgeKind, HalfEdge, NetVertex, Region

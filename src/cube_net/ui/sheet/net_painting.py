@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Painting helpers shared by the net and the cut line: two-colour dashed lines, vertex circles, debug labels.
 
 They paint in device pixels: the painter must have no transform; `world` maps sheet units to device pixels.

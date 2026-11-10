@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Every text the user can see has its Russian translation (docs/idea.txt: every text, now and in the future)."""
 
 import ast

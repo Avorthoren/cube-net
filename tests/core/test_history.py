@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The rules of `History`, as scripts of actions. The state is simply the number of the action that led to it."""
 
 import pytest

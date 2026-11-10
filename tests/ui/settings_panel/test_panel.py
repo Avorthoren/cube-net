@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from PyQt6.QtCore import QRect
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QScrollArea, QWidget

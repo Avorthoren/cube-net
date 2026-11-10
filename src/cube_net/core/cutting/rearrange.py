@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Rearranging the two halves of a split net (docs/idea.txt, CUT_EDITING rule 4; docs/plan.md, section 4.4).
 
 The clicked cut stays where it is; the half that holds its counterpart moves so that the counterpart lies on it, point

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`SheetItem`: the white sheet with its 1x1 grid, drawn in scene (= cube) units."""
 
 import math

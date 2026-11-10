@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Projects: the whole state of the user's work, and how it's kept in a file (docs/plan.md, section 5.3)."""
 
 from cube_net.core.project.codec import FORMAT_VERSION, decode_project, encode_project

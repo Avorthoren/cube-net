@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Do the two rearranged halves of the net overlap? (docs/idea.txt, CUT_APPROVING; docs/plan.md, section 4.5.)
 
 The criterion: the interiors of the two halves must not share any area. Touching is fine: at a point, or along segments

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """What to do when the last project can't be reopened at start (docs/idea.txt): a new project, or another file."""
 
 from enum import Enum

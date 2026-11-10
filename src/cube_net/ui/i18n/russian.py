@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Russian texts, by their English ones. Every text given to `tr` or `bind` must be here (a test checks that)."""
 
 RUSSIAN: dict[str, str] = {
@@ -93,6 +96,12 @@ RUSSIAN: dict[str, str] = {
     "by UNDEFEAT in attempts to solve {puzzle}": "разработано UNDEFEAT в попытках решить {puzzle}",
     "this puzzle": "эту задачу",
     "Copy and close": "Скопировать и закрыть",
+    "Copyright © 2026 Viktor Podust": "© 2026 Viktor Podust",
+    "GNU GPL v3 or later": "GNU GPL версии 3 или более поздней",
+    "Free software under the {license}, with ABSOLUTELY NO WARRANTY": (
+        "Свободная программа под лицензией {license}, БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ"
+    ),
+    "Source code: {source}": "Исходный код: {source}",
     "Close": "Закрыть",
     "Check for updates": "Проверка обновлений",
     "Under development...": "В разработке...",

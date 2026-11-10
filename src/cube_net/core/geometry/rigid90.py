@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`Rigid90`: an exact rigid motion of the plane by a multiple of 90 degrees (docs/plan.md, section 3.1).
 
 Every rearrangement of cube net parts is such a motion (docs/idea.txt, "Some facts we agreed on"), and so is the

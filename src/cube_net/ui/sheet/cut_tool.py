@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`CutTool`: turns mouse input on the sheet into editor actions for the cut line (docs/idea.txt).
 
 - A click on a perimeter vertex (inside its circle) or on a cut (inside its hitbox) starts the cut line there, or

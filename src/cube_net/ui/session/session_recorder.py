@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`SessionRecorder`: an application-wide event filter that writes user input into a `SessionLog`.
 
 Line format (after the time in seconds since start):

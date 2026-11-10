@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`ApproveButtonItem`: the round button in the middle of the segment chosen for gluing (CUT_APPROVING).
 
 A green check mark when the rearrangement can be approved, a grey "x" when it can't (clicking it undoes the

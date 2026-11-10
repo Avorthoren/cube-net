@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Help -> Check for updates: not there yet, and it says so, with a little traffic cone of road works."""
 
 from PyQt6.QtCore import QPointF, QRectF, QSize, Qt

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Labels of the net's vertices: the point's name plus an image index, like A_1, A_2, A_3 (docs/idea.txt)."""
 
 from dataclasses import dataclass

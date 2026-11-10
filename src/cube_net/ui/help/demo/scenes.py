@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The scripts of the animations of Help -> Help, on the default net (the cross: the column 11..12 x 10..14 with the
 arm 10..13 x 12..13).
 

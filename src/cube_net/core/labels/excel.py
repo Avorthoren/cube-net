@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Spreadsheet-style column names: A, B, ..., Z, AA, AB, ..., AZ, BA, ..., ZZ, AAA, ..."""
 
 

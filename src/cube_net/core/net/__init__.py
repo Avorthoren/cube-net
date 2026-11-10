@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The cube net on the sheet (docs/plan.md, section 3.3)."""
 
 from cube_net.core.net.builder import NetBuildError, RegionSpec, build_net

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Conversions between core geometry (exact) and Qt geometry (floats). For drawing only."""
 
 from PyQt6.QtCore import QPointF

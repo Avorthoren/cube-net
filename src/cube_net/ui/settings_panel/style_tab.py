@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The Style tab: how the net and the sheet look (docs/idea.txt, settings). Every change takes effect at once."""
 
 from dataclasses import replace

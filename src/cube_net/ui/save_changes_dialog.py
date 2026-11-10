@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The question asked before unsaved changes would get lost (docs/idea.txt): Save / Don't save / Cancel."""
 
 from enum import Enum

@@ -521,9 +521,11 @@ Help menu (to the right of Settings): About, Help, Check for updates.
 1. About: a small window with the application's name ("Cube Net"), its version and date ("1.0, 10.11.2026" while
    updates aren't handled), what
    it runs on (Python, Qt, the system), and "by UNDEFEAT in attempts to solve this puzzle", where "this puzzle" is a link
-   to https://ru.braigam.com/?path=comments&puzzle=680. All its text can be selected and copied; the "Copy and close"
-   button at the bottom copies all of it (a line per line, with the link itself instead of "this puzzle") and closes
-   the window. Escape closes it, as does the close button in its corner. It has no minimize or maximize buttons (nor
+   to https://ru.braigam.com/?path=comments&puzzle=680. Below that, the notices of the license: "Copyright © 2026
+   Viktor Podust", "Free software under the GNU GPL v3 or later, with ABSOLUTELY NO WARRANTY" (the license's name links
+   to https://www.gnu.org/licenses/gpl-3.0.html) and "Source code: github.com/Avorthoren/cube-net" (a link). All its
+   text can be selected and copied; the "Copy and close" button at the bottom copies all of it (a line per line, with
+   the links themselves instead of "this puzzle" and the license's name) and closes the window. Escape closes it, as does the close button in its corner. It has no minimize or maximize buttons (nor
    does the next one): Ubuntu's GNOME draws them on every window it frames, so these two windows draw their own title
    bar (title and close button; dragging it moves the window).
 2. Help (F1): a big window (an ordinary one, it can be resized) that explains the application, with animations: what
@@ -541,3 +543,7 @@ Help menu (to the right of Settings): About, Help, Check for updates.
    too. All the text can be selected and copied, across paragraphs too (but not across an animation). Escape closes
    the window.
 3. Check for updates: a small window saying "Under development..." (with a traffic cone).
+
+License: the application is free software under the GNU General Public License, version 3 or (at the user's option)
+any later version (it's built with PyQt6, which is GPL v3). Copyright (C) 2026 Viktor Podust. The LICENSE file has the
+license's text; every source file starts with the copyright line and "SPDX-License-Identifier: GPL-3.0-or-later".

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from PyQt6.QtCore import QPoint, QPointF, QSize, Qt
 from pytestqt.qtbot import QtBot
 

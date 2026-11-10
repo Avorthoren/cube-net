@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """How a straight segment of the cube surface is coloured as a dashed line (docs/idea.txt, colouring rule 2).
 
 - A segment on a cube edge alternates the colours of the edge's 2 faces; any other segment alternates its face's

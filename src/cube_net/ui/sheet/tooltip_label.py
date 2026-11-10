@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`TooltipLabel`: a tooltip that looks like the usual ones, but that's shown and hidden exactly when it's told.
 
 Qt's own tooltip (`QToolTip`) lingers for 300 ms after it's told to hide, and only a graphics view's items can have

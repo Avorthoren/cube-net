@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Zoom rules for the sheet (docs/idea.txt, zoom section). Pure functions, no Qt.
 
 Zoom is expressed as a scale: screen pixels per unit (1 unit = edge of the cube).

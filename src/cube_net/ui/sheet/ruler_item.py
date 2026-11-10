@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`RulerItem`: draws the ruler (docs/idea.txt, "ruler" instrument).
 
 For points P1..Pn and the mouse position M: lines P1-P2, ..., Pn-M; coordinates next to every point and next to the

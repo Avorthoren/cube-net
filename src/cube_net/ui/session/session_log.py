@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`SessionLog`: the session file. One line per entry: `<seconds since start> <kind> <fields...>`.
 
 Header lines start with `#`. The file is line-buffered, so it's complete even if the application crashes.

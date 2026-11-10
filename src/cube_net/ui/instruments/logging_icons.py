@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The icons of the button that starts and stops logging: a red dot (record) and a red square in a frame (stop), as
 media players and recorders show them. Drawn here, so that they look the same on every system."""
 

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Approving a rearrangement: gluing the halves for good (docs/idea.txt note 5 and 6; docs/plan.md, section 4.6).
 
 1. The chosen cut is glued with its counterpart.

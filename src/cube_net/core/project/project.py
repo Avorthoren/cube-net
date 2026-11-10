@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`Project`: everything that gets saved (docs/idea.txt): the current state, the history, settings, point names."""
 
 from dataclasses import dataclass

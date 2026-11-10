@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`BoundingControls`: the bounding rectangle's area label and toggle button on the instrument panel (docs/idea.txt).
 
 - The area of the minimum-area bounding rectangle is always shown, with 3 decimals.

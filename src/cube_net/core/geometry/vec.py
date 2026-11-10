@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Exact 2D point/vector `Vec` and the exact-number guard `to_fraction` (docs/plan.md, section 3.1).
 
 All coordinates are `fractions.Fraction`. Floats are deliberately rejected: a float coming from the UI must go through

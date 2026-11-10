@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Colours used by the UI (docs/idea.txt; docs/plan.md, section 6.5)."""
 
 from types import MappingProxyType

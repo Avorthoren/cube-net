@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Straight segments: what holding SHIFT does to a segment of the cut line (docs/idea.txt).
 
 The segment from an anchor point goes horizontally or vertically, whichever is closer to the mouse. Snapping must keep

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Development labels for the cut line being drawn: its points, the counterpart images of its endpoints, and the
 points where it crosses cube edges.
 

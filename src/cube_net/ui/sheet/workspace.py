@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`Workspace`: a sheet view with the net and the tools that work on it, wired together.
 
 The main window has one; so does every animation of Help -> Help, which plays the real tools with scripted input. What

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from fractions import Fraction as F
 
 from cube_net.core.cube import SurfacePoint

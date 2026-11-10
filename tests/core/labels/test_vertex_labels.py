@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, VertexLabel, vertex_labels
 from cube_net.core.net import default_net

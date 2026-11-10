@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`AppSettings`: settings of the application as a whole (not of a project), stored with `QSettings`."""
 
 from dataclasses import fields, replace

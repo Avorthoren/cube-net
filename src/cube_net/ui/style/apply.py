@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Putting a `Style` in place: everything that paints or hit-tests reads it from `net_style` and `palette`."""
 
 from PyQt6.QtGui import QColor

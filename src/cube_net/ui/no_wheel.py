@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Fields that ignore the mouse wheel (numbers, drop-down lists): scrolling over one must not change it by accident.
 The wheel goes on to what's behind the field (a tab of the settings scrolls as if the field weren't there)."""
 

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`ProjectSettings`: settings that belong to one project (docs/idea.txt). Saved with the project from M9 on."""
 
 from dataclasses import dataclass

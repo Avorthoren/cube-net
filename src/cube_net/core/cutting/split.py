@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Splitting the net along the cut line (docs/plan.md, section 4.3).
 
 `split_net` builds a new net in which the line has become real cuts: the perimeter is divided at the line's ends and at

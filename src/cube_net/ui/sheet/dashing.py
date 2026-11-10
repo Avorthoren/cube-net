@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Splitting a line into dashes of alternating colours (float arithmetic: drawing only)."""
 
 import math

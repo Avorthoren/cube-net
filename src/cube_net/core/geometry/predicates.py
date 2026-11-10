@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Exact geometric predicates: orientation and segment-segment classification (docs/plan.md, section 3.1).
 
 Every validity rule of the application (cut line strictly inside the net, perimeter overlap check, ...) is built on

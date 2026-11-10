@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`PointLabels`: stable letter names for points of the cube surface (debug labels, docs/idea.txt).
 
 The 8 cube vertices are named A..H as in docs/idea.txt. Every other point (created by cuts) gets the next free

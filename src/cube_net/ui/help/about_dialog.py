@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Help -> About: the application's name, version and build, and who made it for what."""
 
 import platform
@@ -20,6 +23,18 @@ PUZZLE_URL = "https://ru.braigam.com/?path=comments&puzzle=680"
 
 # The credits, with "this puzzle" where the link goes.
 CREDITS = "by UNDEFEAT in attempts to solve {puzzle}"
+
+# Who holds the copyright, and since when.
+COPYRIGHT = "Copyright © 2026 Viktor Podust"
+
+# The license (the GNU GPL v3 or any later version), with its name where the link to it goes.
+LICENSE_URL = "https://www.gnu.org/licenses/gpl-3.0.html"
+LICENSE_NAME = "GNU GPL v3 or later"
+LICENSE_TEXT = "Free software under the {license}, with ABSOLUTELY NO WARRANTY"
+
+# Where the source code is (the GPL's promise to whoever has the program).
+SOURCE_URL = "https://github.com/Avorthoren/cube-net"
+SOURCE_TEXT = "Source code: {source}"
 
 
 def build_info() -> str:
@@ -52,6 +67,13 @@ class AboutDialog(SmallWindow):
             label.setTextInteractionFlags(selectable)  # so that the user can copy any of it
         # The link stays a link (with "Copy link location" in its context menu), and the text around it selectable.
         self.credits.setTextInteractionFlags(selectable | Qt.TextInteractionFlag.LinksAccessibleByMouse)
+        # The notices of the GPL: who holds the copyright, that there's no warranty, the license and the source.
+        self.copyright = QLabel(tr(COPYRIGHT), self)
+        self.copyright.setTextInteractionFlags(selectable)
+        license_link = f'<a href="{LICENSE_URL}">{tr(LICENSE_NAME)}</a>'
+        self.license = _link_label(tr(LICENSE_TEXT, license=license_link), self)
+        source_link = f'<a href="{SOURCE_URL}">{SOURCE_URL.removeprefix("https://")}</a>'
+        self.source = _link_label(tr(SOURCE_TEXT, source=source_link), self)
         self.copy_button = QPushButton(tr("Copy and close"), self)
         self.copy_button.setAutoDefault(False)  # Enter in the text doesn't press it
         self.copy_button.clicked.connect(self._copy_and_close)
@@ -63,16 +85,44 @@ class AboutDialog(SmallWindow):
             content.addWidget(label)
         content.insertSpacing(3, 10)
         content.addSpacing(10)
+        for label in (self.copyright, self.license, self.source):
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            content.addWidget(label)
+        content.addSpacing(10)
         content.addWidget(self.copy_button, alignment=Qt.AlignmentFlag.AlignCenter)
         self.body.addLayout(content)
         self.setFixedSize(self.sizeHint())
 
     def text(self) -> str:
-        """All of it as plain text, a line per line, with the link itself instead of "this puzzle"."""
-        return "\n".join([APP_NAME, self.version.text(), *build_info().split("\n"), tr(CREDITS, puzzle=PUZZLE_URL)])
+        """All of it as plain text, a line per line, with the links themselves instead of "this puzzle" and the
+        license's name (that one with the link after it)."""
+        return "\n".join(
+            [
+                APP_NAME,
+                self.version.text(),
+                *build_info().split("\n"),
+                tr(CREDITS, puzzle=PUZZLE_URL),
+                tr(COPYRIGHT),
+                tr(LICENSE_TEXT, license=f"{tr(LICENSE_NAME)} ({LICENSE_URL})"),
+                tr(SOURCE_TEXT, source=SOURCE_URL),
+            ]
+        )
 
     def _copy_and_close(self) -> None:
         clipboard = QApplication.clipboard()
         if clipboard is not None:
             clipboard.setText(self.text())
         self.accept()
+
+
+def _link_label(text: str, parent: QWidget) -> QLabel:
+    """Rich text with a link that opens in the browser (and keeps "Copy link location"); the rest selectable."""
+    label = QLabel(text, parent)
+    label.setTextFormat(Qt.TextFormat.RichText)
+    label.setOpenExternalLinks(True)
+    label.setTextInteractionFlags(
+        Qt.TextInteractionFlag.TextSelectableByMouse
+        | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        | Qt.TextInteractionFlag.LinksAccessibleByMouse
+    )
+    return label

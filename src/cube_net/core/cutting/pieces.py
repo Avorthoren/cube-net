@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Which cube faces a segment of the cut line passes through (for its colours, docs/idea.txt note 3).
 
 A straight segment on the sheet can cross fold edges; on the cube it then goes from one face to another. Split at

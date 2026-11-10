@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`CounterpartBlink`: while the user hovers a cut that can be chosen, its counterpart blinks (docs/idea.txt,
 CUT_EDITING): regular and invisible in equal parts, so that it's easy to see which cut would come onto the hovered one.
 """

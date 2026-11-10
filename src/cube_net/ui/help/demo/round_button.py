@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`RoundButton`: the big round button over an animation: play (a triangle) before it starts, replay (an arrow going
 round) after it ends."""
 

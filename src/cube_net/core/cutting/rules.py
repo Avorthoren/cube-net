@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Validity rules of the cut line (docs/idea.txt, CUTTING state; docs/plan.md, section 4.2).
 
 The cut line must lie strictly inside the net, except for its first and last points, which lie on the perimeter. So a

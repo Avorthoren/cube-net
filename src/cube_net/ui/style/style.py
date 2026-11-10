@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`Style`: the values of Settings -> Style, with their ranges. The defaults are what the style files say."""
 
 import math

@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Help -> Help: a big window that explains how the application works, with animations of the real tools.
 
 The text is in a column of easy-to-read width, in blocks between the animations (`TextBlock`: selectable across

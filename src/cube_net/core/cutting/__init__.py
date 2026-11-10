@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """Drawing a new cut line across the net (docs/idea.txt; docs/plan.md, section 4.2)."""
 
 from cube_net.core.cutting.approve import approve

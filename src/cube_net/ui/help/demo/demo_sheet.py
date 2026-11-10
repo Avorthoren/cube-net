@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`DemoSheet`: the sheet of an animation. The net, the editor and the tools are the application's own (a
 `Workspace`); the mouse input comes from a script (`steps`), sent as real mouse events, so everything reacts as it does
 in the app. The user's own mouse and keyboard mean nothing here.

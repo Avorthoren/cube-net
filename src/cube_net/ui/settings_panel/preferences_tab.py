@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """The Preferences tab: language, vertex labels, session logs, blinking on success, how far the sheet can be zoomed
 in."""
 

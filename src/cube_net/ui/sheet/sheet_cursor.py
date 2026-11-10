@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`SheetCursor`: the mouse cursor and tooltip over the sheet follow what a click would do there (`CutTool.cursor_at`).
 
 They're worked out again when the mouse moves, and when what's under it changes without a move (a click changed the

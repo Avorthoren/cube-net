@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`Ruler`: the measuring tool's points (docs/idea.txt, "ruler" instrument). Not part of the project or the history."""
 
 import math

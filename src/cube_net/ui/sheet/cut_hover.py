@@ -1,3 +1,6 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 """`CutHover`: highlights the cut or perimeter vertex under the mouse (docs/idea.txt, DEFAULT state, rule 1)."""
 
 from collections.abc import Callable
