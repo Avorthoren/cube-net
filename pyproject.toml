@@ -34,6 +34,9 @@ version = { attr = "cube_net.__version__" }
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"cube_net.ui.icons" = ["*.png"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]  # so that the tests can import `scripts.release`

@@ -509,8 +509,22 @@ mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dr
   changelog section given to the version, tags it (annotated) and pushes both at once. `RUN_RUFF` in the script turns
   the ruff step off.
 - While working, changes go under "## Unreleased" in CHANGELOG.md: that becomes the release's notes.
-- The build workflow (GitHub Actions on a pushed tag: the same checks again, then builds and a draft release) is still
-  to be written (M11).
+- `.github/workflows/release.yml` (GitHub Actions), on a pushed tag "v*":
+  1. Check (Ubuntu 22.04): `python -m scripts.check_release` (the rules of the release script, for a tag pushed by
+     hand too: on master, equal to `__version__`, not lower than other release tags, a non-empty "## 1.2.0 (...)"
+     section in CHANGELOG.md, which becomes the notes), ruff, the tests.
+  2. Build, on Ubuntu 22.04, Windows Server 2025 and macOS 15 (Apple silicon): `python -m scripts.build` runs
+     PyInstaller (`packaging/cube_net.spec`), launch-tests the program (`--smoke-test`: shows the window, quits by
+     itself, with throwaway settings), and packages it: an AppImage (appimagetool 1.9.1), an Inno Setup installer
+     (`packaging/windows/cube_net.iss`: per user, no administrator rights, English or Russian, a fixed AppId) or a
+     .dmg. Unsigned: Windows' SmartScreen and macOS' Gatekeeper warn once.
+  3. A draft release with the three files, SHA256SUMS and the notes (a pre-release for -alpha/-beta/-rc), to be
+     published by hand.
+  Run by hand (Actions -> Release -> Run workflow), it checks and builds without releasing: a trial of the builds,
+  kept a week under the run.
+- The icon: the default net, faces filled with the default colours, transparent around it. `scripts/make_icon.py`
+  draws it from the net and the colours into `src/cube_net/ui/icons/cube_net.png` (the window icon, 256 px) and
+  `packaging/icons/` (`.ico` for Windows, `.icns` for macOS); a test fails when they're out of date.
 
 ## 8. Open questions and deferred topics
 

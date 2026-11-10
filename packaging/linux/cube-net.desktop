@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Cube Net
+Comment=Explore unit cube nets by cutting and re-gluing them
+Comment[ru]=Развёртки единичного куба: разрезать и склеивать по-новому
+Exec=cube-net
+Icon=cube-net
+Terminal=false
+Categories=Education;Science;Math;

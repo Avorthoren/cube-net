@@ -24,7 +24,7 @@ import os
 import re
 import subprocess
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -128,15 +128,28 @@ def check_not_lower(version: Version, tags: Sequence[str]) -> Version | None:
     return latest
 
 
-def unreleased_notes(changelog: str) -> str | None:
-    """What's under "## Unreleased" (up to the next "## " heading), or None if there's no such section."""
+def section_notes(changelog: str, heading: Callable[[str], bool]) -> str | None:
+    """What's under the first "## " heading that `heading` accepts (up to the next "## " heading), or None if there's
+    no such section."""
     lines = changelog.splitlines()
     try:
-        start = next(i for i, line in enumerate(lines) if line.rstrip() == UNRELEASED)
+        start = next(i for i, line in enumerate(lines) if line.startswith("## ") and heading(line.rstrip()))
     except StopIteration:
         return None
     end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
     return "\n".join(lines[start + 1 : end]).strip()
+
+
+def unreleased_notes(changelog: str) -> str | None:
+    """What's under "## Unreleased", or None if there's no such section."""
+    return section_notes(changelog, lambda line: line == UNRELEASED)
+
+
+def version_notes(changelog: str, version: Version) -> str | None:
+    """What's under the section of `version` ("## 1.2.0 (2026-11-20)", as a release makes it), or None."""
+    return section_notes(
+        changelog, lambda line: line == f"## {version.text}" or line.startswith(f"## {version.text} (")
+    )
 
 
 def check_notes(changelog: str | None) -> str:
