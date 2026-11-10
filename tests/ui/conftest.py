@@ -43,3 +43,15 @@ def english_and_own_settings(tmp_path_factory: pytest.TempPathFactory) -> Iterat
     TRANSLATIONS.set_language(Language.ENGLISH)
     yield
     TRANSLATIONS.set_language(Language.ENGLISH)
+
+
+@pytest.fixture(autouse=True)
+def no_modifiers_held() -> None:
+    """The test platform remembers the modifiers of the latest input event, and a window that becomes active reads
+    them (`SheetView.eventFilter`): a Shift+click of one test would hold SHIFT in the next. A key press without
+    modifiers forgets them."""
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtTest import QTest
+    from PyQt6.QtWidgets import QWidget
+
+    QTest.keyClick(QWidget(), Qt.Key.Key_A)

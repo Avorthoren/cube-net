@@ -153,3 +153,18 @@ def test_tooltip_label_looks_like_a_tooltip(qtbot: QtBot, tmp_path: Path) -> Non
     assert label.windowFlags() & Qt.WindowType.ToolTip
     assert label.palette().color(label.backgroundRole()) == QToolTip.palette().color(label.backgroundRole())
     assert not label.isVisible()
+
+
+def test_ctrl_turns_it_into_a_red_x_without_a_move(qtbot: QtBot, tmp_path: Path) -> None:
+    window = make(qtbot, tmp_path)
+    view = window.sheet_view
+    h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+    view.left_pressed.emit(11.5, 14 - h)
+    view.left_pressed.emit(11.5, 13.5)
+    view.left_pressed.emit(12 - h, 13.5)
+    view.mouse_moved.emit(11.5, 13.5)  # the inner point
+    assert window.sheet_cursor.kind() is CursorKind.PENCIL
+    qtbot.keyPress(view, Qt.Key.Key_Control)
+    assert window.sheet_cursor.kind() is CursorKind.DELETE
+    qtbot.keyRelease(view, Qt.Key.Key_Control)
+    assert window.sheet_cursor.kind() is CursorKind.PENCIL

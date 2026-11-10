@@ -268,7 +268,7 @@ CUT_APPROVING.
 |---------------|-------------------------------------------------|-------------------------------------------------------------|
 | DEFAULT       | net                                             | click a boundary segment → #1 (first point) → CUTTING      |
 | CUTTING       | net, cut line (open)                            | click inside → #1; click on boundary → #1 → CUT_EDITING    |
-| CUT_EDITING   | net, cut line (closed), endpoint images         | midpoint circle → #1; Shift+click → #2; drag → #3; click a boundary segment → #4 → CUT_APPROVING |
+| CUT_EDITING   | net, cut line (closed), endpoint images         | midpoint circle → #1; Shift/Ctrl+click → #2; drag → #3; click a boundary segment → #4 → CUT_APPROVING |
 | CUT_APPROVING | candidate net, glue pair, validity result       | Ctrl+Enter / ✓ (only if valid) → #5 → DEFAULT             |
 
 Undo and redo are available in every state. Each public method either performs one action, or returns a
@@ -393,6 +393,11 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
 - SHIFT restricts the segment being made, or the one from the previous point to the dragged point, to horizontal or
   vertical (`core/cutting/straight.py`). `SheetView` tracks SHIFT, from the keyboard and from mouse events, so that it
   acts at once. Shift+press on an inner point deletes it on release, unless the mouse has moved: then it's a move.
+- SHIFT and CTRL are tracked whichever widget has the keyboard focus (an app-wide event filter; read anew when
+  the window becomes active again). While the mouse is over the sheet they're also read every 50 ms: the desktop
+  may take a key for itself (GNOME's "Locate pointer" grabs the left CTRL on X11), and then no key events come.
+- CTRL is tracked like SHIFT (`ctrl_changed`): over an inner point it shows the red x, and Ctrl+press on one arms
+  it like a button (no drag); released on the same point, it's deleted (the usual check and black flash).
 
 ### 6.5 Blinking and colours (`palette.py`)
 - Face colours come from `QSettings`, with the defaults from `idea.txt`. Each colour also has a derived
@@ -462,7 +467,7 @@ part is built right away**, before more logic is added. Every step marked 👁 e
 | M7  | Approve                           | **Done.** 1. Gluing, auto-glue walk, cleanup (§4.6), `validate_net()` (§3.4). 2. 👁 The ✓ button on the sheet and Ctrl+Enter accept the cut; you can keep cutting the new net. | All **11 hexomino nets** are reachable from the cross (core scenario test) and in the app |
 | M8  | Undo / redo                       | **Done.** 1. `history.py` with every special rule (§5.2). 2. 👁 Ctrl+Z / Ctrl+Y and Edit menu items, in every state.                         | Table-driven history tests pass; works in the app |
 | M9  | Projects                          | **Done.** 1. 👁 (**done**) Serialization of the editor state, history and point names (`PointLabels`), so debug labels stay the same after reopening; File → Open…, Save As… 2. 👁 (**done**) Save (Ctrl+S), New, the dirty flag and the unsaved-changes prompt (also on Quit). 3. 👁 (**done**) Startup flow (reopen the last project). 4. 👁 (**done**) Project settings dialog (area threshold). 5. (**done**) The session-recording state snapshot (§6.7) becomes the serialized project. | Save → restart → identical state with full undo/redo |
-| M10 | Polish                            | 1. (**done**) Performance check at about 50 cuts (below). 2. 👁 (**done**) Cursor shapes (scissors, pencil, glue tube: `ui/sheet/cursors.py`, chosen by `CutTool.cursor_at`, which uses the same checks as the clicks); the approve button looks raised and has a tooltip. 3. 👁 (**done**) Ruler with SHIFT: the first segment horizontal/vertical, every next one parallel/perpendicular to the previous segment. 4. 👁 (**done**) Settings panel (Preferences, Style) instead of the View menu; the target area on the instrument panel instead of File → Project settings. 5. Anything found while trying the app. Colour variants for the new cut line are in since M5 (halo and rings). | Smooth interaction with a heavily cut net |
+| M10 | Polish                            | 1. (**done**) Performance check at about 50 cuts (below). 2. 👁 (**done**) Cursor shapes (scissors, pencil, glue tube, a green plus over the middle circles, a red x over an inner point with CTRL held, Ctrl+click deletes it: `ui/sheet/cursors.py`, chosen by `CutTool.cursor_at`, which uses the same checks as the clicks); the approve button looks raised and has a tooltip. 3. 👁 (**done**) Ruler with SHIFT: the first segment horizontal/vertical, every next one parallel/perpendicular to the previous segment. 4. 👁 (**done**) Settings panel (Preferences, Style) instead of the View menu; the target area on the instrument panel instead of File → Project settings. 5. Anything found while trying the app. Colour variants for the new cut line are in since M5 (halo and rings). | Smooth interaction with a heavily cut net |
 | M11 | Packaging                         | PyInstaller one-folder build → `.deb` and/or AppImage for Ubuntu 24; later macOS (`.app`/`.dmg`) and Windows                       | Install on a clean Ubuntu VM and run |
 
 M7's "all 11 nets" scenario is the main acceptance test for the whole topology engine. It's written against the

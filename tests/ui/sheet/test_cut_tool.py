@@ -781,18 +781,33 @@ class TestCursorAt:
         assert tool.cursor_at(11.5, 12.5) is CursorKind.SCISSORS
         assert tool.cursor_at(7, 7) is CursorKind.ARROW
 
-    def test_editing_pencil_glue_or_nothing(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+    def test_editing_pencil_plus_glue_or_nothing(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
         from cube_net.ui.sheet.cursors import CursorKind
 
         view, tool, _ = setup
         corner_cut(view)
         h = self.h(view)
         assert tool.cursor_at(11.5, 13.5) is CursorKind.PENCIL  # a point
-        assert tool.cursor_at(11.5, 13.75) is CursorKind.PENCIL  # a segment's middle
+        assert tool.cursor_at(11.5, 13.75) is CursorKind.PLUS  # a segment's middle
         assert tool.cursor_at(11.75, 10 + h) is CursorKind.GLUE  # a cut that can be chosen
         assert tool.cursor_at(10.5, 12 + h) is CursorKind.ARROW  # a useless one
         assert tool.cursor_at(11.5, 12.5) is CursorKind.ARROW
         assert tool.cursor_at(10, 13) is CursorKind.ARROW  # a vertex: nothing to click there
+
+    def test_red_x_over_an_inner_point_while_ctrl_is_held(
+        self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
+    ) -> None:
+        from cube_net.ui.sheet.cursors import CursorKind
+
+        view, tool, _ = setup
+        corner_cut(view)
+        qtbot.keyPress(view, Qt.Key.Key_Control)
+        assert tool.cursor_at(11.5, 13.5) is CursorKind.DELETE  # Y
+        assert tool.cursor_at(11.5, 14) is CursorKind.PENCIL  # the first point
+        assert tool.cursor_at(12, 13.5) is CursorKind.PENCIL  # the last one
+        assert tool.cursor_at(11.5, 13.75) is CursorKind.PLUS
+        qtbot.keyRelease(view, Qt.Key.Key_Control)
+        assert tool.cursor_at(11.5, 13.5) is CursorKind.PENCIL
 
     def test_pencil_while_dragging(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
         from cube_net.ui.sheet.cursors import CursorKind
@@ -904,3 +919,70 @@ class TestButtonsActOnRelease:
         assert tool.editor.state is EditorState.CUT_EDITING
         view.left_released.emit(11.5, 13.75)
         assert len(positions(tool)) == 4
+
+
+def ctrl_press(view: SheetView, qtbot: QtBot, x: float, y: float) -> None:
+    pos = view.from_sheet(QPointF(x, y)).toPoint()
+    qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, pos)
+
+
+def ctrl_release(view: SheetView, qtbot: QtBot, x: float, y: float) -> None:
+    pos = view.from_sheet(QPointF(x, y)).toPoint()
+    qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ControlModifier, pos)
+
+
+class TestCtrlClickDeletes:
+    """Ctrl+click on an inner point deletes it, when released on the same point; the ends can't be deleted."""
+
+    def test_deletes_on_release(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        ctrl_press(view, qtbot, 11.5, 13.5)
+        assert positions(tool) == [X, Y, Z]  # nothing yet
+        assert tool.busy
+        assert not tool.dragging  # CTRL doesn't drag
+        with qtbot.waitSignal(tool.edited) as blocker:
+            ctrl_release(view, qtbot, 11.5, 13.5)
+        assert positions(tool) == [X, Z]
+        assert blocker.args == ["delete", 1, Y]
+        assert not tool.busy
+
+    def test_released_off_the_point_does_nothing(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.ui.sheet.cursors import CursorKind
+
+        view, tool, _ = setup
+        corner_cut(view)
+        view._press_modifiers = Qt.KeyboardModifier.ControlModifier  # as a real Ctrl+press leaves it
+        view.left_pressed.emit(11.5, 13.5)
+        view.mouse_moved.emit(11.3, 13.2)
+        assert positions(tool) == [X, Y, Z]  # the point doesn't move
+        assert tool.cursor_at(11.3, 13.2) is CursorKind.ARROW
+        assert tool.cursor_at(11.5, 13.5) is CursorKind.DELETE
+        view.left_released.emit(11.3, 13.2)
+        assert positions(tool) == [X, Y, Z]
+        assert not tool.busy
+
+    def test_an_end_is_dragged_as_usual(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        ctrl_press(view, qtbot, 12, 13.5)
+        assert tool.dragging
+        ctrl_release(view, qtbot, 12, 13.5)
+        assert positions(tool) == [X, Y, Z]
+
+    def test_rejected_when_the_line_would_cross_the_perimeter(
+        self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
+    ) -> None:
+        view, tool, _ = setup
+        inside = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        view.left_pressed.emit(10.5, 13 - inside)  # on C_1-A_2
+        view.left_pressed.emit(11.2, 12.8)
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(11.5, 14 - inside)
+        before = positions(tool)
+        ctrl_press(view, qtbot, 11.2, 12.8)
+        with qtbot.waitSignal(tool.rejected):
+            ctrl_release(view, qtbot, 11.2, 12.8)
+        assert tool.item.flash() == ((before[0], before[2]),)  # the shortcut in black
+        qtbot.waitUntil(lambda: tool.item.flash() is None, timeout=FLASH_MS + 500)
+        assert positions(tool) == before

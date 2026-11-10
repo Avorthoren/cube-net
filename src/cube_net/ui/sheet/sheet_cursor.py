@@ -37,6 +37,7 @@ class SheetCursor(QObject):
         view.mouse_left.connect(self._on_mouse_left)
         view.left_released.connect(lambda *_: self.update())
         view.shift_changed.connect(self.update)
+        view.ctrl_changed.connect(self.update)
         cut_tool.line_changed.connect(self.update)
         cut_tool.net_changed.connect(self.update)
         ruler.points_changed.connect(self.update)

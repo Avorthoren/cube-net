@@ -4,8 +4,9 @@
   ends it there while cutting. A vertex wins over a cut.
 - While cutting, a click inside the net adds a point (on a fold line, if clicked in its hitbox); a thin line follows the
   mouse from the last point (hidden while the ruler is active, which then takes the clicks).
-- In CUT_EDITING, a click on a segment's hollow middle circle adds a point there; Shift+click on an inner point deletes
-  it (on release, if the mouse has hardly moved: Shift+drag moves it); dragging a point moves it, and it's checked when
+- In CUT_EDITING, a click on a segment's hollow middle circle adds a point there; Ctrl+click on an inner point deletes
+  it (on release on the same point; while CTRL is held over it the mouse shows a red x), and so does Shift+click (on
+  release, if the mouse has hardly moved: Shift+drag moves it); dragging a point moves it, and it's checked when
   the mouse is released. An endpoint walks along the perimeter and
   snaps to perimeter vertices. An inner point snaps to fold lines, and may not be released in a hitbox of the perimeter.
 - A fold line is highlighted while the mouse is in its hitbox, whenever that means a point would land on it: while
@@ -97,7 +98,8 @@ class CutTool(QObject):
         self._delete_press: QPointF | None = None
         self._mouse: tuple[float, float] | None = None
 
-        # A button that's pressed: ("approve", 0) or ("midpoint", its segment). It acts if released on it.
+        # A button that's pressed: ("approve", 0), ("midpoint", its segment) or ("delete", the point pressed with CTRL).
+        # It acts if released on it.
         self._armed: tuple[str, int] | None = None
         view.left_pressed.connect(self._on_left_pressed)
         view.left_released.connect(self._on_left_released)
@@ -228,8 +230,13 @@ class CutTool(QObject):
         if state is EditorState.CUT_APPROVING:
             return CursorKind.BUTTON if self._on_approve_button(x, y) else CursorKind.ARROW
         if state is EditorState.CUT_EDITING:
-            if self._point_at(x, y) is not None or self._midpoint_at(x, y) is not None:
-                return CursorKind.PENCIL
+            if self._armed is not None and self._armed[0] == "delete":  # released off the point, it stays
+                return CursorKind.DELETE if self._on_armed(x, y) else CursorKind.ARROW
+            if self._midpoint_at(x, y) is not None:
+                return CursorKind.PLUS
+            i = self._point_at(x, y)
+            if i is not None:
+                return CursorKind.DELETE if self._view.ctrl_held() and self._is_inner(i) else CursorKind.PENCIL
             cut = self._glue_target(x, y)
             choosable = cut is not None and cut not in self._editor.split().same_half_cuts
             return CursorKind.GLUE if choosable else CursorKind.ARROW
@@ -279,6 +286,11 @@ class CutTool(QObject):
         _, cut, vertex, _ = self._hit(x, y)
         return vertex, cut
 
+    def _is_inner(self, i: int) -> bool:
+        """Is point i of the cut line neither its first nor its last?"""
+        line = self._editor.cut_line
+        return line is not None and 0 < i < len(line.points) - 1
+
     def _on_shift_changed(self) -> None:
         if self._mouse is not None:
             self._on_mouse_moved(*self._mouse)
@@ -310,6 +322,9 @@ class CutTool(QObject):
         line = self._editor.cut_line
         assert line is not None
         i = self._point_at(x, y)
+        if i is not None and self._is_inner(i) and self._view.press_modifiers() & Qt.KeyboardModifier.ControlModifier:
+            self._arm(("delete", i))
+            return
         if i is not None:
             self._drag_index, self._drag_target, self._drag_over_perimeter = i, None, False
             inner = 0 < i < len(line.points) - 1
@@ -353,6 +368,8 @@ class CutTool(QObject):
         kind, segment = self._armed
         if kind == "approve":
             return self._editor.state is EditorState.CUT_APPROVING and self._on_approve_button(x, y)
+        if kind == "delete":
+            return self._editor.state is EditorState.CUT_EDITING and self._point_at(x, y) == segment
         return self._editor.state is EditorState.CUT_EDITING and self._midpoint_at(x, y) == segment
 
     def _show_pressed(self, pressed: bool) -> None:
@@ -360,7 +377,7 @@ class CutTool(QObject):
         kind, segment = self._armed
         if kind == "approve":
             self.approve_button.set_pressed(pressed)
-        else:
+        elif kind == "midpoint":
             self.item.set_pressed_midpoint(segment if pressed else None)
 
     def _disarm(self) -> None:
@@ -382,6 +399,9 @@ class CutTool(QObject):
                 self.approve_clicked.emit()
             else:
                 self.undo_clicked.emit()
+            return
+        if kind == "delete":
+            self._delete_point(segment)
             return
         line = self._editor.cut_line
         assert line is not None

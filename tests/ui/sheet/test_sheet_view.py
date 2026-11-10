@@ -286,6 +286,59 @@ class TestShift:
             qtbot.keyRelease(view, Qt.Key.Key_Shift)
         assert not view.shift_held()
 
+    def test_ctrl_is_tracked_too(self, view: SheetView, qtbot: QtBot) -> None:
+        assert not view.ctrl_held()
+        with qtbot.waitSignal(view.ctrl_changed), qtbot.assertNotEmitted(view.shift_changed):
+            qtbot.keyPress(view, Qt.Key.Key_Control)
+        assert view.ctrl_held()
+        with qtbot.waitSignal(view.ctrl_changed):
+            qtbot.keyRelease(view, Qt.Key.Key_Control)
+        assert not view.ctrl_held()
+
+    def test_read_while_the_mouse_is_over_it(
+        self, view: SheetView, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A key the desktop takes for itself (GNOME's "Locate pointer" takes the left CTRL) sends no key events."""
+        from cube_net.ui.sheet import sheet_view
+
+        held = [Qt.KeyboardModifier.ControlModifier]
+
+        class Desktop:
+            @staticmethod
+            def queryKeyboardModifiers() -> Qt.KeyboardModifier:
+                return held[0]
+
+        monkeypatch.setattr(sheet_view, "QGuiApplication", Desktop)
+        view.activateWindow()
+        qtbot.waitUntil(view.isActiveWindow)
+        QApplication.sendEvent(view, QEvent(QEvent.Type.Enter))
+        with qtbot.waitSignal(view.ctrl_changed, timeout=sheet_view.MODIFIER_POLL_MS * 10):
+            pass
+        assert view.ctrl_held()
+        held[0] = Qt.KeyboardModifier.NoModifier
+        with qtbot.waitSignal(view.ctrl_changed, timeout=sheet_view.MODIFIER_POLL_MS * 10):
+            pass
+        assert not view.ctrl_held()
+        QApplication.sendEvent(view, QEvent(QEvent.Type.Leave))
+        held[0] = Qt.KeyboardModifier.ControlModifier
+        with qtbot.assertNotEmitted(view.ctrl_changed):
+            qtbot.wait(sheet_view.MODIFIER_POLL_MS * 4)  # not read while the mouse is elsewhere
+
+    def test_whichever_widget_has_the_focus(self, view: SheetView, qtbot: QtBot) -> None:
+        from PyQt6.QtWidgets import QSpinBox
+
+        other = QSpinBox()  # say, the target area on the instrument panel
+        qtbot.addWidget(other)
+        with qtbot.waitSignal(view.ctrl_changed):
+            qtbot.keyPress(other, Qt.Key.Key_Control)
+        assert view.ctrl_held()
+        with qtbot.waitSignal(view.shift_changed):
+            qtbot.keyPress(other, Qt.Key.Key_Shift)
+        assert view.shift_held()
+        qtbot.keyRelease(other, Qt.Key.Key_Control)
+        qtbot.keyRelease(other, Qt.Key.Key_Shift)
+        assert not view.ctrl_held() and not view.shift_held()
+
     def test_other_keys_do_not_count(self, view: SheetView, qtbot: QtBot) -> None:
         with qtbot.assertNotEmitted(view.shift_changed):
             qtbot.keyPress(view, Qt.Key.Key_A)

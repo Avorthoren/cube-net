@@ -6,9 +6,19 @@ from the core are used as-is.
 
 from collections.abc import Callable
 
-from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, pyqtSignal
-from PyQt6.QtGui import QKeyEvent, QMouseEvent, QMoveEvent, QPainter, QResizeEvent, QShowEvent, QTransform, QWheelEvent
-from PyQt6.QtWidgets import QGraphicsScene, QGraphicsView, QWidget
+from PyQt6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import (
+    QGuiApplication,
+    QKeyEvent,
+    QMouseEvent,
+    QMoveEvent,
+    QPainter,
+    QResizeEvent,
+    QShowEvent,
+    QTransform,
+    QWheelEvent,
+)
+from PyQt6.QtWidgets import QApplication, QGraphicsScene, QGraphicsView, QWidget
 
 from cube_net.core.geometry import Box
 from cube_net.core.labels import VertexLabel
@@ -26,6 +36,10 @@ def _to_rect(box: Box) -> QRectF:
     return QRectF(float(box.lo.x), float(box.lo.y), float(box.width), float(box.height))
 
 
+# How often (ms) the modifier keys are read while the mouse is over the sheet (see `SheetView.__init__`).
+MODIFIER_POLL_MS = 50
+
+
 class SheetView(QGraphicsView):
     # Mouse position in sheet coordinates (emitted on every move over the view).
     mouse_moved = pyqtSignal(float, float)
@@ -38,6 +52,9 @@ class SheetView(QGraphicsView):
 
     # SHIFT was pressed or released (even if the mouse stays where it is).
     shift_changed = pyqtSignal()
+
+    # CTRL was pressed or released (even if the mouse stays where it is).
+    ctrl_changed = pyqtSignal()
 
     # Left button released at a sheet point (x, y), unless it ended panning.
     left_released = pyqtSignal(float, float)
@@ -70,9 +87,18 @@ class SheetView(QGraphicsView):
         self._panning_enabled = True
         self._press_modifiers = Qt.KeyboardModifier.NoModifier
         self._shift_held = False
+        self._ctrl_held = False
         self._pending_initial_view: Box | None = None
         # Where the viewport's top-left corner was in the window, so the sheet can be kept in place when it moves.
         self._viewport_origin: QPoint | None = None
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)  # see `eventFilter`
+        # While the mouse is over the sheet, the modifiers are also read this often: the desktop may take a key for
+        # itself (GNOME's "Locate pointer" takes the left CTRL on X11), and then its presses never reach the app.
+        self._modifier_poll = QTimer(self)
+        self._modifier_poll.setInterval(MODIFIER_POLL_MS)
+        self._modifier_poll.timeout.connect(self._poll_modifiers)
         self._apply_transform()
 
     # --- setup ------------------------------------------------------------------------------------------------------
@@ -151,10 +177,22 @@ class SheetView(QGraphicsView):
     def shift_held(self) -> bool:
         return self._shift_held
 
+    def ctrl_held(self) -> bool:
+        return self._ctrl_held
+
     def _note_shift(self, held: bool) -> None:
         if held != self._shift_held:
             self._shift_held = held
             self.shift_changed.emit()
+
+    def _note_ctrl(self, held: bool) -> None:
+        if held != self._ctrl_held:
+            self._ctrl_held = held
+            self.ctrl_changed.emit()
+
+    def _note_modifiers(self, modifiers: Qt.KeyboardModifier) -> None:
+        self._note_shift(bool(modifiers & Qt.KeyboardModifier.ShiftModifier))
+        self._note_ctrl(bool(modifiers & Qt.KeyboardModifier.ControlModifier))
 
     def press_modifiers(self) -> Qt.KeyboardModifier:
         """The modifier keys held during the latest mouse press."""
@@ -226,7 +264,7 @@ class SheetView(QGraphicsView):
         if event is None:
             return
         self._press_modifiers = event.modifiers()
-        self._note_shift(bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
+        self._note_modifiers(event.modifiers())
         if event.button() == Qt.MouseButton.LeftButton:
             p = self.to_sheet(event.position())
             if self._panning_enabled and not self.press_claimed(p.x(), p.y()):
@@ -241,7 +279,7 @@ class SheetView(QGraphicsView):
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
             return
-        self._note_shift(bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
+        self._note_modifiers(event.modifiers())
         pos = event.position()
         if self._pan_last is not None:
             delta = pos.toPoint() - self._pan_last
@@ -263,17 +301,30 @@ class SheetView(QGraphicsView):
             return
         super().mouseReleaseEvent(event)
 
-    def keyPressEvent(self, event: QKeyEvent | None) -> None:
-        if event is not None and event.key() == Qt.Key.Key_Shift:
-            self._note_shift(True)
-        super().keyPressEvent(event)
+    def eventFilter(self, watched: QObject | None, event: QEvent | None) -> bool:
+        """SHIFT and CTRL, whichever widget of the app has the keyboard focus (a spin box, the settings panel...): the
+        sheet shows what they do at once. Coming back to the window, they're read anew (they may have changed while
+        it was in the background)."""
+        if isinstance(event, QKeyEvent) and event.type() in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
+            held = event.type() == QEvent.Type.KeyPress
+            if event.key() == Qt.Key.Key_Shift:
+                self._note_shift(held)
+            elif event.key() == Qt.Key.Key_Control:
+                self._note_ctrl(held)
+        elif event is not None and event.type() == QEvent.Type.WindowActivate:
+            self._note_modifiers(QGuiApplication.queryKeyboardModifiers())
+        return False
 
-    def keyReleaseEvent(self, event: QKeyEvent | None) -> None:
-        if event is not None and event.key() == Qt.Key.Key_Shift:
-            self._note_shift(False)
-        super().keyReleaseEvent(event)
+    def enterEvent(self, event: object) -> None:
+        self._modifier_poll.start()
+        super().enterEvent(event)  # type: ignore[arg-type]
+
+    def _poll_modifiers(self) -> None:
+        if self.isActiveWindow():
+            self._note_modifiers(QGuiApplication.queryKeyboardModifiers())
 
     def leaveEvent(self, event: object) -> None:
+        self._modifier_poll.stop()
         self.mouse_left.emit()
         super().leaveEvent(event)  # type: ignore[arg-type]
 

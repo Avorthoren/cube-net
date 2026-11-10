@@ -1,18 +1,23 @@
 """Mouse cursors that tell what a click on the sheet would do (docs/idea.txt): scissors (start or go on cutting), a
-pencil (edit the cut line), a glue tube (glue the halves onto this cut). Qt has none of them, so they're drawn here:
+pencil (edit the cut line), a glue tube (glue the halves onto this cut), a plus (add a point), an x (delete one). Qt
+has none of them, so they're drawn here:
 white shapes with a dark outline, visible on every colour of the net and the sheet."""
 
 from enum import Enum
 from functools import cache
 
 from PyQt6.QtCore import QPointF, QRectF, Qt
-from PyQt6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QPainterPath, QPen, QPixmap, QPolygonF
+from PyQt6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QTransform
 
 # The size of a cursor image, in logical pixels.
 CURSOR_PX = 32
 
 OUTLINE = QColor("#202124")
 FILL = QColor("#FFFFFF")
+
+# The plus (adding a point) and the x (deleting one).
+PLUS_FILL = QColor("#34A853")
+DELETE_FILL = QColor("#D93025")
 
 # The pencil's wood, its eraser and the glue tube's nozzle and drop.
 PENCIL_BODY = QColor("#FFD54F")
@@ -33,6 +38,12 @@ class CursorKind(Enum):
 
     # A click glues the halves onto this cut (the rearrangement).
     GLUE = "glue"
+
+    # A click adds a point to the cut line here (the circle in the middle of a segment).
+    PLUS = "plus"
+
+    # A click deletes this point of the cut line (CTRL is held).
+    DELETE = "delete"
 
     # Over a button.
     BUTTON = "button"
@@ -55,7 +66,14 @@ def _drawn(kind: CursorKind) -> QCursor:
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     painter.setPen(QPen(OUTLINE, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-    hotspot = {CursorKind.SCISSORS: _scissors, CursorKind.PENCIL: _pencil, CursorKind.GLUE: _glue}[kind](painter)
+    draw = {
+        CursorKind.SCISSORS: _scissors,
+        CursorKind.PENCIL: _pencil,
+        CursorKind.GLUE: _glue,
+        CursorKind.PLUS: _plus,
+        CursorKind.DELETE: _delete,
+    }[kind]
+    hotspot = draw(painter)
     painter.end()
     return QCursor(pixmap, round(hotspot.x()), round(hotspot.y()))
 
@@ -124,3 +142,42 @@ def _glue(painter: QPainter) -> QPointF:
     painter.drawRect(QRectF(-6.5, 12, 13, 2.5))
     painter.restore()
     return drop
+
+
+def _thick_shape(painter: QPainter, path: QPainterPath, fill: QColor) -> None:
+    painter.save()
+    painter.setPen(QPen(OUTLINE, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.SquareCap, Qt.PenJoinStyle.MiterJoin))
+    painter.setBrush(fill)
+    path.setFillRule(Qt.FillRule.WindingFill)  # the bars overlap: fill where they cross too
+    painter.drawPath(path.simplified())
+    painter.restore()
+
+
+# The plus's bounding square, its top left corner and the width of its bars.
+PLUS_SIZE = 20.0
+PLUS_CORNER = QPointF(2, 2)
+PLUS_BAR = 6.0
+
+
+def _plus_path() -> QPainterPath:
+    middle = (PLUS_SIZE - PLUS_BAR) / 2
+    left, top = PLUS_CORNER.x(), PLUS_CORNER.y()
+    path = QPainterPath()
+    path.addRect(QRectF(left + middle, top, PLUS_BAR, PLUS_SIZE))
+    path.addRect(QRectF(left, top + middle, PLUS_SIZE, PLUS_BAR))
+    return path
+
+
+def _plus(painter: QPainter) -> QPointF:
+    """A thick green plus with a black outline; the hot spot is its upper left inner corner, where the bars meet."""
+    _thick_shape(painter, _plus_path(), PLUS_FILL)
+    middle = (PLUS_SIZE - PLUS_BAR) / 2
+    return PLUS_CORNER + QPointF(middle, middle)
+
+
+def _delete(painter: QPainter) -> QPointF:
+    """The plus turned by 45 degrees, red: an x of the same size. The hot spot is its middle."""
+    centre = PLUS_CORNER + QPointF(PLUS_SIZE / 2, PLUS_SIZE / 2)
+    turn = QTransform().translate(centre.x(), centre.y()).rotate(45).translate(-centre.x(), -centre.y())
+    _thick_shape(painter, turn.map(_plus_path()), DELETE_FILL)
+    return centre
