@@ -113,3 +113,46 @@ class TestLooksLikeAButton:
         above = image.pixelColor(int(center.x()), int(center.y() - reach - 1))
         assert above == QColor("white")
         assert below.lightness() < above.lightness()
+
+
+class TestPressed:
+    def test_pushed_in_and_darker(self) -> None:
+        item = ApproveButtonItem()
+        item.set_state(Vec(2, 2), True)
+        raised, center = render(item)
+        item.set_pressed(True)
+        assert item.pressed()
+        pressed, _ = render(item)
+        assert raised != pressed
+        r = int(net_style.APPROVE_BUTTON_RADIUS_PX)
+        x = int(center.x()) - r // 2
+        top = pressed.pixelColor(x, int(center.y()) - r // 2 + 1)
+        bottom = pressed.pixelColor(x, int(center.y()) + r // 2 + 1)
+        raised_top = raised.pixelColor(x, int(center.y()) - r // 2)
+        assert top.saturation() < 20 and bottom.saturation() < 20  # its grey inside, not the symbol
+        assert top.lightness() < bottom.lightness()  # the other way round than raised: in its own shadow
+        assert top.lightness() < raised_top.lightness()  # darker than raised
+
+    def test_no_shadow_while_pressed(self) -> None:
+        item = ApproveButtonItem()
+        item.set_state(Vec(2, 2), True)
+        item.set_pressed(True)
+        image = QImage(200, 200, QImage.Format.Format_RGB32)
+        image.fill(QColor("white"))
+        world = QTransform().scale(SCALE, -SCALE).translate(0, -4)
+        painter = QPainter(image)
+        painter.setTransform(world)
+        item.paint(painter, None)
+        painter.end()
+        center = world.map(QPointF(2, 2))
+        shadow = net_style.APPROVE_BUTTON_SHADOW_PX
+        reach = net_style.APPROVE_BUTTON_RADIUS_PX + net_style.APPROVE_CHECK_WIDTH_PX / 2 + shadow / 2 + 2
+        assert image.pixelColor(int(center.x()), int(center.y() + reach)) == QColor("white")
+
+    def test_the_same_size(self) -> None:
+        item = ApproveButtonItem()
+        item.set_state(Vec(2, 2), True)
+        item.set_pressed(True)
+        image, center = render(item)
+        just_outside = center + QPointF(net_style.APPROVE_BUTTON_RADIUS_PX + net_style.APPROVE_CHECK_WIDTH_PX + 1, 0)
+        assert image.pixelColor(just_outside.toPoint()) == QColor("black")

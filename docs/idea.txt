@@ -499,7 +499,11 @@ Mouse pointer (while the ruler is not active; it tells the user what a click wou
 3. CUT_EDITING: over a point of the new cut line that can be dragged, or the circle in the middle of a segment (a new
    point there) - a pencil; over a segment of the outer perimeter that can be chosen for gluing (not a thin black
    one) - a tube of glue. While a point is dragged, the pencil stays.
-4. CUT_APPROVING: over the round button - the pointing hand. The button looks raised (lit from above, with a soft
+4. CUT_APPROVING: over the round button - the pointing hand.
+   The round button and the hollow circles in the middle of the new cut line's segments act like buttons: pressing
+   one only shows it pressed (the round button pushed in, a circle all black, the same size); it acts when the mouse
+   button is released on it. Moved off it before that, it doesn't act (and looks pressed again if the mouse comes
+   back). The button looks raised (lit from above, with a soft
    shadow), and its tooltip says "Approve", or "Cancel" when it shows the "x".
 Elsewhere it's the usual arrow; while the sheet is being dragged, the closed hand.
 

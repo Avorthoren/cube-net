@@ -136,3 +136,20 @@ def test_a_line_off_the_net_while_dragging_is_painted_without_colours() -> None:
     image, world = render(item)  # must not raise, even with a zero-length segment
     assert image.pixelColor(world.map(QPointF(9, 14)).toPoint()) == palette.DERIVED_POINT
     assert item.crossings() == []
+
+
+def test_a_pressed_midpoint_is_all_black_and_the_same_size() -> None:
+    item = item_with_line()
+    item.set_show_midpoints(True)
+    plain, world = render(item)
+    item.set_pressed_midpoint(0)
+    assert item.pressed_midpoint() == 0
+    pressed, _ = render(item)
+    centre = world.map(QPointF(11.5, 13.25)).toPoint()  # the middle of the line
+    assert plain.pixelColor(centre) != palette.PRESSED_MIDPOINT
+    assert pressed.pixelColor(centre) == palette.PRESSED_MIDPOINT
+    r = net_style.VERTEX_RADIUS_PX * net_style.MIDPOINT_RADIUS_FACTOR
+    for dx in (r - 2, -(r - 2)):  # inside its (smoothed) edge it is black...
+        assert pressed.pixelColor(centre + QPointF(dx, 0).toPoint()) == palette.PRESSED_MIDPOINT
+    outside = centre + QPointF(r + 3, 0).toPoint()  # ...and not beyond: the same size
+    assert plain.pixelColor(outside) == pressed.pixelColor(outside)

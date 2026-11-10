@@ -311,7 +311,7 @@ class MainWindow(QMainWindow):
     def _update_edit_actions(self) -> None:
         """Undo and redo need something to undo or redo and no point being dragged; approving needs a valid
         rearrangement."""
-        dragging = self.cut_tool.dragging
+        dragging = self.cut_tool.busy  # a point is being dragged, or a button of the line is pressed
         self.undo_action.setEnabled(self.editor.history.can_undo and not dragging)
         self.redo_action.setEnabled(self.editor.history.can_redo and not dragging)
         rearranged = self.editor.rearranged

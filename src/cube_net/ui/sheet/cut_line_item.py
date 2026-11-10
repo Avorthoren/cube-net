@@ -39,6 +39,7 @@ class CutLineItem(QGraphicsItem):
         self._rubber: tuple[Vec, Vec] | None = None
         self._flash: tuple[tuple[Vec, Vec], ...] | None = None
         self._show_midpoints = False
+        self._pressed_midpoint: int | None = None
         self._labels: tuple[tuple[Vec, VertexLabel], ...] = ()
 
     # --- state ------------------------------------------------------------------------------------------------------
@@ -91,6 +92,15 @@ class CutLineItem(QGraphicsItem):
         self._flash = segments
         self.update()
 
+    def set_pressed_midpoint(self, segment: int | None) -> None:
+        """The middle circle of this segment is pressed (the mouse button is down on it): drawn all black."""
+        if segment != self._pressed_midpoint:
+            self._pressed_midpoint = segment
+            self.update()
+
+    def pressed_midpoint(self) -> int | None:
+        return self._pressed_midpoint
+
     def set_show_midpoints(self, show: bool) -> None:
         if show != self._show_midpoints:
             self._show_midpoints = show
@@ -137,8 +147,8 @@ class CutLineItem(QGraphicsItem):
                 self._paint_dot(painter, world, image.position, palette.COUNTERPART_IMAGE)
         for crossing in self.crossings():
             self._paint_dot(painter, world, crossing, palette.DERIVED_POINT)
-        for midpoint in self.midpoints():
-            self._paint_midpoint(painter, world, midpoint)
+        for segment, midpoint in enumerate(self.midpoints()):
+            self._paint_midpoint(painter, world, midpoint, pressed=segment == self._pressed_midpoint)
         if self._labels:
             outward = self._outward_directions(world)
             paint_labels(
@@ -214,10 +224,11 @@ class CutLineItem(QGraphicsItem):
         self._paint_circle(painter, world, point.position, faces)
 
     @staticmethod
-    def _paint_midpoint(painter: QPainter, world: QTransform, p: Vec) -> None:
+    def _paint_midpoint(painter: QPainter, world: QTransform, p: Vec, pressed: bool = False) -> None:
+        """Hollow; all black while pressed (the same size)."""
         r = net_style.VERTEX_RADIUS_PX * net_style.MIDPOINT_RADIUS_FACTOR
-        painter.setPen(QPen(palette.VERTEX_OUTLINE, 1))
-        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(palette.PRESSED_MIDPOINT if pressed else palette.VERTEX_OUTLINE, 1))
+        painter.setBrush(palette.PRESSED_MIDPOINT if pressed else Qt.BrushStyle.NoBrush)
         painter.drawEllipse(world.map(to_qpointf(p)), r, r)
 
     @staticmethod

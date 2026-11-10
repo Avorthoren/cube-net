@@ -477,6 +477,7 @@ class TestApproveButton:
         rearranged_corner_cut(view)
         with qtbot.assertNotEmitted(tool.undo_clicked), qtbot.waitSignal(tool.approve_clicked):
             view.left_pressed.emit(*MIDDLE_OF_X2_B3)
+            view.left_released.emit(*MIDDLE_OF_X2_B3)
         assert tool.editor.state is EditorState.CUT_APPROVING  # approving itself is up to the window
 
     def test_click_beside_it_does_nothing(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
@@ -497,6 +498,7 @@ class TestApproveButton:
         assert not tool.approve_button.enabled()
         with qtbot.assertNotEmitted(tool.approve_clicked), qtbot.waitSignal(tool.undo_clicked):
             view.left_pressed.emit(12.75, 13.0)
+            view.left_released.emit(12.75, 13.0)
         assert tool.editor.state is EditorState.CUT_APPROVING  # undoing itself is up to the window
 
     def test_ruler_takes_the_click(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
@@ -827,3 +829,78 @@ class TestCursorAt:
         assert tool.cursor_at(10 + self.h(view), 12.5) is CursorKind.ARROW
         corner_cut(view)  # the ruler takes these clicks: still DEFAULT
         assert tool.cursor_at(11.5, 13.5) is CursorKind.ARROW
+
+
+class TestButtonsActOnRelease:
+    """The approve button and the middle circles: a press shows them pressed; they act when released on them."""
+
+    def test_approve_on_release_only(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        rearranged_corner_cut(view)
+        with qtbot.assertNotEmitted(tool.approve_clicked):
+            view.left_pressed.emit(*MIDDLE_OF_X2_B3)
+        assert tool.approve_button.pressed()
+        assert tool.busy
+        with qtbot.waitSignal(tool.approve_clicked):
+            view.left_released.emit(*MIDDLE_OF_X2_B3)
+        assert not tool.approve_button.pressed()
+        assert not tool.busy
+
+    def test_approve_moved_off_and_released_does_nothing(
+        self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
+    ) -> None:
+        view, tool, _ = setup
+        rearranged_corner_cut(view)
+        away = MIDDLE_OF_X2_B3[0], MIDDLE_OF_X2_B3[1] + net_style.APPROVE_BUTTON_RADIUS_PX * 3 / view.scale_factor()
+        view.left_pressed.emit(*MIDDLE_OF_X2_B3)
+        view.mouse_moved.emit(*away)
+        assert not tool.approve_button.pressed()  # not pressed while the mouse is off it
+        with qtbot.assertNotEmitted(tool.approve_clicked), qtbot.assertNotEmitted(tool.undo_clicked):
+            view.left_released.emit(*away)
+        assert tool.editor.state is EditorState.CUT_APPROVING
+
+    def test_approve_moved_off_and_back(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        rearranged_corner_cut(view)
+        away = MIDDLE_OF_X2_B3[0], MIDDLE_OF_X2_B3[1] + net_style.APPROVE_BUTTON_RADIUS_PX * 3 / view.scale_factor()
+        view.left_pressed.emit(*MIDDLE_OF_X2_B3)
+        view.mouse_moved.emit(*away)
+        view.mouse_moved.emit(*MIDDLE_OF_X2_B3)
+        assert tool.approve_button.pressed()
+        with qtbot.waitSignal(tool.approve_clicked):
+            view.left_released.emit(*MIDDLE_OF_X2_B3)
+
+    def test_midpoint_on_release_only(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(11.5, 13.75)
+        assert len(positions(tool)) == 3  # nothing yet
+        assert tool.item.pressed_midpoint() == 0
+        view.left_released.emit(11.5, 13.75)
+        assert len(positions(tool)) == 4
+        assert tool.item.pressed_midpoint() is None
+
+    def test_midpoint_moved_off_and_released_does_nothing(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(11.5, 13.75)
+        view.mouse_moved.emit(11.5, 13.6)
+        assert tool.item.pressed_midpoint() is None
+        view.left_released.emit(11.5, 13.6)
+        assert len(positions(tool)) == 3
+
+    def test_released_on_another_midpoint_does_nothing(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(11.5, 13.75)  # the first segment's
+        view.left_released.emit(11.75, 13.5)  # the second segment's
+        assert len(positions(tool)) == 3
+
+    def test_no_undo_while_a_button_is_pressed(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(11.5, 13.75)
+        tool.undo()
+        assert tool.editor.state is EditorState.CUT_EDITING
+        view.left_released.emit(11.5, 13.75)
+        assert len(positions(tool)) == 4

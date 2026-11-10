@@ -77,6 +77,9 @@ COUNTERPART_IMAGE = QColor("#000000")
 # A part of a cut that can't be chosen for gluing: thin and black while the user hovers the perimeter in CUT_EDITING.
 USELESS_CUT = QColor("#000000")
 
+# The circle in the middle of a cut-line segment while the mouse button is down on it.
+PRESSED_MIDPOINT = QColor("#000000")
+
 # The round "approve" button: its inside, and its colour while the rearrangement can't be approved (when it can, it's
 # SUCCESS).
 APPROVE_BUTTON_FILL = QColor("#FFFFFF")
@@ -85,6 +88,9 @@ APPROVE_BUTTON_FILL = QColor("#FFFFFF")
 # casts a soft shadow.
 APPROVE_BUTTON_SHADE = QColor("#D5D8DC")
 APPROVE_BUTTON_SHADOW = QColor(0, 0, 0, 90)
+
+# The approve button while it's pressed: pushed in, so the top of its inside is in shadow.
+APPROVE_BUTTON_PRESSED_TOP = QColor("#9AA0A6")
 APPROVE_BUTTON_DISABLED = QColor("#9E9E9E")
 
 

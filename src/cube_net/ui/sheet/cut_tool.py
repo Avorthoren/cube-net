@@ -16,6 +16,8 @@
   counterpart onto it: CUT_APPROVING.
 - In CUT_APPROVING, a round button in the middle of the chosen segment approves the rearrangement, if it's valid. If
   it isn't, the button undoes the rearrangement.
+- That button and the middle circles act like buttons: a press only shows them pressed; they act when the mouse button
+  is released on them. Moved off before that, they don't (they look pressed again if it comes back).
 - While SHIFT is held, the segment being made (while cutting) or the one from the previous point to the dragged point
   (not for the first point) is horizontal or vertical. It takes effect at once, even if the mouse stays where it is.
 - Anything that breaks the rules shows the offending segments in black for 200 ms and changes nothing.
@@ -94,6 +96,9 @@ class CutTool(QObject):
         # Where (in window pixels) Shift+press hit an inner point, until it's clear whether that's a click or a drag.
         self._delete_press: QPointF | None = None
         self._mouse: tuple[float, float] | None = None
+
+        # A button that's pressed: ("approve", 0) or ("midpoint", its segment). It acts if released on it.
+        self._armed: tuple[str, int] | None = None
         view.left_pressed.connect(self._on_left_pressed)
         view.left_released.connect(self._on_left_released)
         view.mouse_moved.connect(self._on_mouse_moved)
@@ -113,6 +118,11 @@ class CutTool(QObject):
     def dragging(self) -> bool:
         return self._drag_index is not None
 
+    @property
+    def busy(self) -> bool:
+        """The mouse button is down on something of the line (a point, a button): nothing else should change now."""
+        return self.dragging or self._armed is not None
+
     def approve(self) -> None:
         """Glue the rearranged halves for good; from now on the tool works on the new net."""
         self._editor.approve()
@@ -124,6 +134,7 @@ class CutTool(QObject):
         """The editor got a whole new state (a project was opened): forget everything that was going on."""
         self._drag_index, self._drag_target, self._drag_over_perimeter = None, None, False
         self._delete_press = None
+        self._disarm()
         self._flash_timer.stop()
         self.item.set_flash(None)
         self.item.set_net(self._editor.net)
@@ -132,7 +143,10 @@ class CutTool(QObject):
         self.net_changed.emit()
 
     def cancel_drag(self) -> None:
-        """Forget the point being dragged: it stays where it was."""
+        """Forget the point being dragged (it stays where it was), or the button being pressed (it doesn't act)."""
+        if self._armed is not None:
+            self._disarm()
+            self.line_changed.emit()
         if self._drag_index is None:
             return
         self._drag_index, self._drag_target, self._drag_over_perimeter = None, None, False
@@ -143,12 +157,12 @@ class CutTool(QObject):
 
     def undo(self) -> None:
         """Undo the last action (not while a point is being dragged)."""
-        if not self.dragging:
+        if not self.busy:
             self._after_history_step(self._editor.undo)
 
     def redo(self) -> None:
         """Redo one undone action (not while a point is being dragged)."""
-        if not self.dragging:
+        if not self.busy:
             self._after_history_step(self._editor.redo)
 
     def _after_history_step(self, step: Callable[[], bool]) -> None:
@@ -278,10 +292,7 @@ class CutTool(QObject):
             return
         if self._editor.state is EditorState.CUT_APPROVING:
             if self._on_approve_button(x, y):
-                if self.approve_button.enabled():
-                    self.approve_clicked.emit()
-                else:
-                    self.undo_clicked.emit()
+                self._arm(("approve", 0))
             return
         p, cut, vertex, fold = self._hit(x, y)
         before = len(self._editor.cut_line.points) if self._editor.cut_line else 0
@@ -308,12 +319,7 @@ class CutTool(QObject):
             return
         segment = self._midpoint_at(x, y)
         if segment is not None:
-            rejection = self._editor.insert_midpoint(segment)
-            if rejection is not None:
-                self._reject(rejection, (rejection.segment[0] + rejection.segment[1]) / 2)
-            else:
-                self.refresh()
-                self.edited.emit("insert", segment + 1, line.points[segment + 1].position)
+            self._arm(("midpoint", segment))
             return
         self._press_on_cut(x, y)
 
@@ -336,7 +342,60 @@ class CutTool(QObject):
             self.net_changed.emit()
             self.glued.emit()
 
+    def _arm(self, button: tuple[str, int]) -> None:
+        self._armed = button
+        self._show_pressed(True)
+        self.line_changed.emit()
+
+    def _on_armed(self, x: float, y: float) -> bool:
+        """Is the mouse on the pressed button?"""
+        assert self._armed is not None
+        kind, segment = self._armed
+        if kind == "approve":
+            return self._editor.state is EditorState.CUT_APPROVING and self._on_approve_button(x, y)
+        return self._editor.state is EditorState.CUT_EDITING and self._midpoint_at(x, y) == segment
+
+    def _show_pressed(self, pressed: bool) -> None:
+        assert self._armed is not None
+        kind, segment = self._armed
+        if kind == "approve":
+            self.approve_button.set_pressed(pressed)
+        else:
+            self.item.set_pressed_midpoint(segment if pressed else None)
+
+    def _disarm(self) -> None:
+        if self._armed is not None:
+            self._show_pressed(False)
+            self._armed = None
+
+    def _release_armed(self, x: float, y: float) -> None:
+        """The mouse button is up: the pressed button acts if it's still under the mouse."""
+        assert self._armed is not None
+        kind, segment = self._armed
+        on_it = self._on_armed(x, y)
+        self._disarm()
+        self.line_changed.emit()
+        if not on_it:
+            return
+        if kind == "approve":
+            if self.approve_button.enabled():
+                self.approve_clicked.emit()
+            else:
+                self.undo_clicked.emit()
+            return
+        line = self._editor.cut_line
+        assert line is not None
+        rejection = self._editor.insert_midpoint(segment)
+        if rejection is not None:
+            self._reject(rejection, (rejection.segment[0] + rejection.segment[1]) / 2)
+        else:
+            self.refresh()
+            self.edited.emit("insert", segment + 1, line.points[segment + 1].position)
+
     def _on_left_released(self, x: float, y: float) -> None:
+        if self._armed is not None:
+            self._release_armed(x, y)
+            return
         i, target = self._drag_index, self._drag_target
         self._drag_index, self._drag_target = None, None
         self._highlight_fold(None)
@@ -404,6 +463,9 @@ class CutTool(QObject):
 
     def _on_mouse_moved(self, x: float, y: float) -> None:
         self._mouse = x, y
+        if self._armed is not None:
+            self._show_pressed(self._on_armed(x, y))  # pressed while the mouse is on it
+            return
         if self._drag_index is not None:
             self._drag_to(x, y)
             return
@@ -418,6 +480,8 @@ class CutTool(QObject):
         self._highlight_fold(target.fold)
 
     def _on_mouse_left(self) -> None:
+        if self._armed is not None:
+            self._show_pressed(False)
         if self._drag_index is None:
             self._mouse = None
         self.item.set_rubber_band(None)

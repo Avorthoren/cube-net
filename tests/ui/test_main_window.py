@@ -343,7 +343,8 @@ def test_cut_line_edits_recorded_and_labels_follow(qtbot: QtBot, tmp_path: Path)
     view.left_pressed.emit(11.5, 14 - inside)
     view.left_pressed.emit(11.5, 13.5)
     view.left_pressed.emit(12 - inside, 13.5)
-    view.left_pressed.emit(11.5, 13.75)  # a midpoint: insert
+    view.left_pressed.emit(11.5, 13.75)  # a midpoint: insert (when released on it)
+    view.left_released.emit(11.5, 13.75)
     view.left_pressed.emit(11.5, 13.75)  # that new point: drag it
     view.mouse_moved.emit(11.25, 13.75)
     view.left_released.emit(11.25, 13.75)
@@ -551,6 +552,7 @@ class TestApproveButton:
         self.overlapping_rearrangement(window)
         line = window.editor.cut_line
         window.sheet_view.left_pressed.emit(12.75, 13.0)
+        window.sheet_view.left_released.emit(12.75, 13.0)
         assert window.editor.state.value == "cut_editing"
         assert window.editor.cut_line is not None and window.editor.cut_line.points == line.points
         assert window.net is window.editor.net
@@ -1490,6 +1492,7 @@ class TestProjects:
         assert item is not None and item.overlapping()
         assert not other.cut_tool.approve_button.enabled()
         other.sheet_view.left_pressed.emit(12.75, 13.0)  # the "x" undoes it, for good
+        other.sheet_view.left_released.emit(12.75, 13.0)
         assert other.editor.state.value == "cut_editing"
         assert not other.redo_action.isEnabled()
 
