@@ -14,7 +14,7 @@
 from fractions import Fraction
 
 from PyQt6.QtCore import QLocale, QObject, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QFont, QFontMetrics
 from PyQt6.QtWidgets import QDoubleSpinBox, QLabel, QToolBar, QWidget
 
 from cube_net.core.bounding import BoundingRectangle
@@ -127,7 +127,16 @@ class BoundingControls(QObject):
 
     def _show_area(self) -> None:
         if self._rectangle is not None:
-            self.label.setText(f"{tr('Area')}\n{format_area(self._rectangle.area)}")
+            text = f"{tr('Area')}\n{format_area(self._rectangle.area)}"
+            self.label.setText(text)
+            # On success the text is bold, which is wider: the label has that width all along, so the panel (as wide as
+            # its widest item) doesn't change its width when the target is reached.
+            bold = QFont(self.label.font())
+            bold.setBold(True)
+            metrics = QFontMetrics(bold)
+            margins = self.label.contentsMargins()
+            widest = max(metrics.horizontalAdvance(line) for line in text.split("\n"))
+            self.label.setMinimumWidth(widest + margins.left() + margins.right() + 2 * self.label.margin())
 
     def _on_toggled(self, checked: bool) -> None:
         self._refresh_item()

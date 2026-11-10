@@ -75,6 +75,29 @@ def test_toggle_shows_rectangle_on_item(controls: BoundingControls, qtbot: QtBot
     assert item.corners() == ()
 
 
+def test_reaching_the_target_does_not_change_the_labels_width(qtbot: QtBot) -> None:
+    """The area turns bold on success, which is wider: the label is that wide from the start. Otherwise, wherever it's
+    the panel's widest item (as with some systems' fonts), the panel would get wider when the target is reached."""
+    from PyQt6.QtWidgets import QMainWindow
+
+    window = QMainWindow()
+    qtbot.addWidget(window)
+    toolbar = QToolBar(window)
+    window.addToolBar(toolbar)
+    controls = BoundingControls(toolbar, BoundingItem())
+    window.show()
+    qtbot.waitExposed(window)
+
+    def width() -> int:  # what the panel's layout gives it
+        return max(controls.label.minimumWidth(), controls.label.sizeHint().width())
+
+    controls.update(rect(F(5)), F(4))
+    regular = width()
+    controls.update(rect(F(5)), F(6))
+    assert width() == regular
+    assert controls.label.minimumWidth() >= controls.label.sizeHint().width()  # the bold text fits
+
+
 def test_blinking_does_not_change_the_size_of_the_button(qtbot: QtBot) -> None:
     """The panel is as wide as its widest item: a button that changes its size makes the panel change its width."""
     from PyQt6.QtWidgets import QMainWindow
