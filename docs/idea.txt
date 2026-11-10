@@ -518,7 +518,7 @@ Mouse pointer (while the ruler is not active; it tells the user what a click wou
 Elsewhere it's the usual arrow; while the sheet is being dragged, the closed hand.
 
 Help menu (to the right of Settings): About, Help, Check for updates.
-1. About: a small window with the application's name ("Cube Net"), its version and date ("1.0, 10.11.2026" while
+1. About: a small window with the application's name ("Cube Net"), its version and date ("1.0, 2026-11-10", ISO, while
    updates aren't handled), what
    it runs on (Python, Qt, the system), and "by UNDEFEAT in attempts to solve this puzzle", where "this puzzle" is a link
    to https://ru.braigam.com/?path=comments&puzzle=680. Below that, the notices of the license: "Copyright © 2026

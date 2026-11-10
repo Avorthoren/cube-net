@@ -500,6 +500,18 @@ mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dr
 
 ---
 
+## Releases
+
+- `./release.sh 1.2.0` (`--dry-run` to only check) makes a release: see `scripts/release.py` for what it checks
+  (version format per PEP 440, clean tree, on master, pulled, tag new and not lower than the highest release, a
+  non-empty "## Unreleased" section in CHANGELOG.md, ruff and the tests), then commits "Release v1.2.0" with the
+  version and date in `cube_net/__init__.py` (the only place of the version; `pyproject.toml` reads it) and the
+  changelog section given to the version, tags it (annotated) and pushes both at once. `RUN_RUFF` in the script turns
+  the ruff step off.
+- While working, changes go under "## Unreleased" in CHANGELOG.md: that becomes the release's notes.
+- The build workflow (GitHub Actions on a pushed tag: the same checks again, then builds and a draft release) is still
+  to be written (M11).
+
 ## 8. Open questions and deferred topics
 
 Deferred on purpose (per `idea.txt`):

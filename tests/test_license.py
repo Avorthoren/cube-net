@@ -26,6 +26,12 @@ def test_the_package_says_so() -> None:
 
 def test_every_python_file_starts_with_the_notice() -> None:
     files = [*ROOT.glob("*.py"), *(ROOT / "src").rglob("*.py"), *(ROOT / "tests").rglob("*.py")]
+    files += [*(ROOT / "scripts").rglob("*.py")]
     missing = [str(f.relative_to(ROOT)) for f in files if not f.read_text(encoding="utf-8").startswith(HEADER)]
     assert len(files) > 200
     assert missing == []
+
+
+def test_the_release_script_too() -> None:
+    lines = (ROOT / "release.sh").read_text(encoding="utf-8").splitlines()
+    assert lines[1:3] == HEADER.splitlines()  # after the #! line

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cube-net"
-version = "1.0"
+dynamic = ["version"]  # from `cube_net.__version__`, which the release script sets
 description = "Desktop application to explore unit cube nets by cutting and re-gluing them."
 readme = "docs/idea.txt"
 requires-python = ">=3.14"
@@ -22,23 +22,28 @@ dev = [
     "hypothesis>=6.100",
     "ruff>=0.8",
     "mypy>=1.13",
+    "packaging>=24",  # the release script checks versions with it
 ]
 
 [project.scripts]
 cube-net = "cube_net.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "cube_net.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # so that the tests can import `scripts.release`
 addopts = "-ra"
 qt_api = "pyqt6"
 
 [tool.ruff]
 line-length = 120
 target-version = "py314"
-src = ["src", "tests"]
+src = ["src", "tests", "scripts"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]

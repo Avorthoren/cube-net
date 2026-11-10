@@ -20,7 +20,7 @@ def test_name_version_build(qtbot: QtBot) -> None:
     dialog = make(qtbot)
     assert dialog.name.text() == "Cube Net"
     assert __version__ == "1.0"
-    assert dialog.version.text() == "Version 1.0, 10.11.2026"
+    assert dialog.version.text() == "Version 1.0, 2026-11-10"
     assert "Python" in dialog.build.text() and "Qt" in dialog.build.text()
     assert dialog.build.text() == build_info()
 
@@ -65,11 +65,11 @@ def test_selected_text_can_be_copied(qtbot: QtBot) -> None:
 
     dialog = make(qtbot)
     dialog.version.setSelection(0, len(dialog.version.text()))
-    assert dialog.version.selectedText() == "Version 1.0, 10.11.2026"
+    assert dialog.version.selectedText() == "Version 1.0, 2026-11-10"
     dialog.version.setFocus()
     qtbot.keyClick(dialog.version, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
     clipboard = QApplication.clipboard()
-    assert clipboard is not None and clipboard.text() == "Version 1.0, 10.11.2026"
+    assert clipboard is not None and clipboard.text() == "Version 1.0, 2026-11-10"
 
 
 class TestCopyAndClose:
@@ -89,7 +89,7 @@ class TestCopyAndClose:
         assert clipboard is not None
         assert clipboard.text().split("\n") == [
             "Cube Net",
-            "Version 1.0, 10.11.2026",
+            "Version 1.0, 2026-11-10",
             *build_info().split("\n"),
             f"by UNDEFEAT in attempts to solve {PUZZLE_URL}",
             "Copyright © 2026 Viktor Podust",
