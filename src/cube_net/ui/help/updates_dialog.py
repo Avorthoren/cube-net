@@ -5,6 +5,7 @@ from PyQt6.QtGui import QColor, QPainter, QPaintEvent, QPen, QPolygonF
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QWidget
 
 from cube_net.ui.help.small_window import SmallWindow
+from cube_net.ui.i18n import tr
 
 # The cone's colours.
 CONE = QColor("#F57C00")
@@ -57,9 +58,9 @@ class UpdatesDialog(SmallWindow):
     """Closed with Escape or its close button."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__("Check for updates", parent)
+        super().__init__(tr("Check for updates"), parent)
         self.cone = Cone(self)
-        self.text = QLabel("Under development...", self)
+        self.text = QLabel(tr("Under development..."), self)
         content = QHBoxLayout()
         content.setContentsMargins(24, 16, 32, 20)
         content.setSpacing(16)

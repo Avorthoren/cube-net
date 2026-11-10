@@ -4,6 +4,8 @@ from enum import Enum
 
 from PyQt6.QtWidgets import QMessageBox, QWidget
 
+from cube_net.ui.i18n import tr
+
 
 class AfterLoadFailed(Enum):
     NEW_PROJECT = "new project"
@@ -14,11 +16,11 @@ def ask_after_load_failed(parent: QWidget | None, message: str) -> AfterLoadFail
     """Tell why it failed, and suggest a new project. Closing the question means just that."""
     box = QMessageBox(parent)
     box.setIcon(QMessageBox.Icon.Warning)
-    box.setWindowTitle("Can't open the project")
+    box.setWindowTitle(tr("Can't open the project"))
     box.setText(message)
-    box.setInformativeText("Start a new project, or open another one?")
-    new_project = box.addButton("New project", QMessageBox.ButtonRole.AcceptRole)
-    open_another = box.addButton("Open...", QMessageBox.ButtonRole.ActionRole)
+    box.setInformativeText(tr("Start a new project, or open another one?"))
+    new_project = box.addButton(tr("New project"), QMessageBox.ButtonRole.AcceptRole)
+    open_another = box.addButton(tr("&Open..."), QMessageBox.ButtonRole.ActionRole)
     box.setDefaultButton(new_project)
     box.setEscapeButton(new_project)
     box.exec()

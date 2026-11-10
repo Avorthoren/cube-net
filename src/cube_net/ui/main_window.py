@@ -8,6 +8,7 @@ from PyQt6.QtGui import QAction, QCloseEvent
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
+    QComboBox,
     QFileDialog,
     QLabel,
     QMainWindow,
@@ -36,6 +37,8 @@ from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.help.about_dialog import AboutDialog
 from cube_net.ui.help.updates_dialog import UpdatesDialog
+from cube_net.ui.i18n import TRANSLATIONS, Language, bind, tr
+from cube_net.ui.i18n.errors import error_text
 from cube_net.ui.instruments.bounding_controls import BoundingControls
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
 from cube_net.ui.no_wheel import ignore_wheel
@@ -63,7 +66,6 @@ from cube_net.ui.style import Style, apply_style
 
 APP_TITLE = "Cube Net"
 NO_COORDINATES = "x: —   y: —"
-PROJECT_FILES = f"Cube Net projects (*{PROJECT_SUFFIX})"
 
 # What a project is called until it's saved.
 UNTITLED = "Untitled"
@@ -72,6 +74,11 @@ UNTITLED = "Untitled"
 def format_point(p: Vec) -> str:
     """A point in session recordings: x,y with 3 decimals (the input rounding)."""
     return f"{float(p.x):.3f},{float(p.y):.3f}"
+
+
+def project_files() -> str:
+    """The file dialogs' filter for project files, in the current language."""
+    return tr("Cube Net projects (*{suffix})", suffix=PROJECT_SUFFIX)
 
 
 def format_style(style: Style) -> str:
@@ -104,6 +111,7 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.settings = AppSettings() if settings is None else settings
         apply_style(self.settings.style)  # before anything gets drawn
+        TRANSLATIONS.set_language(self.settings.language)  # before any text is set
         self.point_labels = PointLabels()
         self.project_settings = ProjectSettings()
 
@@ -154,7 +162,10 @@ class MainWindow(QMainWindow):
 
         self._create_instruments()
         self._create_menus()
-        ignore_wheel(self.findChildren(QAbstractSpinBox), self)  # every number field of the window
+        TRANSLATIONS.changed.connect(self._update_title)  # "Untitled" is in the current language
+        TRANSLATIONS.changed.connect(self._on_texts_changed)
+        fields = [*self.findChildren(QAbstractSpinBox), *self.findChildren(QComboBox)]
+        ignore_wheel(fields, self)  # every number field and drop-down list of the window
         self._update_title()
         self._update_vertex_labels()
         self._resize_to_screen()
@@ -181,7 +192,7 @@ class MainWindow(QMainWindow):
         # `reopen_last_project` takes care of that.
         reopening = reason == STARTED_AT_LAUNCH and self.settings.last_project is not None
         self._record_state(recorder, snapshot=not reopening)
-        self.statusBar().showMessage(f"Recording session to {recorder.log.path}", 15000)
+        self.statusBar().showMessage(tr("Recording session to {path}", path=recorder.log.path), 15000)
 
     def stop_recording(self, reason: str) -> None:
         app = QApplication.instance()
@@ -189,7 +200,7 @@ class MainWindow(QMainWindow):
             return
         stop_session_recording(app, self.recorder, reason)
         self.recorder = None
-        self.statusBar().showMessage("Session recording stopped", 5000)
+        self.statusBar().showMessage(tr("Session recording stopped"), 5000)
 
     def _record_state(self, recorder: SessionRecorder, snapshot: bool = True) -> None:
         """Everything needed to reproduce the session from this point on: the whole project in its snapshot, and what
@@ -200,6 +211,7 @@ class MainWindow(QMainWindow):
             self._record_snapshot(recorder)
         self._record_net_state(recorder)
         recorder.note("state", "labels", "on" if self.settings.show_vertex_labels else "off")
+        recorder.note("state", "language", self.settings.language.value)
         recorder.note("state", "blink", "on" if self.settings.blink_on_success else "off")
         recorder.note("state", "max_zoom", self.settings.max_zoom)
         recorder.note("state", "style", format_style(self.settings.style))
@@ -225,18 +237,24 @@ class MainWindow(QMainWindow):
         recorder.note("state", "net", "default" if cuts == 0 else f"after {cuts} approved cuts")
 
     def _create_instruments(self) -> None:
-        toolbar = QToolBar("Instruments", self)
+        toolbar = QToolBar(self)
+        bind(toolbar, toolbar.setWindowTitle, "Instruments")
         toolbar.setObjectName("instruments")
         toolbar.setMovable(False)
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, toolbar)
-        self.ruler_action = QAction("Ruler", self)
+        self.ruler_action = QAction(self)
+        bind(self.ruler_action, self.ruler_action.setText, "Ruler")
         self.ruler_action.setCheckable(True)
         self.ruler_action.setShortcut("R")
-        self.ruler_action.setToolTip("Ruler (R): click on the sheet to measure; turn off to clear")
+        bind(
+            self.ruler_action,
+            self.ruler_action.setToolTip,
+            "Ruler (R): click on the sheet to measure; turn off to clear",
+        )
         self.ruler_action.toggled.connect(self._on_ruler_toggled)
         toolbar.addAction(self.ruler_action)
         self.ruler_total_label = QLabel(self)
-        self.ruler_total_label.setToolTip("Total length of the placed ruler segments")
+        bind(self.ruler_total_label, self.ruler_total_label.setToolTip, "Total length of the placed ruler segments")
         self.ruler_total_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.ruler_total_action = toolbar.addWidget(self.ruler_total_label)
         self.ruler_tool.points_changed.connect(self._update_ruler_total)
@@ -256,8 +274,9 @@ class MainWindow(QMainWindow):
         spacer = QWidget(toolbar)  # pushes what follows to the bottom of the panel
         spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         toolbar.addWidget(spacer)
-        self.open_logs_action = QAction("Logs", self)
-        self.open_logs_action.setToolTip("Open the folder with session logs")
+        self.open_logs_action = QAction(self)
+        bind(self.open_logs_action, self.open_logs_action.setText, "Logs")
+        bind(self.open_logs_action, self.open_logs_action.setToolTip, "Open the folder with session logs")
         self.open_logs_action.triggered.connect(self._on_open_logs)
         toolbar.addAction(self.open_logs_action)
 
@@ -301,7 +320,7 @@ class MainWindow(QMainWindow):
 
     def _on_open_logs(self) -> None:
         if not open_session_log_folder(self._session_dir):
-            self.statusBar().showMessage("Could not open the folder with session logs", 5000)
+            self.statusBar().showMessage(tr("Could not open the folder with session logs"), 5000)
 
     def _on_bounding_toggled(self, checked: bool) -> None:
         if self.recorder is not None:
@@ -341,7 +360,7 @@ class MainWindow(QMainWindow):
         return self.editor.history.revision != self._saved_revision or self.project_settings != self._saved_settings
 
     def _project_name(self) -> str:
-        return UNTITLED if self.project_path is None else self.project_path.name
+        return tr(UNTITLED) if self.project_path is None else self.project_path.name
 
     def _update_title(self) -> None:
         self.setWindowTitle(f"{self._project_name()}[*] — {APP_TITLE}")
@@ -354,7 +373,7 @@ class MainWindow(QMainWindow):
         try:
             save_project(self._project(), path)
         except ProjectFileError as e:
-            QMessageBox.critical(self, APP_TITLE, str(e))
+            QMessageBox.critical(self, APP_TITLE, error_text(e))
             return False
         self.project_path = path
         self.settings.last_project = path
@@ -371,7 +390,7 @@ class MainWindow(QMainWindow):
         try:
             self._load_and_show(path)
         except ProjectFileError as e:
-            QMessageBox.critical(self, APP_TITLE, str(e))
+            QMessageBox.critical(self, APP_TITLE, error_text(e))
             return False
         return True
 
@@ -394,20 +413,20 @@ class MainWindow(QMainWindow):
             self.settings.last_project = None  # don't ask about it at every start from now on
             if self.recorder is not None:
                 self.recorder.note("project", "reopening failed", path)
-            self._offer_another_project(str(e))
+            self._offer_another_project(error_text(e))
             if self.recorder is not None and self.project_path is None:
                 self._record_snapshot(self.recorder)  # it's the new project after all
 
     def _offer_another_project(self, message: str) -> None:
         """The project that should be here can't be loaded: the user decides. The window has a new one until then."""
         while ask_after_load_failed(self, message) is AfterLoadFailed.OPEN_ANOTHER:
-            name, _ = QFileDialog.getOpenFileName(self, "Open project", "", PROJECT_FILES)
+            name, _ = QFileDialog.getOpenFileName(self, tr("Open project"), "", project_files())
             if not name:
                 return
             try:
                 self._load_and_show(Path(name))
             except ProjectFileError as e:
-                message = str(e)
+                message = error_text(e)
             else:
                 return
 
@@ -451,7 +470,7 @@ class MainWindow(QMainWindow):
     def _on_open(self) -> None:
         if not self._confirm_leaving_project():
             return
-        name, _ = QFileDialog.getOpenFileName(self, "Open project", self._dialog_folder(), PROJECT_FILES)
+        name, _ = QFileDialog.getOpenFileName(self, tr("Open project"), self._dialog_folder(), project_files())
         if name:
             self.open_project_from(Path(name))
 
@@ -460,7 +479,7 @@ class MainWindow(QMainWindow):
         return self._save_as() if self.project_path is None else self.save_project_to(self.project_path)
 
     def _save_as(self) -> bool:
-        name, _ = QFileDialog.getSaveFileName(self, "Save project as", self._dialog_folder(), PROJECT_FILES)
+        name, _ = QFileDialog.getSaveFileName(self, tr("Save project as"), self._dialog_folder(), project_files())
         if not name:
             return False
         path = Path(name)
@@ -468,6 +487,12 @@ class MainWindow(QMainWindow):
 
     def _on_settings_tab_changed(self) -> None:
         self.settings.settings_tab = self.settings_panel.tab_name()
+
+    def _on_language_changed(self, language: Language) -> None:
+        self.settings.language = language
+        TRANSLATIONS.set_language(language)
+        if self.recorder is not None:
+            self.recorder.note("settings", "language", language.value)
 
     def _on_blink_changed(self, blink: bool) -> None:
         self.settings.blink_on_success = blink
@@ -507,6 +532,11 @@ class MainWindow(QMainWindow):
         width = screen.geometry().width() if screen is not None else 1920
         self.settings_panel.place_over(self.sheet_view.geometry(), width)
 
+    def _on_texts_changed(self) -> None:
+        """Texts of another length: the settings panel takes the width it needs now (still at most its share)."""
+        if not self.settings_panel.isHidden():
+            self._place_settings_panel()
+
     def _on_settings_toggled(self, shown: bool) -> None:
         if shown:
             self._place_settings_panel()
@@ -537,53 +567,67 @@ class MainWindow(QMainWindow):
     def _create_menus(self) -> None:
         menu_bar = self.menuBar()
         assert menu_bar is not None
-        file_menu = menu_bar.addMenu("&File")
+        file_menu = menu_bar.addMenu("")
         assert file_menu is not None
-        self.new_action = QAction("&New", self)
+        bind(file_menu, file_menu.setTitle, "&File")
+        self.new_action = QAction(self)
+        bind(self.new_action, self.new_action.setText, "&New")
         self.new_action.setShortcut("Ctrl+N")
         self.new_action.triggered.connect(self._on_new)
         file_menu.addAction(self.new_action)
-        self.open_action = QAction("&Open...", self)
+        self.open_action = QAction(self)
+        bind(self.open_action, self.open_action.setText, "&Open...")
         self.open_action.setShortcut("Ctrl+O")
         self.open_action.triggered.connect(self._on_open)
         file_menu.addAction(self.open_action)
-        self.save_action = QAction("&Save", self)
+        self.save_action = QAction(self)
+        bind(self.save_action, self.save_action.setText, "&Save")
         self.save_action.setShortcut("Ctrl+S")
         self.save_action.triggered.connect(lambda: self._save())
         file_menu.addAction(self.save_action)
-        self.save_as_action = QAction("Save &As...", self)
+        self.save_as_action = QAction(self)
+        bind(self.save_as_action, self.save_as_action.setText, "Save &As...")
         self.save_as_action.setShortcut("Ctrl+Shift+S")
         self.save_as_action.triggered.connect(lambda: self._save_as())
         file_menu.addAction(self.save_as_action)
         file_menu.addSeparator()
-        self.quit_action = QAction("&Quit", self)
+        self.quit_action = QAction(self)
+        bind(self.quit_action, self.quit_action.setText, "&Quit")
         self.quit_action.setShortcut("Ctrl+Q")
         self.quit_action.triggered.connect(self.close)
         file_menu.addAction(self.quit_action)
 
         # The switches of the Preferences tab of the settings panel.
-        self.show_labels_action = QAction("Show vertex labels", self)
+        self.show_labels_action = QAction(self)
+        bind(self.show_labels_action, self.show_labels_action.setText, "Show vertex labels")
         self.show_labels_action.setCheckable(True)
         self.show_labels_action.setChecked(self.settings.show_vertex_labels)
         self.show_labels_action.toggled.connect(self._on_show_labels_toggled)
-        self.record_session_action = QAction("Log sessions", self)
+        self.record_session_action = QAction(self)
+        bind(self.record_session_action, self.record_session_action.setText, "Log sessions")
         self.record_session_action.setCheckable(True)
         self.record_session_action.setChecked(self.settings.record_session)
         self.record_session_action.toggled.connect(self._on_record_session_toggled)
 
-        edit_menu = menu_bar.addMenu("&Edit")
+        edit_menu = menu_bar.addMenu("")
+
         assert edit_menu is not None
-        self.approve_action = QAction("&Approve cut", self)
+
+        bind(edit_menu, edit_menu.setTitle, "&Edit")
+        self.approve_action = QAction(self)
+        bind(self.approve_action, self.approve_action.setText, "&Approve cut")
         self.approve_action.setShortcuts(["Ctrl+Return", "Ctrl+Enter"])  # the main Enter key and the one on the keypad
         self.approve_action.triggered.connect(self._on_approve)
         self.cut_tool.approve_clicked.connect(self.approve_action.trigger)
         edit_menu.addAction(self.approve_action)
-        self.undo_action = QAction("&Undo", self)
+        self.undo_action = QAction(self)
+        bind(self.undo_action, self.undo_action.setText, "&Undo")
         self.undo_action.setShortcut("Ctrl+Z")
         self.undo_action.triggered.connect(self._on_undo)
         self.cut_tool.undo_clicked.connect(self.undo_action.trigger)
         edit_menu.addAction(self.undo_action)
-        self.redo_action = QAction("&Redo", self)
+        self.redo_action = QAction(self)
+        bind(self.redo_action, self.redo_action.setText, "&Redo")
         self.redo_action.setShortcut("Ctrl+Y")
         self.redo_action.triggered.connect(self._on_redo)
         edit_menu.addAction(self.redo_action)
@@ -595,27 +639,34 @@ class MainWindow(QMainWindow):
             self.settings.max_zoom,
             self.settings.style,
             self,
+            self.settings.language,
         )
+        self.settings_panel.preferences.language_changed.connect(self._on_language_changed)
         self.settings_panel.preferences.blink_changed.connect(self._on_blink_changed)
         self.settings_panel.show_tab(self.settings.settings_tab)  # the one the user looked at last, even last time
         self.settings_panel.tabs.currentChanged.connect(self._on_settings_tab_changed)
         self.settings_panel.preferences.max_zoom_changed.connect(self._on_max_zoom_changed)
         self.settings_panel.style_tab.style_changed.connect(self._on_style_changed)
         self.sheet_view.installEventFilter(self)
-        self.settings_action = QAction("&Settings", self)
+        self.settings_action = QAction(self)
+        bind(self.settings_action, self.settings_action.setText, "&Settings")
         self.settings_action.setCheckable(True)
-        self.settings_action.setToolTip("Settings of the application (not of the project)")
+        bind(self.settings_action, self.settings_action.setToolTip, "Settings of the application (not of the project)")
         self.settings_action.toggled.connect(self._on_settings_toggled)
         menu_bar.addAction(self.settings_action)
-        help_menu = menu_bar.addMenu("&Help")
+        help_menu = menu_bar.addMenu("")
         assert help_menu is not None
-        self.about_action = QAction("&About", self)
+        bind(help_menu, help_menu.setTitle, "&Help")
+        self.about_action = QAction(self)
+        bind(self.about_action, self.about_action.setText, "&About")
         self.about_action.triggered.connect(lambda: AboutDialog(self).exec())
         help_menu.addAction(self.about_action)
-        self.help_action = QAction("&Help", self)
+        self.help_action = QAction(self)
+        bind(self.help_action, self.help_action.setText, "&Help")
         self.help_action.setEnabled(False)  # what it shows is still to be decided
         help_menu.addAction(self.help_action)
-        self.updates_action = QAction("Check for &updates", self)
+        self.updates_action = QAction(self)
+        bind(self.updates_action, self.updates_action.setText, "Check for &updates")
         self.updates_action.triggered.connect(lambda: UpdatesDialog(self).exec())
         help_menu.addAction(self.updates_action)
         self.settings_panel.hide_requested.connect(lambda: self.settings_action.setChecked(False))

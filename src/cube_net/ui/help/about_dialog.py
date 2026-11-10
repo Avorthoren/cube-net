@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import QApplication, QLabel, QPushButton, QVBoxLayout, QWid
 
 from cube_net import __version__, __version_date__
 from cube_net.ui.help.small_window import SmallWindow
+from cube_net.ui.i18n import tr
 
 APP_NAME = "Cube Net"
 
@@ -33,16 +34,17 @@ class AboutDialog(SmallWindow):
     """Closed with Escape or its close button. All its text can be selected and copied, or copied at once."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(f"About {APP_NAME}", parent)
+        super().__init__(tr("About {name}", name=APP_NAME), parent)
         self.name = QLabel(APP_NAME, self)
         font = QFont(self.name.font())
         font.setPointSizeF(font.pointSizeF() * 1.8)
         font.setBold(True)
         self.name.setFont(font)
-        self.version = QLabel(f"Version {__version__}, {__version_date__}", self)
+        self.version = QLabel(tr("Version {version}, {date}", version=__version__, date=__version_date__), self)
         self.build = QLabel(build_info(), self)
         self.build.setStyleSheet(f"color: {BUILD_TEXT};")
-        self.credits = QLabel(CREDITS.format(puzzle=f'<a href="{PUZZLE_URL}">this puzzle</a>'), self)
+        link = f'<a href="{PUZZLE_URL}">{tr("this puzzle")}</a>'
+        self.credits = QLabel(tr(CREDITS, puzzle=link), self)
         self.credits.setTextFormat(Qt.TextFormat.RichText)
         self.credits.setOpenExternalLinks(True)  # the link opens in the browser
         selectable = Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard
@@ -50,7 +52,7 @@ class AboutDialog(SmallWindow):
             label.setTextInteractionFlags(selectable)  # so that the user can copy any of it
         # The link stays a link (with "Copy link location" in its context menu), and the text around it selectable.
         self.credits.setTextInteractionFlags(selectable | Qt.TextInteractionFlag.LinksAccessibleByMouse)
-        self.copy_button = QPushButton("Copy and close", self)
+        self.copy_button = QPushButton(tr("Copy and close"), self)
         self.copy_button.setAutoDefault(False)  # Enter in the text doesn't press it
         self.copy_button.clicked.connect(self._copy_and_close)
         content = QVBoxLayout()
@@ -67,7 +69,7 @@ class AboutDialog(SmallWindow):
 
     def text(self) -> str:
         """All of it as plain text, a line per line, with the link itself instead of "this puzzle"."""
-        return "\n".join([APP_NAME, self.version.text(), *build_info().split("\n"), CREDITS.format(puzzle=PUZZLE_URL)])
+        return "\n".join([APP_NAME, self.version.text(), *build_info().split("\n"), tr(CREDITS, puzzle=PUZZLE_URL)])
 
     def _copy_and_close(self) -> None:
         clipboard = QApplication.clipboard()

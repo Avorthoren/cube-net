@@ -115,9 +115,10 @@ def test_recording_started_at_launch(qtbot: QtBot, tmp_path: Path) -> None:
     assert window.recorder is not None
     lines = session_lines(window.recorder.log.path)
     assert "# recording started: at app launch" in lines
-    assert lines[-10:] == [
+    assert lines[-11:] == [
         "state net default",
         "state labels on",
+        "state language en",
         "state blink on",
         "state max_zoom 1000",
         f"state style {format_style(DEFAULT_STYLE)}",
@@ -3003,7 +3004,7 @@ class TestLastSettingsTab:
     def test_preferences_the_first_time(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
         window.settings_action.trigger()
-        assert window.settings_panel.tab_name() == "Preferences"
+        assert window.settings_panel.tab_name() == "preferences"
 
     def test_the_same_tab_when_opened_again(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
@@ -3011,7 +3012,7 @@ class TestLastSettingsTab:
         window.settings_panel.show_tab("Style")
         window.settings_action.trigger()
         window.settings_action.trigger()
-        assert window.settings_panel.tab_name() == "Style"
+        assert window.settings_panel.tab_name() == "style"
 
     def test_and_in_the_next_run(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
@@ -3019,7 +3020,7 @@ class TestLastSettingsTab:
         window.settings_panel.show_tab("Style")
         other = self.make(qtbot, tmp_path)
         other.settings_action.trigger()
-        assert other.settings_panel.tab_name() == "Style"
+        assert other.settings_panel.tab_name() == "style"
 
 
 class TestSettingsPanelOpenAtStart:
@@ -3126,3 +3127,143 @@ class TestHelpMenu:
         window.about_action.trigger()
         window.updates_action.trigger()
         assert opened == ["AboutDialog", "UpdatesDialog"]
+
+
+class TestLanguage:
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+        settings.record_session = record
+        window = MainWindow(settings=settings, session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def choose(self, window: MainWindow, name: str) -> None:
+        box = window.settings_panel.preferences.language
+        box.setCurrentIndex(box.findText(name))
+
+    def texts(self, window: MainWindow) -> dict[str, str]:
+        menu_bar = window.menuBar()
+        assert menu_bar is not None
+        prefs = window.settings_panel.preferences
+        return {
+            "menus": " ".join(a.text() for a in menu_bar.actions()),
+            "open": window.open_action.text(),
+            "ruler": window.ruler_action.text(),
+            "target": window.bounding.target_label.text(),
+            "area": window.bounding.label.text().split("\n")[0],
+            "tabs": " ".join(window.settings_panel.tabs.tabText(i) for i in range(2)),
+            "labels": prefs.show_labels.text(),
+            "language": prefs.language_label.text(),
+            "title": window.windowTitle(),
+        }
+
+    def test_first_in_preferences(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        prefs = window.settings_panel.preferences
+        box = prefs.language
+        assert [box.itemText(i) for i in range(box.count())] == ["English", "Русский"]
+        assert prefs.language_label.text() == "Language"
+        layout = prefs.layout()
+        assert layout is not None
+        first = layout.itemAt(0)
+        assert first is not None and first.layout() is not None
+        assert first.layout().indexOf(box) >= 0  # type: ignore[union-attr]
+
+    def test_everything_changes_at_once(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        english = self.texts(window)
+        self.choose(window, "Русский")
+        russian = self.texts(window)
+        assert russian == {
+            "menus": "&Файл &Правка &Настройки &Справка",
+            "open": "&Открыть...",
+            "ruler": "Линейка",
+            "target": "Цель",
+            "area": "Площадь",
+            "tabs": "Основные Оформление",
+            "labels": "Показывать метки вершин",
+            "language": "Язык",
+            "title": "Без имени[*] — Cube Net",
+        }
+        self.choose(window, "English")
+        assert self.texts(window) == english
+
+    def test_the_list_does_not_move(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.settings_action.trigger()
+        box = window.settings_panel.preferences.language
+        before = box.mapTo(window, box.rect().topLeft())
+        self.choose(window, "Русский")
+        qtbot.wait(20)
+        assert box.mapTo(window, box.rect().topLeft()) == before
+
+    def test_remembered_and_used_at_start(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.ui.i18n import Language
+
+        window = self.make(qtbot, tmp_path, record=True)
+        self.choose(window, "Русский")
+        assert window.settings.language is Language.RUSSIAN
+        assert window.recorder is not None
+        assert session_lines(window.recorder.log.path)[-1] == "settings language ru"
+        window.stop_recording("test over")
+        other = self.make(qtbot, tmp_path)
+        assert other.ruler_action.text() == "Линейка"
+        assert other.settings_panel.preferences.language.currentText() == "Русский"
+
+    def test_not_a_change_of_the_project(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.choose(window, "Русский")
+        assert not window.is_dirty
+
+    def test_the_wheel_does_not_change_it(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from PyQt6.QtCore import QPoint, QPointF
+        from PyQt6.QtGui import QWheelEvent
+        from PyQt6.QtWidgets import QApplication
+
+        window = self.make(qtbot, tmp_path)
+        box = window.settings_panel.preferences.language
+        pos = QPointF(box.width() / 2, box.height() / 2)
+        event = QWheelEvent(
+            pos,
+            box.mapToGlobal(pos),
+            QPoint(0, 0),
+            QPoint(0, -360),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False,
+        )
+        QApplication.sendEvent(box, event)
+        assert box.currentText() == "English"
+
+    def test_error_messages_in_the_language(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        window = self.make(qtbot, tmp_path)
+        self.choose(window, "Русский")
+        told: list[str] = []
+        monkeypatch.setattr(QMessageBox, "critical", lambda _p, _t, text: told.append(text))
+        bad = tmp_path / "bad.cubenet"
+        bad.write_text("Hello!")
+        window.open_project_from(bad)
+        assert told == [f"Не удалось открыть {bad}. Это не проект Cube Net."]
+
+
+def test_the_settings_panel_takes_the_width_its_texts_need(qtbot: QtBot, tmp_path: Path) -> None:
+    from cube_net.ui.i18n import TRANSLATIONS, Language
+
+    window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+    qtbot.addWidget(window)
+    window.resize(1500, 900)
+    window.show()
+    qtbot.waitExposed(window)
+    window.settings_action.trigger()
+    placed: list[int] = []
+    original = window.settings_panel.place_over
+    window.settings_panel.place_over = lambda area, width: (placed.append(1), original(area, width))  # type: ignore[method-assign]
+    TRANSLATIONS.set_language(Language.RUSSIAN)
+    assert placed

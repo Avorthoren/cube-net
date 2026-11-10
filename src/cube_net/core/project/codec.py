@@ -42,11 +42,11 @@ def decode_project(data: object) -> Project:
     if version != FORMAT_VERSION:
         if isinstance(version, int) and version > FORMAT_VERSION:
             raise ProjectFileError("It was saved by a newer version of the application.")
-        raise ProjectFileError(f"It has an unknown format version: {version!r}.")
+        raise ProjectFileError("It has an unknown format version: {version}.", version=repr(version))
     try:
         return _Decoder(data).project()
     except (KeyError, IndexError, TypeError, ValueError, AttributeError, ZeroDivisionError, NetInvariantError) as e:
-        raise ProjectFileError(f"It is damaged ({type(e).__name__}: {e}).") from e
+        raise ProjectFileError("It is damaged ({detail}).", detail=f"{type(e).__name__}: {e}") from e
 
 
 def _write_vec(v: Vec) -> list[str]:

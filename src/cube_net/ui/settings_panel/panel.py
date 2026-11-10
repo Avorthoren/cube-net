@@ -8,6 +8,7 @@ from PyQt6.QtCore import QRect, Qt, pyqtSignal
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QFrame, QScrollArea, QTabWidget, QToolButton, QVBoxLayout, QWidget
 
+from cube_net.ui.i18n import Language, bind
 from cube_net.ui.settings_panel.preferences_tab import PreferencesTab
 from cube_net.ui.settings_panel.style_tab import StyleTab
 from cube_net.ui.style import Style
@@ -18,6 +19,10 @@ MAX_SCREEN_FRACTION = 1 / 3
 # On the button that hides the panel: a double chevron pointing the way the panel goes (not a cross, which would look
 # like closing the application).
 HIDE_SIGN = chr(0x00BB)
+
+# The tabs' keys: how the last one shown is remembered, in any language.
+PREFERENCES = "preferences"
+STYLE = "style"
 
 # Room for a vertical scroll bar, so that it never covers the fields.
 SCROLL_BAR_ROOM_PX = 24
@@ -36,19 +41,28 @@ class SettingsPanel(QFrame):
     hide_requested = pyqtSignal()
 
     def __init__(
-        self, labels: QAction, logs: QAction, blink: bool, max_zoom: int, style: Style, parent: QWidget
+        self,
+        labels: QAction,
+        logs: QAction,
+        blink: bool,
+        max_zoom: int,
+        style: Style,
+        parent: QWidget,
+        language: Language = Language.ENGLISH,
     ) -> None:
         super().__init__(parent)
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setAutoFillBackground(True)
-        self.preferences = PreferencesTab(labels, logs, blink, max_zoom)
+        self.preferences = PreferencesTab(labels, logs, blink, max_zoom, language)
         self.style_tab = StyleTab(style)
         self.tabs = QTabWidget(self)
-        self.tabs.addTab(_scrolling(self.preferences), "Preferences")
-        self.tabs.addTab(_scrolling(self.style_tab), "Style")
+        self._add_tab(PREFERENCES, self.preferences)
+        bind(self.tabs, lambda text: self.tabs.setTabText(0, text), "Preferences")
+        self._add_tab(STYLE, self.style_tab)
+        bind(self.tabs, lambda text: self.tabs.setTabText(1, text), "Style")
         self.hide_button = QToolButton(self.tabs)
         self.hide_button.setText(HIDE_SIGN)
-        self.hide_button.setToolTip("Hide settings")
+        bind(self.hide_button, self.hide_button.setToolTip, "Hide settings")
         self.hide_button.setAutoRaise(True)
         self.hide_button.clicked.connect(self.hide_requested)
         self.tabs.setCornerWidget(self.hide_button, Qt.Corner.TopRightCorner)
@@ -57,13 +71,23 @@ class SettingsPanel(QFrame):
         layout.addWidget(self.tabs)
         self.hide()
 
+    def _add_tab(self, key: str, tab: QWidget) -> None:
+        index = self.tabs.addTab(_scrolling(tab), "")
+        page = self.tabs.widget(index)
+        assert page is not None
+        page.setObjectName(key)
+
     def tab_name(self) -> str:
-        return self.tabs.tabText(self.tabs.currentIndex())
+        """The shown tab's key (the same in every language)."""
+        widget = self.tabs.currentWidget()
+        return widget.objectName() if widget is not None else ""
 
     def show_tab(self, name: str) -> None:
-        """Show the tab with this name; an unknown name changes nothing."""
+        """Show the tab with this key; an unknown one changes nothing. (Earlier versions kept the tab's English title,
+        which is its key with a capital letter.)"""
         for i in range(self.tabs.count()):
-            if self.tabs.tabText(i) == name:
+            widget = self.tabs.widget(i)
+            if widget is not None and widget.objectName() == name.lower():
                 self.tabs.setCurrentIndex(i)
 
     def place_over(self, area: QRect, screen_width: int) -> None:

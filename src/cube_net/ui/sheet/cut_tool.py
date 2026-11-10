@@ -32,6 +32,7 @@ from cube_net.core.editor import Editor, EditorState, Rejection
 from cube_net.core.geometry import Vec, quantize
 from cube_net.core.net import HalfEdge, NetVertex, boundary_edge_at
 from cube_net.core.sheet import SHEET_MARGIN
+from cube_net.ui.i18n import tr
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.approve_button_item import ApproveButtonItem
@@ -224,7 +225,7 @@ class CutTool(QObject):
         """The tooltip of what's under the mouse: the approve button tells what it does."""
         if self._ruler.active or not self._on_approve_button(x, y):
             return ""
-        return "Approve" if self.approve_button.enabled() else "Cancel"
+        return tr("Approve") if self.approve_button.enabled() else tr("Cancel")
 
     def _on_approve_button(self, x: float, y: float) -> bool:
         position = self.approve_button.position()

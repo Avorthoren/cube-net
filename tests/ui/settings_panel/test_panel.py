@@ -42,11 +42,11 @@ def test_at_most_a_third_of_the_screen(qtbot: QtBot) -> None:
 
 def test_show_tab_by_name(qtbot: QtBot) -> None:
     panel = make(qtbot)
-    assert panel.tab_name() == "Preferences"
+    assert panel.tab_name() == "preferences"
     panel.show_tab("Style")
-    assert panel.tab_name() == "Style"
+    assert panel.tab_name() == "style"
     panel.show_tab("No such tab")
-    assert panel.tab_name() == "Style"
+    assert panel.tab_name() == "style"
 
 
 def test_hide_button(qtbot: QtBot) -> None:

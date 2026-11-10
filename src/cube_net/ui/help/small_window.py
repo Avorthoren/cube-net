@@ -11,6 +11,8 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QIcon, QMouseEvent
 from PyQt6.QtWidgets import QDialog, QFrame, QHBoxLayout, QLabel, QStyle, QToolButton, QVBoxLayout, QWidget
 
+from cube_net.ui.i18n import bind
+
 
 class TitleBar(QWidget):
     """The title and the close button; dragging it moves the window."""
@@ -27,7 +29,7 @@ class TitleBar(QWidget):
         assert style is not None
         fallback = style.standardIcon(QStyle.StandardPixmap.SP_TitleBarCloseButton)
         self.close_button.setIcon(QIcon.fromTheme("window-close-symbolic", QIcon.fromTheme("window-close", fallback)))
-        self.close_button.setToolTip("Close")
+        bind(self.close_button, self.close_button.setToolTip, "Close")
         self.close_button.setAutoRaise(True)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 4, 4, 4)

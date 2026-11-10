@@ -54,7 +54,7 @@ def save_project(project: Project, path: Path) -> None:
     except OSError as e:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
-        raise ProjectFileError(f"Can't save {path}: {e.strerror or e}.") from e
+        raise ProjectFileError("Can't save {path}: {reason}.", path=path, reason=e.strerror or e) from e
 
 
 def load_project(path: Path) -> Project:
@@ -62,8 +62,8 @@ def load_project(path: Path) -> Project:
     try:
         content = path.read_bytes()
     except OSError as e:
-        raise ProjectFileError(f"Can't open {path}: {e.strerror or e}.") from e
+        raise ProjectFileError("Can't open {path}: {reason}.", path=path, reason=e.strerror or e) from e
     try:
         return project_from_bytes(content)
     except ProjectFileError as e:
-        raise ProjectFileError(f"Can't open {path}. {e}") from e
+        raise ProjectFileError("Can't open {path}. {problem}", path=path, problem=e) from e

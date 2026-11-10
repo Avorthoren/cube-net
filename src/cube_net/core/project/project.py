@@ -10,7 +10,16 @@ from cube_net.core.project_settings import ProjectSettings
 
 
 class ProjectFileError(Exception):
-    """A project can't be saved or loaded. The message is meant for the user."""
+    """A project can't be saved or loaded. The message is meant for the user.
+
+    It's a template with {placeholders} and their values, so that the UI can show it in the user's language: the
+    template is the English text (`str` gives it filled in). A value can be another `ProjectFileError` (the reason).
+    """
+
+    def __init__(self, template: str, **values: object) -> None:
+        self.template = template
+        self.values = values
+        super().__init__(template.format(**{k: str(v) for k, v in values.items()}))
 
 
 @dataclass(frozen=True, slots=True)

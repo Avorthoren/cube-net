@@ -28,3 +28,18 @@ def default_style() -> Iterator[None]:
     apply_style(DEFAULT_STYLE)
     yield
     apply_style(DEFAULT_STYLE)
+
+
+@pytest.fixture(autouse=True)
+def english_and_own_settings(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """Every test starts in English, and app settings it doesn't give explicitly don't come from the user's own file."""
+    from PyQt6.QtCore import QSettings
+
+    from cube_net.ui.i18n import TRANSLATIONS, Language
+
+    folder = str(tmp_path_factory.mktemp("settings"))
+    for scope in (QSettings.Scope.UserScope, QSettings.Scope.SystemScope):
+        QSettings.setPath(QSettings.Format.NativeFormat, scope, folder)
+    TRANSLATIONS.set_language(Language.ENGLISH)
+    yield
+    TRANSLATIONS.set_language(Language.ENGLISH)

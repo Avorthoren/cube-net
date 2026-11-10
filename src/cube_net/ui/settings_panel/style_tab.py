@@ -5,6 +5,7 @@ from dataclasses import replace
 from PyQt6.QtCore import QLocale, pyqtSignal
 from PyQt6.QtWidgets import QDoubleSpinBox, QFrame, QLabel, QSpinBox, QVBoxLayout, QWidget
 
+from cube_net.ui.i18n import bind
 from cube_net.ui.settings_panel.color_field import ColorField
 from cube_net.ui.settings_panel.section import Section
 from cube_net.ui.settings_panel.swatches import ColorSwatch, GridSwatch
@@ -60,7 +61,9 @@ def _pixels_box(allowed: tuple[float, float], parent: QWidget) -> QDoubleSpinBox
 
 def _px(parent: QWidget) -> QLabel:
     """The unit, after a field in pixels."""
-    return QLabel(PIXELS, parent)
+    label = QLabel(parent)
+    bind(label, label.setText, PIXELS)
+    return label
 
 
 class StyleTab(QWidget):

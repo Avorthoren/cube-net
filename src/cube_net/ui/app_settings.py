@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import QSettings
 
+from cube_net.ui.i18n.language import Language
 from cube_net.ui.sheet.zoom import DEFAULT_MAX_ZOOM, MAX_ZOOM_RANGE
 from cube_net.ui.style import DEFAULT_STYLE, Style, StyleError
 
@@ -26,6 +27,7 @@ _LAST_PROJECT = "project/last"
 _MAX_ZOOM = "view/max_zoom"
 _SETTINGS_TAB = "view/settings_tab"
 _SETTINGS_OPEN = "view/settings_open"
+_LANGUAGE = "view/language"
 _STYLE = "style/"
 
 
@@ -57,6 +59,16 @@ class AppSettings:
     @blink_on_success.setter
     def blink_on_success(self, value: bool) -> None:
         self._settings.setValue(_BLINK_ON_SUCCESS, value)
+
+    @property
+    def language(self) -> Language:
+        """The application's language (English if it's not one it knows)."""
+        value = str(self._settings.value(_LANGUAGE, Language.ENGLISH.value, type=str))
+        return next((language for language in Language if language.value == value), Language.ENGLISH)
+
+    @language.setter
+    def language(self, language: Language) -> None:
+        self._settings.setValue(_LANGUAGE, language.value)
 
     @property
     def settings_open(self) -> bool:

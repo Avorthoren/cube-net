@@ -1,0 +1,97 @@
+"""Russian texts, by their English ones. Every text given to `tr` or `bind` must be here (a test checks that)."""
+
+RUSSIAN: dict[str, str] = {
+    # The menus.
+    "&File": "&Файл",
+    "&New": "&Новый",
+    "&Open...": "&Открыть...",
+    "&Save": "&Сохранить",
+    "Save &As...": "Сохранить &как...",
+    "&Quit": "&Выход",
+    "&Edit": "&Правка",
+    "&Approve cut": "&Утвердить разрез",
+    "&Undo": "&Отменить",
+    "&Redo": "&Повторить",
+    "&Settings": "&Настройки",
+    "Settings of the application (not of the project)": "Настройки приложения (не проекта)",
+    "&Help": "&Справка",
+    "&About": "&О программе",
+    "Check for &updates": "Проверить &обновления",
+    # The instruments panel.
+    "Instruments": "Инструменты",
+    "Ruler": "Линейка",
+    "Ruler (R): click on the sheet to measure; turn off to clear": (
+        "Линейка (R): щёлкайте по листу, чтобы измерять; выключите, чтобы очистить"
+    ),
+    "Total length of the placed ruler segments": "Общая длина отрезков линейки",
+    "Area": "Площадь",
+    "Area of the smallest rectangle (any orientation) that contains the net": (
+        "Площадь наименьшего прямоугольника (повёрнутого как угодно), в который помещается развёртка"
+    ),
+    "Target area": "Цель",
+    "The project's goal: an area below this is a success": "Цель проекта: площадь меньше этой — успех",
+    "Bounds": "Рамка",
+    "Show the smallest bounding rectangle (B)": "Показать наименьший описанный прямоугольник (B)",
+    "Logs": "Журналы",
+    "Open the folder with session logs": "Открыть папку с журналами сеансов",
+    # The status bar and the window's title.
+    "Recording session to {path}": "Сеанс записывается в {path}",
+    "Session recording stopped": "Запись сеанса остановлена",
+    "Could not open the folder with session logs": "Не удалось открыть папку с журналами сеансов",
+    "Untitled": "Без имени",
+    # Projects: files and questions.
+    "Open project": "Открыть проект",
+    "Save project as": "Сохранить проект как",
+    "Cube Net projects (*{suffix})": "Проекты Cube Net (*{suffix})",
+    "Save changes?": "Сохранить изменения?",
+    'Save changes to "{name}"?': "Сохранить изменения в проекте «{name}»?",
+    "Don't save": "Не сохранять",
+    "Can't open the project": "Не удалось открыть проект",
+    "Start a new project, or open another one?": "Начать новый проект или открыть другой?",
+    "New project": "Новый проект",
+    # Why a project can't be saved or opened (from core.project; values are as the system or the file has them).
+    "It isn't a Cube Net project.": "Это не проект Cube Net.",
+    "It is damaged.": "Файл повреждён.",
+    "It is damaged ({detail}).": "Файл повреждён ({detail}).",
+    "It was saved by a newer version of the application.": "Он сохранён более новой версией приложения.",
+    "It has an unknown format version: {version}.": "У него неизвестная версия формата: {version}.",
+    "Can't save {path}: {reason}.": "Не удалось сохранить {path}: {reason}.",
+    "Can't open {path}: {reason}.": "Не удалось открыть {path}: {reason}.",
+    "Can't open {path}. {problem}": "Не удалось открыть {path}. {problem}",
+    # The approve button.
+    "Approve": "Утвердить",
+    "Cancel": "Отменить",
+    # The settings panel.
+    "Preferences": "Основные",
+    "Style": "Оформление",
+    "Hide settings": "Скрыть настройки",
+    "Language": "Язык",
+    "Show vertex labels": "Показывать метки вершин",
+    "Log sessions": "Вести журнал сеансов",
+    "Blink when target area achieved": "Мигать, когда цель достигнута",
+    "Maximum zoom:": "Наибольший масштаб:",
+    "px per unit": "пикс. на единицу",
+    "How far in the sheet can be zoomed: how many pixels the edge of the cube takes": (
+        "Насколько можно приблизить лист: сколько пикселей занимает ребро куба"
+    ),
+    "px": "пикс.",
+    "Faces colors": "Цвета граней",
+    "Faces tiling": "Разбиение граней",
+    "Cuts and folds": "Разрезы и сгибы",
+    "Vertices": "Вершины",
+    "Grid": "Сетка",
+    "Restore default": "По умолчанию",
+    'Restore the default values of "{section}"?': "Вернуть значения по умолчанию в разделе «{section}»?",
+    "Dashes": "Штрихи",
+    "Thickness": "Толщина",
+    "Radius": "Радиус",
+    # The Help menu's windows.
+    "About {name}": "О программе {name}",
+    "Version {version}, {date}": "Версия {version}, {date}",
+    "by UNDEFEAT in attempts to solve {puzzle}": "от UNDEFEAT в попытках решить {puzzle}",
+    "this puzzle": "эту головоломку",
+    "Copy and close": "Скопировать и закрыть",
+    "Close": "Закрыть",
+    "Check for updates": "Проверка обновлений",
+    "Under development...": "В разработке...",
+}

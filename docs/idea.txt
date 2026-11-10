@@ -472,6 +472,9 @@ A small button in the panel's upper right corner (a double chevron pointing righ
 closing the application) hides the panel, like clicking "Settings" again. Every change is applied and saved at once, and shows on the
 sheet at once.
 1. Preferences:
+   - Language (first): "Language" and a drop-down list with "English" and "Русский" to the right of it ("Язык" when
+     it's Russian). The list stays where it is when the language changes. Every text of the application is shown in
+     the chosen language (Qt's own too: standard buttons, file dialogs), at once, and the choice is remembered;
    - Show vertex labels;
    - Log sessions;
    - Blink when target area achieved (on by default): if it's off, the

@@ -31,7 +31,7 @@ def test_new_project(qtbot: QtBot) -> None:
 
 
 def test_open_another(qtbot: QtBot) -> None:
-    answering(click_button("Open..."))
+    answering(click_button("&Open..."))
     assert ask_after_load_failed(None, "Oops.") is AfterLoadFailed.OPEN_ANOTHER
 
 

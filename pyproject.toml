@@ -40,6 +40,11 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# Russian texts: their Cyrillic letters look like Latin ones, and that's fine.
+"src/cube_net/ui/i18n/*.py" = ["RUF001"]
+"tests/**/*.py" = ["RUF001"]
+
 [tool.mypy]
 python_version = "3.14"
 files = ["src/cube_net/core"]

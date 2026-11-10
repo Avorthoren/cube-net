@@ -3,13 +3,15 @@
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
+from cube_net.ui.i18n import bind, tr
+
 
 def confirm_restore(parent: QWidget | None, section: str) -> bool:
     """Ask before the section's values are replaced by the defaults."""
     answer = QMessageBox.question(
         parent,
-        "Restore default",
-        f'Restore the default values of "{section}"?',
+        tr("Restore default"),
+        tr('Restore the default values of "{section}"?', section=tr(section)),
         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         QMessageBox.StandardButton.No,
     )
@@ -24,8 +26,10 @@ class Section(QWidget):
         super().__init__(parent)
         self.title = title
         header = QHBoxLayout()
-        name = QLabel(f"<b>{title}</b>", self)
-        self.restore_button = QPushButton("Restore default", self)
+        name = QLabel(self)
+        bind(name, lambda text: name.setText(f"<b>{text}</b>"), title)
+        self.restore_button = QPushButton(self)
+        bind(self.restore_button, self.restore_button.setText, "Restore default")
         self.restore_button.clicked.connect(self._on_restore)
         header.addWidget(name)
         header.addStretch()
@@ -45,7 +49,9 @@ class Section(QWidget):
             self._form.setColumnStretch(2, 1)
             self.body.addLayout(self._form)
         row = self._form.rowCount()
-        self._form.addWidget(QLabel(label, self), row, 0)
+        text = QLabel(self)
+        bind(text, text.setText, label)
+        self._form.addWidget(text, row, 0)
         fields = QHBoxLayout()
         for widget in widgets:
             fields.addWidget(widget)

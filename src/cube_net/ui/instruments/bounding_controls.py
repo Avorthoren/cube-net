@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import QDoubleSpinBox, QLabel, QToolBar, QWidget
 from cube_net.core.bounding import BoundingRectangle
 from cube_net.core.project_settings import MAX_AREA_THRESHOLD, MIN_AREA_THRESHOLD
 from cube_net.ui import palette
+from cube_net.ui.i18n import TRANSLATIONS, bind, tr
 from cube_net.ui.sheet.bounding_item import BoundingItem
 
 # The target area has at most 3 decimals; the field's arrows change it by this much.
@@ -49,9 +50,12 @@ class BoundingControls(QObject):
         toolbar.addSeparator()
         self.label = QLabel(toolbar)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label.setToolTip("Area of the smallest rectangle (any orientation) that contains the net")
+        bind(
+            self.label, self.label.setToolTip, "Area of the smallest rectangle (any orientation) that contains the net"
+        )
         toolbar.addWidget(self.label)
-        self.target_label = QLabel("Target area", toolbar)
+        self.target_label = QLabel(toolbar)
+        bind(self.target_label, self.target_label.setText, "Target area")
         self.target_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         toolbar.addWidget(self.target_label)
         self.target = QDoubleSpinBox(toolbar)
@@ -60,17 +64,19 @@ class BoundingControls(QObject):
         self.target.setRange(float(MIN_AREA_THRESHOLD), float(MAX_AREA_THRESHOLD))
         self.target.setSingleStep(TARGET_STEP)
         self.target.setKeyboardTracking(False)  # a value is taken when it's entered, not at every digit typed
-        self.target.setToolTip("The project's goal: an area below this is a success")
+        bind(self.target, self.target.setToolTip, "The project's goal: an area below this is a success")
         self.target.valueChanged.connect(self._on_target)
         toolbar.addWidget(self.target)
-        self.action = QAction("Bounds", toolbar)
+        self.action = QAction(toolbar)
+        bind(self.action, self.action.setText, "Bounds")
         self.action.setCheckable(True)
         self.action.setShortcut("B")
-        self.action.setToolTip("Show the smallest bounding rectangle (B)")
+        bind(self.action, self.action.setToolTip, "Show the smallest bounding rectangle (B)")
         self.action.toggled.connect(self._on_toggled)
         toolbar.addAction(self.action)
         self.button: QWidget | None = toolbar.widgetForAction(self.action)
 
+        TRANSLATIONS.changed.connect(self._show_area)
         self._timer = QTimer(self)
         self._timer.setInterval(BLINK_INTERVAL_MS)
         self._timer.timeout.connect(self._blink)
@@ -102,7 +108,7 @@ class BoundingControls(QObject):
         """Show the area of `rectangle` and react to whether it's below `threshold`."""
         self._rectangle = rectangle
         self._success = rectangle.area < threshold
-        self.label.setText(f"Area\n{format_area(rectangle.area)}")
+        self._show_area()
         self.label.setStyleSheet(f"color: {palette.SUCCESS.name()}; font-weight: bold;" if self._success else "")
         self._show_success()
         self._refresh_item()
@@ -115,6 +121,10 @@ class BoundingControls(QObject):
         elif not blink:
             self._timer.stop()
             self._set_blink(self._success)
+
+    def _show_area(self) -> None:
+        if self._rectangle is not None:
+            self.label.setText(f"{tr('Area')}\n{format_area(self._rectangle.area)}")
 
     def _on_toggled(self, checked: bool) -> None:
         self._refresh_item()

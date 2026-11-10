@@ -116,3 +116,14 @@ def test_settings_open_default_and_persisted(tmp_path: Path) -> None:
     assert s.settings_open is False
     s.settings_open = True
     assert settings_at(tmp_path / "s.ini").settings_open is True
+
+
+def test_language_default_and_persisted(tmp_path: Path) -> None:
+    from cube_net.ui.i18n import Language
+
+    s = settings_at(tmp_path / "s.ini")
+    assert s.language is Language.ENGLISH
+    s.language = Language.RUSSIAN
+    assert settings_at(tmp_path / "s.ini").language is Language.RUSSIAN
+    QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat).setValue("view/language", "xx")
+    assert settings_at(tmp_path / "s.ini").language is Language.ENGLISH

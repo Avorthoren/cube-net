@@ -321,6 +321,11 @@ Undo and redo are available in every state. Each public method either performs o
   - Ruler toggle;
   - the area label (3 decimals), the project's target area (an input, 0 to 20, 3 decimals), the bounding-rectangle
     toggle;
+- **Languages** (`ui/i18n/`): English and Russian. Every text the user sees goes through `tr("English text")`, or
+  `bind(widget, setter, "English text")`, which sets it again when the language changes (switching is live). Russian
+  texts are in `russian.py`; a test scans the source and fails for any text without a translation. Qt's own texts come
+  from its `qtbase_ru` translations. Project-file errors are templates with values (`ProjectFileError`), so the core
+  stays without Qt and the window translates them (`error_text`).
 - **Number fields** ignore the mouse wheel (`ignore_wheel`, applied to every one of the main window): scrolling over
   one passes the wheel on to what's behind it.
 - **Style:** the defaults are in `net_style.py` and `palette.py`; `ui/style/` holds the user's `Style`, and
