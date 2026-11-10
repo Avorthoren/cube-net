@@ -142,15 +142,16 @@ def test_turning_recording_off_and_on(qtbot: QtBot, tmp_path: Path) -> None:
     settings = settings_in(tmp_path, record=False)
     window = MainWindow(settings=settings, session_dir=tmp_path)
     qtbot.addWidget(window)
-    window.record_session_action.setChecked(True)  # starts a file describing the current state
+    window.logging_action.trigger()  # starts a file describing the current state
     first = window.recorder
-    assert first is not None and settings.record_session
+    assert first is not None
+    assert not settings.record_session  # the button doesn't touch the auto-start setting
     assert "# recording started: turned on by the user" in session_lines(first.log.path)
     window.show_labels_action.setChecked(False)
-    window.record_session_action.setChecked(False)  # ends it
-    assert window.recorder is None and not settings.record_session
+    window.logging_action.trigger()  # ends it
+    assert window.recorder is None
     assert session_lines(first.log.path)[-2:] == ["labels off", "stop turned off by the user"]
-    window.record_session_action.setChecked(True)  # a new file, with the new state
+    window.logging_action.trigger()  # a new file, with the new state
     second = window.recorder
     assert second is not None and second.log.path != first.log.path
     assert "state labels off" in session_lines(second.log.path)
@@ -271,7 +272,7 @@ def test_state_snapshot_includes_ruler_points_and_bounds(qtbot: QtBot, tmp_path:
     window.ruler_action.setChecked(True)
     window.sheet_view.left_pressed.emit(11.0, 12.0)
     window.sheet_view.left_pressed.emit(12.5, 13.25)
-    window.record_session_action.setChecked(True)  # turned on now: the file must describe all of this
+    window.logging_action.trigger()  # turned on now: the file must describe all of this
     assert window.recorder is not None
     lines = session_lines(window.recorder.log.path)
     assert "state bounds on" in lines
@@ -295,8 +296,7 @@ def test_cut_points_and_rejections_recorded(qtbot: QtBot, tmp_path: Path) -> Non
     lines = session_lines(window.recorder.log.path)
     assert lines[-3:] == ["cut cutting 11.500,14.000", "cut rejected 12.500,13.500", "cut cutting 11.500,13.500"]
     window.stop_recording("test over")
-    window.record_session_action.setChecked(False)
-    window.record_session_action.setChecked(True)  # a new file: its state block holds the cut line
+    window.logging_action.trigger()  # a new file: its state block holds the cut line
     assert window.recorder is not None
     assert "state cut cutting 11.500,14.000p 11.500,13.500" in session_lines(window.recorder.log.path)
     window.stop_recording("test over")
@@ -487,7 +487,7 @@ class TestRearrangement:
         window = self.make(qtbot, tmp_path)
         self.closed_corner_cut(window)
         window.sheet_view.left_pressed.emit(*self.bottom_of_face_5(window))
-        window.record_session_action.setChecked(True)
+        window.logging_action.trigger()
         assert window.recorder is not None
         lines = session_lines(window.recorder.log.path)
         assert "state glue 11.500,10.000 12.000,10.000" in lines
@@ -744,7 +744,7 @@ class TestApproving:
         window = self.make(qtbot, tmp_path)
         self.rearranged(window)
         window.approve_action.trigger()
-        window.record_session_action.setChecked(True)
+        window.logging_action.trigger()
         assert window.recorder is not None
         lines = session_lines(window.recorder.log.path)
         assert "state net after 1 approved cuts" in lines
@@ -2598,7 +2598,7 @@ class TestSnapshots:
         window = self.make(qtbot, tmp_path, record=False)
         self.close_line(window)
         window.undo_action.trigger()
-        window.record_session_action.setChecked(True)
+        window.logging_action.trigger()
         project = project_from_bytes(self.snapshots(window)[-1])
         assert project.state.points is not None and len(project.state.points) == 2
         assert project.history.can_undo and project.history.can_redo
@@ -2611,7 +2611,7 @@ class TestSnapshots:
 
         window = self.make(qtbot, tmp_path, record=False)
         window.project_settings = ProjectSettings(Fraction(5))
-        window.record_session_action.setChecked(True)
+        window.logging_action.trigger()
         assert project_from_bytes(self.snapshots(window)[-1]).settings == ProjectSettings(Fraction(5))
         window.stop_recording("test over")
 
@@ -2634,7 +2634,7 @@ class TestSnapshots:
 
         window = self.make(qtbot, tmp_path, record=False)
         self.close_line(window)
-        window.record_session_action.setChecked(True)
+        window.logging_action.trigger()
         assert window.recorder is not None
         log = window.recorder.log.path
         window.stop_recording("test over")
@@ -2647,7 +2647,7 @@ class TestSnapshots:
     def test_a_person_can_still_read_the_log(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path, record=False)
         self.close_line(window)
-        window.record_session_action.setChecked(True)
+        window.logging_action.trigger()
         assert window.recorder is not None
         lines = session_lines(window.recorder.log.path)
         assert any(line.startswith("state cut cut_editing ") for line in lines)
@@ -2746,7 +2746,7 @@ class TestSnapshotsAtLaunch:
     def test_turned_on_later_it_always_has_one(self, qtbot: QtBot, tmp_path: Path) -> None:
         self.saved_project(qtbot, tmp_path)
         window = self.make(qtbot, tmp_path, record=False)
-        window.record_session_action.setChecked(True)
+        window.logging_action.trigger()
         assert len(self.snapshots(window)) == 1
         window.stop_recording("test over")
 
@@ -2813,7 +2813,7 @@ class TestSettingsPanel:
         window = self.make(qtbot, tmp_path)
         tab = window.settings_panel.preferences
         assert tab.show_labels.text() == "Show vertex labels"
-        assert tab.log_sessions.text() == "Log sessions"
+        assert tab.auto_log.text() == "Auto-start logging"
         assert tab.show_labels.isChecked() == window.settings.show_vertex_labels
         tab.show_labels.setChecked(False)
         assert not window.show_labels_action.isChecked()
@@ -2823,14 +2823,27 @@ class TestSettingsPanel:
         window.show_labels_action.setChecked(True)
         assert tab.show_labels.isChecked()
 
-    def test_log_sessions(self, qtbot: QtBot, tmp_path: Path) -> None:
+    def test_auto_log_only_decides_about_the_next_start(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
         tab = window.settings_panel.preferences
-        assert window.recorder is None and not tab.log_sessions.isChecked()
-        tab.log_sessions.setChecked(True)
-        assert window.recorder is not None
-        tab.log_sessions.setChecked(False)
-        assert window.recorder is None
+        assert tab.auto_log.text() == "Auto-start logging"
+        assert window.recorder is None and not tab.auto_log.isChecked()
+        tab.auto_log.setChecked(True)
+        assert window.recorder is None  # it doesn't start now
+        assert window.settings.record_session is True
+        window.logging_action.trigger()
+        tab.auto_log.setChecked(False)
+        assert window.recorder is not None  # nor does it stop
+        assert window.settings.record_session is False
+        window.stop_recording("test over")
+
+    def test_auto_log_starts_it_at_launch(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.settings_panel.preferences.auto_log.setChecked(True)
+        other = MainWindow(settings=window.settings, session_dir=tmp_path)
+        qtbot.addWidget(other)
+        assert other.recorder is not None
+        other.stop_recording("test over")
 
     def test_max_zoom(self, qtbot: QtBot, tmp_path: Path) -> None:
         from PyQt6.QtCore import QPointF
@@ -3267,3 +3280,64 @@ def test_the_settings_panel_takes_the_width_its_texts_need(qtbot: QtBot, tmp_pat
     window.settings_panel.place_over = lambda area, width: (placed.append(1), original(area, width))  # type: ignore[method-assign]
     TRANSLATIONS.set_language(Language.RUSSIAN)
     assert placed
+
+
+class TestLoggingButton:
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def test_right_above_logs(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        toolbar = window.findChild(QToolBar)
+        assert toolbar is not None
+        actions = toolbar.actions()
+        assert actions.index(window.logging_action) == actions.index(window.open_logs_action) - 1
+
+    def test_an_icon_and_no_text(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        toolbar = window.findChild(QToolBar)
+        assert toolbar is not None
+        button = toolbar.widgetForAction(window.logging_action)
+        assert button is not None and not window.logging_action.icon().isNull()
+        assert window.logging_action.text() == ""
+
+    def test_start_then_stop(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.ui.instruments.logging_icons import record_icon, stop_icon
+
+        window = self.make(qtbot, tmp_path)
+        action = window.logging_action
+        assert window.recorder is None
+        assert action.toolTip() == "Start logging"
+        assert action.icon().cacheKey() == record_icon().cacheKey()
+        action.trigger()
+        assert window.recorder is not None
+        assert action.toolTip() == "Stop logging"
+        assert action.icon().cacheKey() == stop_icon().cacheKey()
+        path = window.recorder.log.path
+        action.trigger()
+        assert window.recorder is None
+        assert action.toolTip() == "Start logging"
+        assert session_lines(path)[-1] == "stop turned off by the user"
+
+    def test_stop_while_it_started_at_launch(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, record=True)
+        assert window.recorder is not None
+        assert window.logging_action.toolTip() == "Stop logging"
+        window.logging_action.trigger()
+        assert window.recorder is None
+        assert window.settings.record_session is True  # still starts by itself next time
+
+    def test_tooltips_in_russian(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.ui.i18n import TRANSLATIONS, Language
+
+        window = self.make(qtbot, tmp_path)
+        TRANSLATIONS.set_language(Language.RUSSIAN)
+        assert window.logging_action.toolTip() == "Начать логирование"
+        window.logging_action.trigger()
+        assert window.logging_action.toolTip() == "Остановить логирование"
+        assert window.settings_panel.preferences.auto_log.text() == "Автоматически начинать логирование"
+        window.stop_recording("test over")

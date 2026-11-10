@@ -45,7 +45,7 @@ class AppSettings:
 
     @property
     def record_session(self) -> bool:
-        """Whether recording is on (at launch, and whenever the user switches it)."""
+        """Whether logging (session recording) starts by itself when the application starts."""
         return self._bool(_RECORD_SESSION, DEFAULT_RECORD_SESSION)
 
     @record_session.setter

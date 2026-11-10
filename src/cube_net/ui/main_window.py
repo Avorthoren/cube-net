@@ -40,6 +40,7 @@ from cube_net.ui.help.updates_dialog import UpdatesDialog
 from cube_net.ui.i18n import TRANSLATIONS, Language, bind, tr
 from cube_net.ui.i18n.errors import error_text
 from cube_net.ui.instruments.bounding_controls import BoundingControls
+from cube_net.ui.instruments.logging_icons import record_icon, stop_icon
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
 from cube_net.ui.no_wheel import ignore_wheel
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
@@ -193,6 +194,7 @@ class MainWindow(QMainWindow):
         reopening = reason == STARTED_AT_LAUNCH and self.settings.last_project is not None
         self._record_state(recorder, snapshot=not reopening)
         self.statusBar().showMessage(tr("Recording session to {path}", path=recorder.log.path), 15000)
+        self._update_logging_action()
 
     def stop_recording(self, reason: str) -> None:
         app = QApplication.instance()
@@ -201,6 +203,7 @@ class MainWindow(QMainWindow):
         stop_session_recording(app, self.recorder, reason)
         self.recorder = None
         self.statusBar().showMessage(tr("Session recording stopped"), 5000)
+        self._update_logging_action()
 
     def _record_state(self, recorder: SessionRecorder, snapshot: bool = True) -> None:
         """Everything needed to reproduce the session from this point on: the whole project in its snapshot, and what
@@ -274,6 +277,11 @@ class MainWindow(QMainWindow):
         spacer = QWidget(toolbar)  # pushes what follows to the bottom of the panel
         spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         toolbar.addWidget(spacer)
+        self.logging_action = QAction(self)  # just an icon: record, or stop
+        self.logging_action.triggered.connect(self._on_logging_clicked)
+        TRANSLATIONS.changed.connect(self._update_logging_action)
+        toolbar.addAction(self.logging_action)
+        self._update_logging_action()
         self.open_logs_action = QAction(self)
         bind(self.open_logs_action, self.open_logs_action.setText, "Logs")
         bind(self.open_logs_action, self.open_logs_action.setToolTip, "Open the folder with session logs")
@@ -603,11 +611,11 @@ class MainWindow(QMainWindow):
         self.show_labels_action.setCheckable(True)
         self.show_labels_action.setChecked(self.settings.show_vertex_labels)
         self.show_labels_action.toggled.connect(self._on_show_labels_toggled)
-        self.record_session_action = QAction(self)
-        bind(self.record_session_action, self.record_session_action.setText, "Log sessions")
-        self.record_session_action.setCheckable(True)
-        self.record_session_action.setChecked(self.settings.record_session)
-        self.record_session_action.toggled.connect(self._on_record_session_toggled)
+        self.auto_log_action = QAction(self)
+        bind(self.auto_log_action, self.auto_log_action.setText, "Auto-start logging")
+        self.auto_log_action.setCheckable(True)
+        self.auto_log_action.setChecked(self.settings.record_session)
+        self.auto_log_action.toggled.connect(self._on_auto_log_toggled)
 
         edit_menu = menu_bar.addMenu("")
 
@@ -634,7 +642,7 @@ class MainWindow(QMainWindow):
 
         self.settings_panel = SettingsPanel(
             self.show_labels_action,
-            self.record_session_action,
+            self.auto_log_action,
             self.settings.blink_on_success,
             self.settings.max_zoom,
             self.settings.style,
@@ -737,12 +745,27 @@ class MainWindow(QMainWindow):
         if self.recorder is not None:
             self.recorder.note("labels", "on" if checked else "off")
 
-    def _on_record_session_toggled(self, checked: bool) -> None:
+    def _on_auto_log_toggled(self, checked: bool) -> None:
+        """Only whether logging starts by itself next time: it doesn't start or stop it now (the button does)."""
         self.settings.record_session = checked
-        if checked:
+        if self.recorder is not None:
+            self.recorder.note("settings", "auto_log", "on" if checked else "off")
+
+    def _on_logging_clicked(self) -> None:
+        if self.recorder is None:
             self.start_recording(STARTED_BY_USER)
         else:
             self.stop_recording(STOPPED_BY_USER)
+
+    def _update_logging_action(self) -> None:
+        """Record while not logging, stop while logging."""
+        action = self.logging_action
+        if self.recorder is None:
+            action.setIcon(record_icon())
+            action.setToolTip(tr("Start logging"))
+        else:
+            action.setIcon(stop_icon())
+            action.setToolTip(tr("Stop logging"))
 
     def _update_vertex_labels(self) -> None:
         """Debug labels of the net's vertices and of the cut line's new points and images (if switched on)."""

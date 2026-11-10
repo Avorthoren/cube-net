@@ -32,6 +32,8 @@ RUSSIAN: dict[str, str] = {
     "The project's goal: an area below this is a success": "Цель проекта: площадь меньше этой — успех",
     "Bounds": "Рамка",
     "Show the smallest bounding rectangle (B)": "Показать наименьший описанный прямоугольник (B)",
+    "Start logging": "Начать логирование",
+    "Stop logging": "Остановить логирование",
     "Logs": "Журналы",
     "Open the folder with session logs": "Открыть папку с журналами сеансов",
     # The status bar and the window's title.
@@ -67,7 +69,7 @@ RUSSIAN: dict[str, str] = {
     "Hide settings": "Скрыть настройки",
     "Language": "Язык",
     "Show vertex labels": "Показывать метки вершин",
-    "Log sessions": "Вести журнал сеансов",
+    "Auto-start logging": "Автоматически начинать логирование",
     "Blink when target area achieved": "Мигать, когда цель достигнута",
     "Maximum zoom:": "Макс. масштаб:",
     "px per unit": "пикс. на ед.",

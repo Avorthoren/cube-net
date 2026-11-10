@@ -427,12 +427,13 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
 - **Rule for new features:** when a feature changes the model (adds a cut point, glues, undoes, saves, ...), it also
   records one compact `note()` line, so a log shows both the input and its effect.
 - The **Logs** button at the bottom of the instrument panel opens the folder in the system's file manager.
-- App setting `record_session` (`DEFAULT_RECORD_SESSION` is True while developing, False for releases).
-- **Start and stop.** If recording is on at launch, the file's header says `recording started: at app launch`. If the
-  user turns it on later, a new file starts with `recording started: turned on by the user`. Either way it's followed
-  by `state …` lines describing the current state (`MainWindow._record_state`), so the file alone is enough to
-  reproduce what follows. Turning recording off writes `stop turned off by the user` and closes the file. Turning it
-  on again starts a new file.
+- App setting `record_session` ("Auto-start logging" in Settings → Preferences): logging starts by itself at launch.
+  `DEFAULT_RECORD_SESSION` is True while developing, False for releases. Switching it changes only the next start.
+- **Start and stop** with the button above **Logs** on the instrument panel (a red dot: start; a red square in a
+  frame: stop). At launch the file's header says `recording started: at app launch`; started with the button, a new
+  file starts with `recording started: turned on by the user`. Either way it's followed by `state …` lines describing
+  the current state (`MainWindow._record_state`), so the file alone is enough to reproduce what follows. Stopping
+  writes `stop turned off by the user` and closes the file; starting again starts a new file.
 - **The state snapshot.** `state snapshot <base64>` holds the whole project, unsaved work included: the bytes of a project
   file. It's written whenever recording starts and whenever another project comes along, except at launch with a project
   about to be reopened: then the log's first snapshot is the reopened project (or, if that fails, the new one).

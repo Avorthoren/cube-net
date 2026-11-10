@@ -16,13 +16,13 @@ def make(qtbot: QtBot) -> tuple[PreferencesTab, QAction, QAction]:
 
 def test_wording(qtbot: QtBot) -> None:
     tab, _, _ = make(qtbot)
-    assert (tab.show_labels.text(), tab.log_sessions.text()) == ("Show vertex labels", "Log sessions")
+    assert (tab.show_labels.text(), tab.auto_log.text()) == ("Show vertex labels", "Auto-start logging")
 
 
 def test_boxes_and_actions_are_one_switch(qtbot: QtBot) -> None:
     tab, labels, logs = make(qtbot)
-    assert tab.show_labels.isChecked() and not tab.log_sessions.isChecked()
-    tab.log_sessions.setChecked(True)
+    assert tab.show_labels.isChecked() and not tab.auto_log.isChecked()
+    tab.auto_log.setChecked(True)
     assert logs.isChecked()
     labels.setChecked(False)
     assert not tab.show_labels.isChecked()
@@ -51,8 +51,8 @@ def test_blink_like_the_other_switches(qtbot: QtBot) -> None:
     assert tab.blink.text() == "Blink when target area achieved"
     assert tab.blink.isChecked()
     top = tab.blink.mapTo(tab, tab.blink.rect().topLeft())
-    assert top.x() == tab.log_sessions.mapTo(tab, tab.log_sessions.rect().topLeft()).x()
-    assert tab.log_sessions.mapTo(tab, tab.log_sessions.rect().topLeft()).y() < top.y()
+    assert top.x() == tab.auto_log.mapTo(tab, tab.auto_log.rect().topLeft()).x()
+    assert tab.auto_log.mapTo(tab, tab.auto_log.rect().topLeft()).y() < top.y()
     assert top.y() < tab.max_zoom.mapTo(tab, tab.max_zoom.rect().topLeft()).y()
     with qtbot.waitSignal(tab.blink_changed) as blocker:
         tab.blink.setChecked(False)

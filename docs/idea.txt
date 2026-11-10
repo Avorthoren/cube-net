@@ -476,7 +476,9 @@ sheet at once.
      it's Russian). The list stays where it is when the language changes. Every text of the application is shown in
      the chosen language (Qt's own too: standard buttons, file dialogs), at once, and the choice is remembered;
    - Show vertex labels;
-   - Log sessions;
+   - Auto-start logging: when it's on, logging (the session log) starts by itself when the application starts.
+     Switching it doesn't start or stop logging now: the button above "Logs" on the instruments panel does that (a
+     red dot, "Start logging", while not logging; a red square in a frame, "Stop logging", while logging);
    - Blink when target area achieved (on by default): if it's off, the
      "Bounds" button doesn't blink on success, it's just green while the area is below the target;
    - Maximum zoom (pixels per unit, see the zoom section).
