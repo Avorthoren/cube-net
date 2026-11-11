@@ -101,6 +101,10 @@ def linux(folder: Path, text: str) -> Path:
     shutil.copy2(ROOT / "packaging/linux/AppRun", appdir / "AppRun")
     (appdir / "AppRun").chmod(0o755)
     shutil.copy2(ROOT / "packaging/linux/cube-net.desktop", appdir / "cube-net.desktop")
+    # The file type of projects, where desktop integration tools look for it.
+    mime = appdir / "usr/share/mime/packages"
+    mime.mkdir(parents=True)
+    shutil.copy2(ROOT / "packaging/linux/cube-net.xml", mime / "cube-net.xml")
     shutil.copy2(ROOT / "src/cube_net/ui/icons/cube_net.png", appdir / "cube-net.png")
     out = DIST / f"CubeNet-{text}-linux-x86_64.AppImage"
     # appimagetool is an AppImage itself: unpacked as it runs, it needs no FUSE (CI machines have none).

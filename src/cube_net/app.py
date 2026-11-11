@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Application bootstrap."""
+"""Application bootstrap: `cube-net [PROJECT_FILE]` (a project file given opens instead of the last one)."""
 
 import sys
 import tempfile
@@ -13,6 +13,7 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
 from cube_net.ui.app_settings import AppSettings
+from cube_net.ui.file_requests import FileRequests
 from cube_net.ui.main_window import APP_TITLE, MainWindow
 
 # The application's icon (drawn by scripts/make_icon.py).
@@ -39,5 +40,17 @@ def main(argv: list[str] | None = None) -> int:
             return app.exec()
     window = MainWindow()
     window.show()
-    window.reopen_last_project()
+    # A file asked for later (macOS sends double-clicked ones so, even at launch) replaces what's shown then.
+    app.installEventFilter(FileRequests(window.open_project_requested, app))
+    project = project_argument(app.arguments())
+    if project is not None:
+        window.open_project_at_start(project)
+    else:
+        window.reopen_last_project()
     return app.exec()
+
+
+def project_argument(arguments: list[str]) -> Path | None:
+    """The project file to open, given on the command line (Windows and Linux put a double-clicked file there): the
+    first argument that isn't an option. Qt has taken its own options out of `QApplication.arguments()` already."""
+    return next((Path(a) for a in arguments[1:] if not a.startswith("-")), None)

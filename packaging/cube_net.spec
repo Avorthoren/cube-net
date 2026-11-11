@@ -38,6 +38,7 @@ coll = COLLECT(exe, a.binaries, a.datas, name=NAME)  # noqa: F821
 
 if sys.platform == "darwin":
     plain = numbers(VERSION)
+    PROJECT_TYPE = "io.github.avorthoren.cubenet.project"
     app = BUNDLE(  # noqa: F821
         coll,
         name=f"{NAME}.app",
@@ -49,5 +50,24 @@ if sys.platform == "darwin":
             "CFBundleVersion": plain,
             "NSHighResolutionCapable": True,
             "NSHumanReadableCopyright": "Copyright © 2026 Viktor Podust. GNU GPL v3 or later.",
+            # Project files (.cubenet) are this application's own documents: Finder opens them with it.
+            "UTExportedTypeDeclarations": [
+                {
+                    "UTTypeIdentifier": PROJECT_TYPE,
+                    "UTTypeDescription": "Cube Net project",
+                    "UTTypeConformsTo": ["public.data"],
+                    "UTTypeIconFile": "cube_net.icns",
+                    "UTTypeTagSpecification": {"public.filename-extension": ["cubenet"]},
+                }
+            ],
+            "CFBundleDocumentTypes": [
+                {
+                    "CFBundleTypeName": "Cube Net project",
+                    "CFBundleTypeRole": "Editor",
+                    "LSHandlerRank": "Owner",
+                    "LSItemContentTypes": [PROJECT_TYPE],
+                    "CFBundleTypeIconFile": "cube_net.icns",
+                }
+            ],
         },
     )

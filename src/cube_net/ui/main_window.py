@@ -424,6 +424,27 @@ class MainWindow(QMainWindow):
             if self.recorder is not None and self.project_path is None:
                 self._record_snapshot(self.recorder)  # it's the new project after all
 
+    def open_project_at_start(self, path: Path) -> None:
+        """At start, with a project file to open (double-clicked, or given on the command line): that one instead of
+        the last one. If it can't be loaded, the user decides, as when the last one can't."""
+        try:
+            self._load_and_show(path)
+        except ProjectFileError as e:
+            if self.recorder is not None:
+                self.recorder.note("project", "opening failed", path)
+            self._offer_another_project(error_text(e))
+
+    def open_project_requested(self, path: Path) -> None:
+        """The system asks to open a project file while the app runs (macOS sends double-clicked files that way):
+        like File -> Open, unsaved changes are asked about first. The same project just comes to the front."""
+        self.raise_()
+        self.activateWindow()
+        if self.project_path is not None and self.project_path.resolve() == path.resolve():
+            return
+        if self.cut_tool.busy or not self._confirm_leaving_project():
+            return
+        self.open_project_from(path)
+
     def _offer_another_project(self, message: str) -> None:
         """The project that should be here can't be loaded: the user decides. The window has a new one until then."""
         while ask_after_load_failed(self, message) is AfterLoadFailed.OPEN_ANOTHER:

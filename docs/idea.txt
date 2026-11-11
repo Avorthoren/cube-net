@@ -485,7 +485,8 @@ sheet at once.
      it's Russian). The list stays where it is when the language changes. Every text of the application is shown in
      the chosen language (Qt's own too: standard buttons, file dialogs), at once, and the choice is remembered;
    - Show vertex labels;
-   - Auto-start logging: when it's on, logging (the session log) starts by itself when the application starts.
+   - Auto-start logging (off by default): when it's on, logging (the session log) starts by itself when the
+     application starts.
      Switching it doesn't start or stop logging now: the button above "Logs" on the instruments panel does that (a
      red dot, "Start logging", while not logging; a red square in a frame, "Stop logging", while logging);
    - Blink when target area achieved (on by default): if it's off, the
@@ -547,3 +548,10 @@ Help menu (to the right of Settings): About, Help, Check for updates.
 License: the application is free software under the GNU General Public License, version 3 or (at the user's option)
 any later version (it's built with PyQt6, which is GPL v3). Copyright (C) 2026 Viktor Podust. The LICENSE file has the
 license's text; every source file starts with the copyright line and "SPDX-License-Identifier: GPL-3.0-or-later".
+
+Opening project files from outside: `cube-net PROJECT_FILE` opens that project instead of the last one (if it can't be
+loaded, the user decides, as when the last one can't). Windows and Linux give a double-clicked file so; macOS sends it
+to the running application, and then it's opened like File -> Open (unsaved changes are asked about first; the same
+project just comes to the front). The packages register .cubenet: the Windows installer (for the current user, with
+the app's icon; the uninstaller removes it), the macOS app (its own document type), and the AppImage's desktop entry
+with its file type (used when a tool integrates the AppImage into the desktop).

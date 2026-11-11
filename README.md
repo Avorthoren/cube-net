@@ -42,7 +42,7 @@ x64 programs.
 3. Follow the installer. It installs Cube Net for your user only, without administrator rights, and adds it to the
    Start menu (and to the desktop, if you tick that).
 
-To update, install a newer version the same way: it replaces the old one. To remove Cube Net: **Settings → Apps →
+Project files (`.cubenet`) then open in Cube Net with a double-click. To update, install a newer version the same way: it replaces the old one. To remove Cube Net: **Settings → Apps →
 Installed apps → Cube Net → Uninstall**.
 
 ### Linux
@@ -63,8 +63,10 @@ There's no signing to worry about. If it doesn't start and a terminal shows a me
 `./CubeNet-<version>-linux-x86_64.AppImage --appimage-extract-and-run`, or install your distribution's `fuse` package.
 
 To have it in the applications menu, use [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) or
-[AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher). To update, download the newer AppImage; to
-remove Cube Net, delete the file.
+[AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher); depending on the tool, project files (`.cubenet`)
+may then open in Cube Net with a double-click too. Without that, open them from the application (**File → Open**), or
+from a terminal: `./CubeNet-<version>-linux-x86_64.AppImage path/to/project.cubenet`. To update, download the newer
+AppImage; to remove Cube Net, delete the file.
 
 ### macOS
 
@@ -84,8 +86,9 @@ The same in a terminal, after step 2:
 xattr -dr com.apple.quarantine "/Applications/Cube Net.app"
 ```
 
-To update, drag the newer version onto Applications the same way (and repeat step 3 once). To remove Cube Net, move it
-from Applications to the Bin.
+Project files (`.cubenet`) then open in Cube Net with a double-click (or when dropped on its Dock icon). To update,
+drag the newer version onto Applications the same way (and repeat step 3 once). To remove Cube Net, move it from
+Applications to the Bin.
 
 ### Checking a download
 

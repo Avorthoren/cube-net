@@ -10,7 +10,8 @@
 ;   Icon         the .ico file
 ; It installs for the current user only (no administrator rights asked), with a Start menu entry, an optional desktop
 ; one and an uninstaller, in English or Russian (as Windows is). The AppId never changes: it's how Windows knows a
-; newer version is the same application.
+; newer version is the same application. Project files (.cubenet) open with it when double-clicked, and have its icon;
+; the uninstaller takes that away again.
 
 #ifndef Version
   #error Give the version: /DVersion=1.2.0
@@ -41,6 +42,7 @@ WizardStyle=modern
 Compression=lzma2/max
 SolidCompression=yes
 CloseApplications=yes
+ChangesAssociations=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -55,6 +57,14 @@ Source: "{#Source}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs cre
 [InstallDelete]
 ; What an earlier version left there (its files may differ from this one's).
 Type: filesandordirs; Name: "{app}\_internal"
+
+[Registry]
+; .cubenet files are Cube Net projects ("HKA": the current user's part of the registry, for an install for them).
+Root: HKA; Subkey: "Software\Classes\.cubenet"; ValueType: string; ValueName: ""; ValueData: "CubeNet.Project"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\.cubenet\OpenWithProgids"; ValueType: string; ValueName: "CubeNet.Project"; ValueData: ""; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\CubeNet.Project"; ValueType: string; ValueName: ""; ValueData: "Cube Net project"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\CubeNet.Project\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\Cube Net.exe,0"
+Root: HKA; Subkey: "Software\Classes\CubeNet.Project\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\Cube Net.exe"" ""%1"""
 
 [Icons]
 Name: "{autoprograms}\Cube Net"; Filename: "{app}\Cube Net.exe"

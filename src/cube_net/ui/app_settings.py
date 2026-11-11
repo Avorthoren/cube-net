@@ -17,8 +17,8 @@ from cube_net.ui.style import DEFAULT_STYLE, Style, StyleError
 DEFAULT_SHOW_VERTEX_LABELS = True
 
 # Session recording: a compact log of user input (one file per launch), so that problems can be reproduced exactly.
-# ON while the app is being developed; False for releases.
-DEFAULT_RECORD_SESSION = True
+# Off unless the user switches it on (Settings -> Preferences), or starts it with the button above Logs.
+DEFAULT_RECORD_SESSION = False
 
 # The Bounds button blinks while the area is below the target (otherwise it's just green).
 DEFAULT_BLINK_ON_SUCCESS = True

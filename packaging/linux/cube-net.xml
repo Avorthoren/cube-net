@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (C) 2026 Viktor Podust; SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- The file type of Cube Net projects, for the desktop (shared-mime-info): a tool that integrates the AppImage into
+     the desktop installs it, so that .cubenet files open with Cube Net (cube-net.desktop says it opens them). -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-cube-net-project">
+    <comment>Cube Net project</comment>
+    <comment xml:lang="ru">Проект Cube Net</comment>
+    <sub-class-of type="application/gzip"/>
+    <glob pattern="*.cubenet" weight="80"/>
+    <icon name="cube-net"/>
+  </mime-type>
+</mime-info>

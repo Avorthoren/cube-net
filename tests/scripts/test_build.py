@@ -54,6 +54,11 @@ def test_a_missing_tool_says_how_to_give_it(monkeypatch: pytest.MonkeyPatch) -> 
 def test_the_linux_files_agree() -> None:
     desktop = (build.ROOT / "packaging/linux/cube-net.desktop").read_text()
     assert "Icon=cube-net\n" in desktop and "Name=Cube Net\n" in desktop
+    assert "Exec=cube-net %f\n" in desktop  # a project file given to it comes on the command line
+    mime = (build.ROOT / "packaging/linux/cube-net.xml").read_text()
+    kind = re.search(r'<mime-type type="([^"]+)">', mime)
+    assert kind is not None and f"MimeType={kind.group(1)};\n" in desktop  # the type it opens is the one defined
+    assert '<glob pattern="*.cubenet"' in mime
     app_run = build.ROOT / "packaging/linux/AppRun"
     assert '"$HERE/usr/lib/cube-net/Cube Net"' in app_run.read_text()
     assert app_run.stat().st_mode & 0o111  # it's run as it is
@@ -71,3 +76,25 @@ def test_the_icons_are_where_the_recipe_takes_them() -> None:
     spec = (build.ROOT / "packaging/cube_net.spec").read_text()
     for icon in re.findall(r'"(packaging/icons/[^"]+)"', spec):
         assert (build.ROOT / icon).is_file(), icon
+
+
+def test_windows_opens_project_files_with_it() -> None:
+    script = (build.ROOT / "packaging/windows/cube_net.iss").read_text()
+    assert "ChangesAssociations=yes" in script
+    assert (
+        r'Subkey: "Software\Classes\.cubenet"; ValueType: string; ValueName: ""; ValueData: "CubeNet.Project"' in script
+    )
+    assert r'ValueData: """{app}\Cube Net.exe"" ""%1"""' in script  # the file comes on the command line
+    assert "uninsdeletekey" in script  # and the uninstaller takes it away
+
+
+def test_macos_opens_project_files_with_it() -> None:
+    spec = (build.ROOT / "packaging/cube_net.spec").read_text()
+    assert '"public.filename-extension": ["cubenet"]' in spec
+    assert '"LSItemContentTypes": [PROJECT_TYPE]' in spec and '"LSHandlerRank": "Owner"' in spec
+
+
+def test_the_extension_is_the_projects() -> None:
+    from cube_net.core.project import PROJECT_SUFFIX
+
+    assert PROJECT_SUFFIX == ".cubenet"  # what the three packages register

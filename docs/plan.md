@@ -447,7 +447,7 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
   records one compact `note()` line, so a log shows both the input and its effect.
 - The **Logs** button at the bottom of the instrument panel opens the folder in the system's file manager.
 - App setting `record_session` ("Auto-start logging" in Settings → Preferences): logging starts by itself at launch.
-  `DEFAULT_RECORD_SESSION` is True while developing, False for releases. Switching it changes only the next start.
+  Off by default (`DEFAULT_RECORD_SESSION`). Switching it changes only the next start.
 - **Start and stop** with the button above **Logs** on the instrument panel (a red dot: start; a red square in a
   frame: stop). At launch the file's header says `recording started: at app launch`; started with the button, a new
   file starts with `recording started: turned on by the user`. Either way it's followed by `state …` lines describing
@@ -527,6 +527,10 @@ mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dr
      published by hand.
   Run by hand (Actions -> Release -> Run workflow), it checks and builds without releasing: a trial of the builds,
   kept a week under the run.
+- Project files open from outside: `cube-net PROJECT_FILE` (`app.project_argument`; Windows and Linux), and
+  `ui/file_requests.py` for macOS, which sends them as events. `.cubenet` is registered by the Windows installer
+  (`[Registry]`), the macOS app (`Info.plist`: an exported type and a document type) and the AppImage
+  (`packaging/linux/cube-net.desktop` with `MimeType`, and `cube-net.xml`).
 - The icon: the default net, faces filled with the default colours, transparent around it. `scripts/make_icon.py`
   draws it from the net and the colours into `src/cube_net/ui/icons/cube_net.png` (the window icon, 256 px) and
   `packaging/icons/` (`.ico` for Windows, `.icns` for macOS); a test fails when they're out of date.

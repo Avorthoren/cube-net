@@ -3379,3 +3379,81 @@ class TestLoggingButton:
         assert window.logging_action.toolTip() == "Остановить логирование"
         assert window.settings_panel.preferences.auto_log.text() == "Автоматически начинать логирование"
         window.stop_recording("test over")
+
+
+class TestProjectFilesFromOutside:
+    """A project file given at start (a double-click on Windows and Linux), or asked for while running (macOS)."""
+
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def saved(self, qtbot: QtBot, tmp_path: Path, name: str) -> Path:
+        window = self.make(qtbot, tmp_path)
+        path = tmp_path / name
+        assert window.save_project_to(path)
+        window.close()
+        return path
+
+    def test_at_start_instead_of_the_last_one(self, qtbot: QtBot, tmp_path: Path) -> None:
+        last = self.saved(qtbot, tmp_path, "last.cubenet")
+        given = self.saved(qtbot, tmp_path, "given.cubenet")
+        window = self.make(qtbot, tmp_path)
+        window.settings.last_project = last
+        window.open_project_at_start(given)
+        assert window.project_path == given
+        assert window.settings.last_project == given  # it's the one worked on now
+
+    def test_at_start_a_broken_one_lets_the_user_decide(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.load_failed_dialog import AfterLoadFailed
+
+        broken = tmp_path / "broken.cubenet"
+        broken.write_bytes(b"not a project")
+        asked: list[str] = []
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.ask_after_load_failed",
+            lambda _parent, message: asked.append(message) or AfterLoadFailed.NEW_PROJECT,
+        )
+        window = self.make(qtbot, tmp_path)
+        window.open_project_at_start(broken)
+        assert len(asked) == 1 and window.project_path is None  # a new project
+
+    def test_asked_for_while_running(self, qtbot: QtBot, tmp_path: Path) -> None:
+        given = self.saved(qtbot, tmp_path, "given.cubenet")
+        window = self.make(qtbot, tmp_path)
+        window.open_project_requested(given)
+        assert window.project_path == given
+
+    def test_unsaved_changes_are_asked_about_first(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        given = self.saved(qtbot, tmp_path, "given.cubenet")
+        window = self.make(qtbot, tmp_path)
+        window._on_target_changed(F(5))  # an unsaved change
+        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", lambda *_: SaveChoice.CANCEL)
+        window.open_project_requested(given)
+        assert window.project_path is None  # kept
+        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", lambda *_: SaveChoice.DISCARD)
+        window.open_project_requested(given)
+        assert window.project_path == given
+
+    def test_the_same_project_just_comes_to_the_front(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        given = self.saved(qtbot, tmp_path, "given.cubenet")
+        window = self.make(qtbot, tmp_path)
+        window.open_project_requested(given)
+        window._on_target_changed(F(5))
+        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", lambda *_: pytest.fail("not asked"))
+        window.open_project_requested(given)
+        assert window.is_dirty  # nothing reloaded, the change is still there
+        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", lambda *_: SaveChoice.DISCARD)  # closing
