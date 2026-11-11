@@ -509,6 +509,11 @@ mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dr
   changelog section given to the version, tags it (annotated) and pushes both at once. `RUN_RUFF` in the script turns
   the ruff step off.
 - While working, changes go under "## Unreleased" in CHANGELOG.md: that becomes the release's notes.
+- `./release.sh 1.2.0 --fix` (`--dry-run` too): when the workflow failed for a tag and the problem is fixed in new
+  commits, the same version is tagged again on the fix: only for the latest release made by the script, still in
+  master's history, with the package and the changelog still at that version, and never if GitHub has a published
+  release of it (a draft blocks it too, if `$GITHUB_TOKEN` lets the script see drafts). The remote tag is deleted
+  (only if it's the one checked) and the new one pushed with master, which starts the workflow again.
 - `.github/workflows/release.yml` (GitHub Actions), on a pushed tag "v*":
   1. Check (Ubuntu 22.04): `python -m scripts.check_release` (the rules of the release script, for a tag pushed by
      hand too: on master, equal to `__version__`, not lower than other release tags, a non-empty "## 1.2.0 (...)"

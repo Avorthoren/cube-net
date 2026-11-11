@@ -15,15 +15,23 @@ In this order, stopping at the first problem (in red, with what to do):
 Then, after a summary and a "y" from the user: the version and today's date go into `cube_net/__init__.py`, the
 "Unreleased" section becomes this version's (and a new empty one starts above it), all that is committed as
 "Release vX", tagged "vX" (an annotated tag) and pushed with `master` at once (both or neither).
+
+`./release.sh 1.2.0 --fix` (with `--dry-run` too, if wanted): after such a release, when the workflow failed on GitHub
+and the problem is fixed in new commits, the same version is tagged again on the fix (see `fix`). Never for a version
+that's published: that one stays as it is, and the fix is the next version.
 """
 
 import argparse
 import datetime
 import importlib.util
+import json
 import os
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +57,10 @@ VERSION_PATTERN = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(alpha|
 # The lines of `__init__.py` the release sets.
 VERSION_LINE = re.compile(r'^__version__ = "[^"]*"$', re.MULTILINE)
 DATE_LINE = re.compile(r'^__version_date__ = "[^"]*"$', re.MULTILINE)
+
+# GitHub's API, and how long to wait for its answer (s).
+GITHUB_API = "https://api.github.com"
+GITHUB_TIMEOUT = 20
 
 # Colours for a terminal.
 RED = "\033[31m"
@@ -180,10 +192,16 @@ def versioned(source: str, version: Version, day: datetime.date) -> str:
     return DATE_LINE.sub(f'__version_date__ = "{day.isoformat()}"', source)
 
 
-def github_page(remote_url: str) -> str | None:
-    """The repository's page on GitHub, from the remote's URL (https or ssh), if it's there."""
+def github_repository(remote_url: str) -> str | None:
+    """ "owner/name" of the repository on GitHub, from the remote's URL (https or ssh), if it's there."""
     match = re.fullmatch(r"(?:https://github\.com/|git@github\.com:)([^/]+/[^/]+?)(?:\.git)?/?", remote_url.strip())
-    return f"https://github.com/{match.group(1)}" if match else None
+    return match.group(1) if match else None
+
+
+def github_page(remote_url: str) -> str | None:
+    """The repository's page on GitHub, from the remote's URL, if it's there."""
+    repository = github_repository(remote_url)
+    return f"https://github.com/{repository}" if repository else None
 
 
 # --- the repository and the tools ----------------------------------------------------------------------------------
@@ -232,6 +250,39 @@ def check_tools() -> None:
         )
 
 
+def github_releases(repository: str, tag: str) -> tuple[list[dict[str, object]], bool]:
+    """GitHub's releases of `tag`, and whether drafts are among what it was asked about: they're visible only with a
+    token of someone who can push there ($GITHUB_TOKEN). Without one, only a published release can be found."""
+    token = os.environ.get("GITHUB_TOKEN")
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "cube-net-release-script"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+        found: list[dict[str, object]] = []
+        for page in range(1, 11):  # 100 a page, newest first: plenty
+            batch = _github(f"/repos/{repository}/releases?per_page=100&page={page}", headers)
+            assert isinstance(batch, list)
+            found += [r for r in batch if r.get("tag_name") == tag]
+            if len(batch) < 100:
+                break
+        return found, True
+    one = _github(f"/repos/{repository}/releases/tags/{urllib.parse.quote(tag)}", headers)
+    return ([one] if isinstance(one, dict) else []), False
+
+
+def _github(path: str, headers: dict[str, str]) -> object:
+    """What GitHub's API answers (None for "not found"), or a ReleaseError if it can't be asked."""
+    request = urllib.request.Request(GITHUB_API + path, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=GITHUB_TIMEOUT) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise ReleaseError(f"GitHub answered {error.code} ({error.reason}) about {path}.") from None
+    except (urllib.error.URLError, TimeoutError) as error:
+        raise ReleaseError(f"Couldn't ask GitHub about the releases ({error}): try again.") from None
+
+
 def confirm(question: str) -> bool:
     return input(f"{question} [y/N] ").strip().lower() in ("y", "yes")
 
@@ -239,19 +290,17 @@ def confirm(question: str) -> bool:
 # --- the release --------------------------------------------------------------------------------------------------
 
 
-def release(text: str, dry_run: bool, root: Path = ROOT, today: datetime.date | None = None) -> None:
-    day = today or datetime.date.today()
-    git = Git(root)
+def prepare(git: Git, text: str, dry_run: bool) -> Version:
+    """What every run checks and does first: the version, the tools, a clean tree on master, the tags fetched and
+    master pulled (a dry run doesn't pull: it tells if it would)."""
     version = check_version(text)
     say(f"Version {version.text}, tag {version.tag}")
     check_tools()
-
     if git("status", "--porcelain"):
         raise ReleaseError("The working tree isn't clean: commit or stash the changes first.")
     branch = git("rev-parse", "--abbrev-ref", "HEAD")
     if branch != BRANCH:
         raise ReleaseError(f"This is {branch!r}, not {BRANCH!r}: releases are made from {BRANCH}.")
-
     say(f"Fetching {REMOTE}...")
     git("fetch", "--tags", REMOTE)
     behind = int(git("rev-list", "--count", f"{BRANCH}..{REMOTE}/{BRANCH}"))
@@ -260,9 +309,15 @@ def release(text: str, dry_run: bool, root: Path = ROOT, today: datetime.date | 
     elif behind:
         say(f"Pulling {behind} commit(s)...")
         git("pull", "--ff-only", REMOTE, BRANCH)
+    return version
 
+
+def release(text: str, dry_run: bool, root: Path = ROOT, today: datetime.date | None = None) -> None:
+    day = today or datetime.date.today()
+    git = Git(root)
+    version = prepare(git, text, dry_run)
     if git("tag", "--list", version.tag):
-        raise ReleaseError(f"The tag {version.tag} exists already: choose another version.")
+        raise ReleaseError(f"The tag {version.tag} exists already: choose another version (or --fix it).")
     latest = check_not_lower(version, git("tag", "--list", "v*").split())
     changelog_path = root / CHANGELOG_FILE
     changelog = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else None
@@ -274,10 +329,7 @@ def release(text: str, dry_run: bool, root: Path = ROOT, today: datetime.date | 
     say(f"  from {git('log', '-1', '--format=%h %s')}")
     if latest is not None:
         say(f"  {git('rev-list', '--count', f'{latest.tag}..HEAD')} commit(s) since {latest.tag}")
-    say("  Notes:")
-    for line in notes.splitlines():
-        say(f"    {line}")
-    say("")
+    _show_notes(notes)
     if dry_run:
         say(f"{GREEN}Dry run: every check passed; nothing was changed.{RESET}")
         return
@@ -302,6 +354,118 @@ def release(text: str, dry_run: bool, root: Path = ROOT, today: datetime.date | 
             f"or undo them with\n  git tag -d {version.tag} && git reset --hard HEAD~1"
         ) from None
     say(f"{GREEN}Released {version.tag}.{RESET}")
+    _show_links(git)
+
+
+def fix(text: str, dry_run: bool, root: Path = ROOT) -> None:
+    """Tag the version again, on the commit that fixes what made its workflow fail. After `prepare`:
+    1. The tag exists, here and on the remote (the same one: fetching would have failed otherwise).
+    2. It's on a commit `release` made ("Release vX"), and it's an annotated tag, as `release` makes them.
+    3. That commit is in master's history, and there's something new after it (the fix).
+    4. The package still says this version, and CHANGELOG.md still has its non-empty section.
+    5. No other release tag is higher (the fix is for the latest release, not an older one).
+    6. GitHub has no published release of it (never re-tagged: the fix of a published one is the next version), and
+       no draft either, if it can be seen ($GITHUB_TOKEN); without a token, a reminder about drafts.
+    7. ruff and the tests.
+    Then, after a summary and a "y": the local tag is made again on the current commit, the remote one is deleted
+    (only if it's still the one checked here) and master is pushed with the new tag, which starts the workflow."""
+    git = Git(root)
+    version = prepare(git, text, dry_run)
+    tag = version.tag
+    if not git("tag", "--list", tag):
+        raise ReleaseError(f"There's no tag {tag}: --fix moves the tag of a release made before (without --fix).")
+    remote = git("ls-remote", "--tags", REMOTE, f"refs/tags/{tag}")
+    if not remote:
+        raise ReleaseError(f"{tag} is here but not on {REMOTE}: its release didn't get pushed. Push it, or delete it.")
+    remote_object = remote.split()[0]
+    old = git("rev-list", "-n", "1", tag)
+    if git("cat-file", "-t", tag) != "tag" or git("log", "-1", "--format=%s", old) != f"Release {tag}":
+        raise ReleaseError(f'{tag} isn\'t a tag the release script made (annotated, on a commit "Release {tag}").')
+    try:
+        git("merge-base", "--is-ancestor", old, "HEAD")
+    except ReleaseError:
+        raise ReleaseError(f"{tag}'s commit isn't in {BRANCH}'s history: it can't be fixed from here.") from None
+    if git("rev-parse", "HEAD") == old:
+        raise ReleaseError(
+            f"There's nothing after {tag}: commit the fix first. (If the workflow failed for nothing in the code, "
+            'use "Re-run failed jobs" on its page instead.)'
+        )
+    found = _package_version((root / VERSION_FILE).read_text(encoding="utf-8"))
+    if found != version.text:
+        raise ReleaseError(f"The package says {found} now, not {version.text}: this isn't {tag}'s fix any more.")
+    changelog_path = root / CHANGELOG_FILE
+    changelog = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else ""
+    notes = version_notes(changelog, version)
+    if not notes:
+        raise ReleaseError(f'{CHANGELOG_FILE} has no section "## {version.text} (...)" with something in it any more.')
+    higher = [t for t in git("tag", "--list", "v*").split() if (v := parse_version(t[1:])) and v.order > version.order]
+    if higher:
+        raise ReleaseError(f"{', '.join(higher)} came after {tag}: only the latest release can be fixed this way.")
+    _check_not_released(git, tag)
+    run_checks(root)
+
+    say("")
+    say(f"{BOLD}Fix {tag}{RESET}: move it from {git('log', '-1', '--format=%h %s', old)}")
+    say(f"  to {git('log', '-1', '--format=%h %s')}, after:")
+    for line in git("log", "--format=%h %s", f"{old}..HEAD").splitlines():
+        say(f"    {line}")
+    _show_notes(notes)
+    if dry_run:
+        say(f"{GREEN}Dry run: every check passed; nothing was changed.{RESET}")
+        return
+    if not confirm(f"Move {tag} to this commit and push it with {BRANCH} to {REMOTE}?"):
+        say("Nothing was changed.")
+        return
+
+    old_object = git("rev-parse", f"refs/tags/{tag}")
+    git("tag", "-f", "-a", tag, "-m", f"Cube Net {version.text}")
+    say(f"Moving {tag} on {REMOTE}...")
+    try:
+        git("push", f"--force-with-lease=refs/tags/{tag}:{remote_object}", REMOTE, f":refs/tags/{tag}")
+    except ReleaseError as error:
+        git("update-ref", f"refs/tags/{tag}", old_object)  # back as it was: nothing changed
+        raise ReleaseError(f"{error}\n{tag} is as it was, here and on {REMOTE}.") from None
+    try:
+        git("push", "--atomic", REMOTE, BRANCH, tag)
+    except ReleaseError as error:
+        raise ReleaseError(
+            f"{error}\n{tag} is deleted on {REMOTE} and made again here, on the fix. Push it with\n"
+            f"  git push --atomic {REMOTE} {BRANCH} {tag}"
+        ) from None
+    say(f"{GREEN}{tag} is on the fix now.{RESET}")
+    _show_links(git)
+
+
+def _check_not_released(git: Git, tag: str) -> None:
+    repository = github_repository(git("remote", "get-url", REMOTE))
+    if repository is None:
+        raise ReleaseError(f"{REMOTE} isn't on GitHub: there's no way to see whether {tag} is released.")
+    say(f"Asking GitHub about {tag}'s release...")
+    releases, with_drafts = github_releases(repository, tag)
+    if any(not r.get("draft") for r in releases):
+        raise ReleaseError(
+            f"{tag} is published on GitHub: a published version is never tagged again. Release the fix as the next "
+            "version instead."
+        )
+    if releases:
+        raise ReleaseError(f"GitHub has a draft release of {tag}: delete it on the Releases page first.")
+    if not with_drafts:
+        say(f"  (Drafts can't be seen without $GITHUB_TOKEN: if there's one of {tag}, delete it on the Releases page.)")
+
+
+def _package_version(source: str) -> str | None:
+    match = re.search(r'^__version__ = "([^"]*)"$', source, re.MULTILINE)
+    return match.group(1) if match else None
+
+
+def _show_notes(notes: str) -> None:
+    say("  Notes:")
+    for line in notes.splitlines():
+        say(f"    {line}")
+    say("")
+
+
+def _show_links(git: Git) -> None:
     page = github_page(git("remote", "get-url", REMOTE))
     if page is not None:
         say(f"The build: {page}/actions")
@@ -323,11 +487,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Make a release of Cube Net (see the docstring of scripts/release.py)."
     )
-    parser.add_argument("version", help="the new version, without the v: 1.2.0, 1.2.0-beta, 1.2.0-rc.2")
+    parser.add_argument("version", help="the version, without the v: 1.2.0, 1.2.0-beta, 1.2.0-rc.2")
     parser.add_argument("--dry-run", action="store_true", help="only check: change, commit and push nothing")
+    parser.add_argument(
+        "--fix", action="store_true", help="tag this released (but not published) version again, on the fix"
+    )
     args = parser.parse_args(argv)
     try:
-        release(args.version, args.dry_run)
+        if args.fix:
+            fix(args.version, args.dry_run)
+        else:
+            release(args.version, args.dry_run)
     except ReleaseError as error:
         message = str(error)
         print(f"{RED}{message}{RESET}" if sys.stderr.isatty() else message, file=sys.stderr)

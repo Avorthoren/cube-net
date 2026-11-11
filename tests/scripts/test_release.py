@@ -253,3 +253,151 @@ def test_failing_checks_stop_it(repo: Path, monkeypatch: pytest.MonkeyPatch) -> 
 def test_main_says_it_in_red_and_fails(capsys: pytest.CaptureFixture[str]) -> None:
     assert release.main(["v1.2.0"]) == 1
     assert 'without the "v"' in capsys.readouterr().err
+
+
+# --- --fix: the same version again, on the fix ------------------------------------------------------------------
+
+
+@pytest.fixture
+def released(repo: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """`repo` after `release.sh 1.1.0` and a fix committed and pushed; GitHub knows no release of v1.1.0 (drafts
+    included)."""
+    release.release("1.1.0", dry_run=False, root=repo, today=DAY)
+    (repo / "fix.txt").write_text("the fix")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "Fix the build")
+    git(repo, "push", "origin", "master")
+    monkeypatch.setattr(release, "github_releases", lambda repository, tag: ([], True))
+    monkeypatch.setattr(release, "github_repository", lambda url: "someone/cube-net")
+    return repo
+
+
+def remote_tag_commit(root: Path, tag: str) -> str:
+    return git(root, "ls-remote", "origin", f"refs/tags/{tag}^{{}}").split()[0]
+
+
+def test_fix_moves_the_tag_to_the_fix(released: Path) -> None:
+    old = git(released, "rev-list", "-n", "1", "v1.1.0")
+    release.fix("1.1.0", dry_run=False, root=released)
+    head = git(released, "rev-parse", "HEAD")
+    assert head != old
+    assert git(released, "rev-list", "-n", "1", "v1.1.0") == head
+    assert remote_tag_commit(released, "v1.1.0") == head
+    assert git(released, "cat-file", "-t", "v1.1.0") == "tag"  # still an annotated one
+    assert git(released, "log", "-1", "--format=%s") == "Fix the build"  # no new commit
+    assert git(released, "status", "--porcelain") == ""
+
+
+def test_fix_dry_run_changes_nothing(released: Path) -> None:
+    old = git(released, "rev-list", "-n", "1", "v1.1.0")
+    release.fix("1.1.0", dry_run=True, root=released)
+    assert git(released, "rev-list", "-n", "1", "v1.1.0") == old == remote_tag_commit(released, "v1.1.0")
+
+
+def test_fix_needs_the_tag(released: Path) -> None:
+    with pytest.raises(ReleaseError, match=re.escape("There's no tag v1.2.0")):
+        release.fix("1.2.0", dry_run=False, root=released)
+
+
+def test_fix_needs_the_tag_on_the_remote(released: Path) -> None:
+    git(released, "push", "origin", ":refs/tags/v1.1.0")
+    with pytest.raises(ReleaseError, match="not on origin"):
+        release.fix("1.1.0", dry_run=False, root=released)
+
+
+def test_fix_needs_a_tag_the_script_made(released: Path) -> None:
+    git(released, "tag", "v1.0.5", "HEAD~1")  # a light tag by hand on the release commit
+    git(released, "push", "origin", "v1.0.5")
+    with pytest.raises(ReleaseError, match="isn't a tag the release script made"):
+        release.fix("1.0.5", dry_run=False, root=released)
+
+
+def test_fix_needs_something_new(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    release.release("1.1.0", dry_run=False, root=repo, today=DAY)
+    monkeypatch.setattr(release, "github_releases", lambda repository, tag: ([], True))
+    monkeypatch.setattr(release, "github_repository", lambda url: "someone/cube-net")
+    with pytest.raises(ReleaseError, match=re.escape("nothing after v1.1.0")):
+        release.fix("1.1.0", dry_run=False, root=repo)
+
+
+def test_fix_needs_the_same_version_in_the_package(released: Path) -> None:
+    init = released / "src/cube_net/__init__.py"
+    init.write_text(init.read_text().replace('"1.1.0"', '"1.2.0"'))
+    git(released, "commit", "-am", "Next version")
+    git(released, "push", "origin", "master")
+    with pytest.raises(ReleaseError, match=re.escape("says 1.2.0 now")):
+        release.fix("1.1.0", dry_run=False, root=released)
+
+
+def test_fix_needs_the_versions_notes(released: Path) -> None:
+    (released / "CHANGELOG.md").write_text("# Changelog\n\n## Unreleased\n")
+    git(released, "commit", "-am", "Notes gone")
+    git(released, "push", "origin", "master")
+    with pytest.raises(ReleaseError, match=re.escape('no section "## 1.1.0 (...)"')):
+        release.fix("1.1.0", dry_run=False, root=released)
+
+
+def test_fix_only_the_latest_release(released: Path) -> None:
+    git(released, "tag", "v1.2.0")
+    with pytest.raises(ReleaseError, match=re.escape("v1.2.0 came after v1.1.0")):
+        release.fix("1.1.0", dry_run=False, root=released)
+
+
+def test_never_a_published_release(released: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(release, "github_releases", lambda repository, tag: ([{"draft": False}], False))
+    with pytest.raises(ReleaseError, match="published on GitHub"):
+        release.fix("1.1.0", dry_run=False, root=released)
+    assert remote_tag_commit(released, "v1.1.0") != git(released, "rev-parse", "HEAD")
+
+
+def test_a_draft_must_be_deleted_first(released: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(release, "github_releases", lambda repository, tag: ([{"draft": True}], True))
+    with pytest.raises(ReleaseError, match=re.escape("draft release of v1.1.0")):
+        release.fix("1.1.0", dry_run=False, root=released)
+
+
+def test_without_a_token_a_reminder_about_drafts(
+    released: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(release, "github_releases", lambda repository, tag: ([], False))
+    release.fix("1.1.0", dry_run=True, root=released)
+    assert "Drafts can't be seen without $GITHUB_TOKEN" in capsys.readouterr().out
+
+
+def test_fix_on_the_command_line(released: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, bool]] = []
+    monkeypatch.setattr(release, "fix", lambda text, dry_run: calls.append((text, dry_run)))
+    assert release.main(["1.1.0", "--fix", "--dry-run"]) == 0
+    assert calls == [("1.1.0", True)]
+
+
+class TestGitHubReleases:
+    """What GitHub is asked, and how its answers are read (its API simulated)."""
+
+    def answer(self, monkeypatch: pytest.MonkeyPatch, replies: dict[str, object]) -> list[str]:
+        asked: list[str] = []
+
+        def github(path: str, headers: dict[str, str]) -> object:
+            asked.append(path + (" with a token" if "Authorization" in headers else ""))
+            return replies.get(path)
+
+        monkeypatch.setattr(release, "_github", github)
+        return asked
+
+    def test_without_a_token_the_published_release_of_the_tag(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        asked = self.answer(monkeypatch, {"/repos/o/r/releases/tags/v1.1.0": {"tag_name": "v1.1.0", "draft": False}})
+        assert release.github_releases("o/r", "v1.1.0") == ([{"tag_name": "v1.1.0", "draft": False}], False)
+        assert release.github_releases("o/r", "v2.0.0") == ([], False)  # not found
+        assert asked == ["/repos/o/r/releases/tags/v1.1.0", "/repos/o/r/releases/tags/v2.0.0"]
+
+    def test_with_a_token_drafts_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GITHUB_TOKEN", "secret")
+        draft = {"tag_name": "v1.1.0", "draft": True}
+        asked = self.answer(monkeypatch, {"/repos/o/r/releases?per_page=100&page=1": [draft, {"tag_name": "v1.0.0"}]})
+        assert release.github_releases("o/r", "v1.1.0") == ([draft], True)
+        assert asked == ["/repos/o/r/releases?per_page=100&page=1 with a token"]
+
+    def test_the_repository_from_the_remote(self) -> None:
+        assert release.github_repository("git@github.com:Avorthoren/cube-net.git") == "Avorthoren/cube-net"
+        assert release.github_repository("https://example.com/a/b") is None
