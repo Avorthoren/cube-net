@@ -3,8 +3,12 @@
 
 # The release of a version: a pushed tag "v1.2.0" (`./release.sh 1.2.0` makes one) is checked, built for Windows,
 # Linux and macOS, and becomes a draft release with the builds, their checksums and the changelog's notes: publish it
-# on the Releases page after a look. Started by hand (Actions -> Release -> Run workflow), it checks and builds but
-# releases nothing: a test of the builds, which are kept for a week under the run.
+# on the Releases page after a look.
+#
+# Started by hand (Actions -> Release -> Run workflow, from any branch), it's a test build: the checks (unless skipped)
+# and the builds of the chosen systems, kept for a week under the run (Artifacts, at the bottom of its page), named
+# by their commit (CubeNet-abc1234-linux-x86_64.AppImage; after the version once one is released). It releases
+# nothing, unless it's started from a tag for all the systems: that's the same as pushing the tag.
 
 name: Release
 
@@ -12,6 +16,16 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      system:
+        description: Build for
+        type: choice
+        options: [all, Linux, Windows, macOS]
+        default: all
+      skip_checks:
+        description: Skip ruff and the tests (a quicker test build)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -21,6 +35,12 @@ env:
   PYINSTALLER: "pyinstaller==6.22.3"
   APPIMAGETOOL_URL: https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage
 
+  # The builds: which system, on which machine.
+  BUILDS: >-
+    [{"system": "Linux", "runner": "ubuntu-22.04"},
+     {"system": "Windows", "runner": "windows-2025"},
+     {"system": "macOS", "runner": "macos-15"}]
+
   # Qt's system libraries on Linux: what it needs to run (the tests, the launch test), and what PyInstaller puts into
   # the AppImage so that it runs where they're missing.
   QT_LIBRARIES: >-
@@ -29,8 +49,21 @@ env:
     libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxcb-xfixes0
 
 jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    outputs:
+      builds: ${{ steps.builds.outputs.builds }}
+    steps:
+      - name: The builds to make
+        id: builds
+        env:
+          CHOSEN: ${{ inputs.system || 'all' }}  # a pushed tag builds them all
+        run: echo "builds=$(echo "$BUILDS" | jq -c --arg s "$CHOSEN" 'map(select($s == "all" or .system == $s))')" >> "$GITHUB_OUTPUT"
+
   check:
     name: Check
+    if: ${{ !inputs.skip_checks }}
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.tag.outputs.version }}
@@ -65,20 +98,20 @@ jobs:
 
   build:
     name: Build (${{ matrix.system }})
-    needs: check
+    needs: [plan, check]
+    # After the checks, or without them if they were skipped (a test build).
+    if: ${{ !cancelled() && needs.plan.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.check.result) }}
     strategy:
       fail-fast: false  # a failed build doesn't cancel the others: each system's result is seen
+      # Ubuntu 22.04: an old one, what's built on it runs on newer systems too, not the other way round. Windows Server
+      # 2025: it has Inno Setup. macOS 15: Apple silicon.
       matrix:
-        include:
-          - system: Linux
-            runner: ubuntu-22.04  # an old one: what's built on it runs on newer systems too, not the other way round
-          - system: Windows
-            runner: windows-2025  # it has Inno Setup
-          - system: macOS
-            runner: macos-15  # Apple Silicon
+        include: ${{ fromJSON(needs.plan.outputs.builds) }}
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0  # the tags: a test build is named after the latest version only once one is released
       - uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -103,7 +136,8 @@ jobs:
   release:
     name: Draft release
     needs: [check, build]
-    if: github.ref_type == 'tag'
+    # A tag's, with every system built (a test build of one system from a tag releases nothing).
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.system == 'all')
     runs-on: ubuntu-latest
     permissions:
       contents: write  # to create the release

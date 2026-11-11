@@ -525,8 +525,10 @@ mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dr
      .dmg. Unsigned: Windows' SmartScreen and macOS' Gatekeeper warn once.
   3. A draft release with the three files, SHA256SUMS and the notes (a pre-release for -alpha/-beta/-rc), to be
      published by hand.
-  Run by hand (Actions -> Release -> Run workflow), it checks and builds without releasing: a trial of the builds,
-  kept a week under the run.
+  Run by hand (Actions -> Release -> Run workflow, from any branch), it's a test build: the systems chosen (all, or
+  one), the checks unless skipped, no release; the builds are kept a week under the run (Artifacts), named by their
+  commit, after the version once a version is released (`scripts/build.py: label`). Run from a tag for all systems,
+  it's the same as pushing the tag.
 - Project files open from outside: `cube-net PROJECT_FILE` (`app.project_argument`; Windows and Linux), and
   `ui/file_requests.py` for macOS, which sends them as events. `.cubenet` is registered by the Windows installer
   (`[Registry]`), the macOS app (`Info.plist`: an exported type and a document type) and the AppImage

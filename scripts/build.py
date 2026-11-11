@@ -6,10 +6,11 @@
 1. PyInstaller makes the program's folder (`packaging/cube_net.spec`), in build/.
 2. The launch test: the built program starts with --smoke-test, shows its window and quits by itself; anything else
    (a crash, a missing piece of Qt) fails the build.
-3. The package for this system goes into dist/:
-   - Linux: CubeNet-<version>-linux-x86_64.AppImage (appimagetool: $APPIMAGETOOL, or on PATH), launch-tested too;
-   - Windows: CubeNet-<version>-windows-x64-setup.exe (Inno Setup's ISCC: $ISCC, on PATH, or where it installs);
-   - macOS: CubeNet-<version>-macos-arm64.dmg, with "Cube Net.app" and a link to Applications.
+3. The package for this system goes into dist/ (<name>: the version for a release, the commit for a test build: see
+   `label`):
+   - Linux: CubeNet-<name>-linux-x86_64.AppImage (appimagetool: $APPIMAGETOOL, or on PATH), launch-tested too;
+   - Windows: CubeNet-<name>-windows-x64-setup.exe (Inno Setup's ISCC: $ISCC, on PATH, or where it installs);
+   - macOS: CubeNet-<name>-macos-arm64.dmg, with "Cube Net.app" and a link to Applications.
 On GitHub Actions it tells the workflow the package's path (`GITHUB_OUTPUT`: file=...).
 """
 
@@ -19,6 +20,8 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+from scripts.release import parse_version
 
 ROOT = Path(__file__).resolve().parent.parent
 NAME = "Cube Net"
@@ -94,7 +97,7 @@ def tool(variable: str, name: str, places: tuple[Path, ...] = ()) -> str:
     return found
 
 
-def linux(folder: Path, text: str) -> Path:
+def linux(folder: Path, name: str) -> Path:
     appdir = WORK / "AppDir"
     shutil.rmtree(appdir, ignore_errors=True)
     shutil.copytree(folder, appdir / "usr/lib/cube-net", symlinks=True)
@@ -106,7 +109,7 @@ def linux(folder: Path, text: str) -> Path:
     mime.mkdir(parents=True)
     shutil.copy2(ROOT / "packaging/linux/cube-net.xml", mime / "cube-net.xml")
     shutil.copy2(ROOT / "src/cube_net/ui/icons/cube_net.png", appdir / "cube-net.png")
-    out = DIST / f"CubeNet-{text}-linux-x86_64.AppImage"
+    out = DIST / f"CubeNet-{name}-linux-x86_64.AppImage"
     # appimagetool is an AppImage itself: unpacked as it runs, it needs no FUSE (CI machines have none).
     run(
         [tool("APPIMAGETOOL", "appimagetool"), str(appdir), str(out)], env={**os.environ, "ARCH": "x86_64"} | _no_fuse()
@@ -119,8 +122,8 @@ def _no_fuse() -> dict[str, str]:
     return {"APPIMAGE_EXTRACT_AND_RUN": "1"}
 
 
-def windows(folder: Path, text: str) -> Path:
-    name = f"CubeNet-{text}-windows-x64-setup"
+def windows(folder: Path, text: str, name: str) -> Path:
+    name = f"CubeNet-{name}-windows-x64-setup"
     iscc = tool("ISCC", "iscc", ISCC_PLACES)
     defines = {
         "Version": text,
@@ -134,28 +137,47 @@ def windows(folder: Path, text: str) -> Path:
     return DIST / f"{name}.exe"
 
 
-def macos(bundle: Path, text: str) -> Path:
+def macos(bundle: Path, name: str) -> Path:
     staging = WORK / "dmg"
     shutil.rmtree(staging, ignore_errors=True)
     staging.mkdir(parents=True)
     shutil.copytree(bundle, staging / bundle.name, symlinks=True)
     (staging / "Applications").symlink_to("/Applications")  # drag the app onto it to install
-    out = DIST / f"CubeNet-{text}-macos-arm64.dmg"
+    out = DIST / f"CubeNet-{name}-macos-arm64.dmg"
     run(["hdiutil", "create", "-volname", NAME, "-srcfolder", str(staging), "-ov", "-format", "UDZO", str(out)])
     return out
 
 
+def label(text: str) -> str:
+    """What the package's file name says between "CubeNet-" and the system: a release's build (of a tag) the
+    version; any other build (a test) its commit, with the version before it once a version has been released: until
+    then the version means nothing yet (CubeNet-abc1234-..., CubeNet-1.2.0-abc1234-...)."""
+    if os.environ.get("GITHUB_REF_TYPE") == "tag":
+        return text
+    commit = git("rev-parse", "--short=7", "HEAD")
+    released = any(parse_version(tag[1:]) is not None for tag in git("tag", "--list", "v*").split())
+    return f"{text}-{commit}" if released else commit
+
+
+def git(*args: str) -> str:
+    done = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True)
+    if done.returncode != 0:
+        raise BuildError(f"git {' '.join(args)} failed: {done.stderr.strip()}")
+    return done.stdout.strip()
+
+
 def build() -> Path:
     text = version()
+    name = label(text)
     DIST.mkdir(exist_ok=True)
     folder = pyinstaller()
     smoke_test([str(program(folder))])
     if sys.platform.startswith("linux"):
-        return linux(folder, text)
+        return linux(folder, name)
     if sys.platform == "win32":
-        return windows(folder, text)
+        return windows(folder, text, name)
     if sys.platform == "darwin":
-        return macos(folder, text)
+        return macos(folder, name)
     raise BuildError(f"No package for {sys.platform}.")
 
 

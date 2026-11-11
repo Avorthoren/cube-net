@@ -98,3 +98,29 @@ def test_the_extension_is_the_projects() -> None:
     from cube_net.core.project import PROJECT_SUFFIX
 
     assert PROJECT_SUFFIX == ".cubenet"  # what the three packages register
+
+
+class TestLabel:
+    """The package's name: the version for a release, the commit for a test build (after the version, once there's a
+    release)."""
+
+    def answer(self, monkeypatch: pytest.MonkeyPatch, tags: str) -> None:
+        replies = {("rev-parse", "--short=7", "HEAD"): "abc1234", ("tag", "--list", "v*"): tags}
+        monkeypatch.setattr(build, "git", lambda *args: replies[args])
+
+    def test_a_release(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GITHUB_REF_TYPE", "tag")
+        self.answer(monkeypatch, "v1.0.0")
+        assert build.label("1.0.0") == "1.0.0"
+
+    def test_a_test_build_before_any_release(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GITHUB_REF_TYPE", raising=False)
+        self.answer(monkeypatch, "")
+        assert build.label("1.0") == "abc1234"
+        self.answer(monkeypatch, "vacation not-a-release v1.0")  # tags that aren't release tags don't count
+        assert build.label("1.0") == "abc1234"
+
+    def test_a_test_build_after_a_release(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GITHUB_REF_TYPE", "branch")
+        self.answer(monkeypatch, "v1.0.0\nv1.0.1-beta")
+        assert build.label("1.0.1") == "1.0.1-abc1234"
