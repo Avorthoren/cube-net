@@ -559,3 +559,12 @@ to the running application, and then it's opened like File -> Open (unsaved chan
 project just comes to the front). The packages register .cubenet: the Windows installer (for the current user, with
 the app's icon; the uninstaller removes it), the macOS app (its own document type), and the AppImage's desktop entry
 with its file type (used when a tool integrates the AppImage into the desktop).
+
+Linux, AppImage: the first time it starts, it asks whether to add Cube Net to the applications menu; the answer is
+remembered, and Settings -> Preferences has a checkbox for it ("Show in the applications menu", only there when it
+runs from an AppImage). Added, its desktop entry, icon and the file type of projects are in the user's data folder
+(~/.local/share), pointing at the AppImage: it's in the menu and the Dock with its icon, and .cubenet files open in it.
+If the AppImage is moved, the menu hides the entry (TryExec) until it's started from the new place, which points the
+entry there (also for another copy, or a newer download). The windows say which desktop entry they belong to
+(desktop file name, and the X11 window class), so the Dock shows the icon. The AppImage doesn't let its own GLib load
+the system's GLib modules (GIO_MODULE_DIR): they're built for another GLib, and only made it complain.

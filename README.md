@@ -62,11 +62,15 @@ Supported: 64-bit (x86-64) distributions with **glibc 2.35 or newer**, for examp
 There's no signing to worry about. If it doesn't start and a terminal shows a message about FUSE, start it with
 `./CubeNet-<version>-linux-x86_64.AppImage --appimage-extract-and-run`, or install your distribution's `fuse` package.
 
-To have it in the applications menu, use [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever) or
-[AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher); depending on the tool, project files (`.cubenet`)
-may then open in Cube Net with a double-click too. Without that, open them from the application (**File → Open**), or
-from a terminal: `./CubeNet-<version>-linux-x86_64.AppImage path/to/project.cubenet`. To update, download the newer
-AppImage. To remove Cube Net, see [Uninstallation](#uninstallation).
+The first time it starts, Cube Net asks whether to add itself to the applications menu. With that, it's in the menu
+and the Dock with its icon, and project files (`.cubenet`) open in it with a double-click (and in **Open With**). It
+follows the AppImage: if you move the file, start it once from its new place, and everything points there again (until
+then, the menu doesn't show it). You can change your mind any time: **Settings → Preferences → Show in the
+applications menu**. Without it, open projects from the application (**File → Open**), or from a terminal:
+`./CubeNet-<version>-linux-x86_64.AppImage path/to/project.cubenet`.
+
+To update, download the newer AppImage and start it once: the menu entry switches to it. To remove Cube Net, see
+[Uninstallation](#uninstallation).
 
 ### macOS
 
@@ -127,15 +131,20 @@ Delete the settings and the logs too, if you want nothing left.
 
 ### Linux
 
-1. Delete the AppImage file. If you added it to the applications menu with Gear Lever or AppImageLauncher, remove it
-   there instead: they delete the file and its menu entry together.
-2. What's left:
+1. If you let Cube Net add itself to the applications menu, take it out first: **Settings → Preferences**, untick
+   **Show in the applications menu**. (Or later, by hand: delete `~/.local/share/applications/cube-net.desktop`,
+   `~/.local/share/icons/hicolor/256x256/apps/cube-net.png` and `~/.local/share/mime/packages/cube-net.xml`.)
+2. Delete the AppImage file.
+3. What's left:
    - the settings: `~/.config/cube_net/Cube Net.conf`;
    - the session logs: `~/.local/share/cube_net/Cube Net/sessions`.
 
-   To delete both:
+   To delete both, and the menu entry if it's still there:
    ```bash
    rm -rf ~/.config/cube_net ~/.local/share/cube_net
+   ```
+   ```bash
+   rm -f ~/.local/share/applications/cube-net.desktop ~/.local/share/icons/hicolor/256x256/apps/cube-net.png ~/.local/share/mime/packages/cube-net.xml
    ```
 
 ### macOS

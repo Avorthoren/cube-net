@@ -32,6 +32,7 @@ _SETTINGS_TAB = "view/settings_tab"
 _SETTINGS_OPEN = "view/settings_open"
 _LANGUAGE = "view/language"
 _STYLE = "style/"
+_MENU_ENTRY = "linux/menu_entry"
 
 
 class AppSettings:
@@ -45,6 +46,17 @@ class AppSettings:
     @show_vertex_labels.setter
     def show_vertex_labels(self, value: bool) -> None:
         self._settings.setValue(_SHOW_VERTEX_LABELS, value)
+
+    @property
+    def menu_entry(self) -> bool | None:
+        """Linux, AppImage: whether the user wants Cube Net in the applications menu (None: not asked yet)."""
+        if not self._settings.contains(_MENU_ENTRY):
+            return None
+        return self._bool(_MENU_ENTRY, False)
+
+    @menu_entry.setter
+    def menu_entry(self, value: bool) -> None:
+        self._settings.setValue(_MENU_ENTRY, value)
 
     @property
     def record_session(self) -> bool:

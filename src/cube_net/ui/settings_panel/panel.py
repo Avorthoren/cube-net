@@ -52,11 +52,12 @@ class SettingsPanel(QFrame):
         style: Style,
         parent: QWidget,
         language: Language = Language.ENGLISH,
+        menu_entry: QAction | None = None,
     ) -> None:
         super().__init__(parent)
         self.setFrameShape(QFrame.Shape.StyledPanel)
         self.setAutoFillBackground(True)
-        self.preferences = PreferencesTab(labels, logs, blink, max_zoom, language)
+        self.preferences = PreferencesTab(labels, logs, blink, max_zoom, language, menu_entry)
         self.style_tab = StyleTab(style)
         self.tabs = QTabWidget(self)
         self._add_tab(PREFERENCES, self.preferences)

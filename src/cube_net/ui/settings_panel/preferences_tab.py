@@ -1,8 +1,8 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""The Preferences tab: language, vertex labels, session logs, blinking on success, how far the sheet can be zoomed
-in."""
+"""The Preferences tab: language, vertex labels, session logs, blinking on success, the applications menu's entry
+(Linux, an AppImage), how far the sheet can be zoomed in."""
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QAction
@@ -43,8 +43,10 @@ class PreferencesTab(QWidget):
         blink: bool,
         max_zoom: int,
         language: Language = Language.ENGLISH,
+        menu_entry: QAction | None = None,
         parent: QWidget | None = None,
     ) -> None:
+        """`menu_entry`: the switch of the applications menu's entry, where there's one (Linux, an AppImage)."""
         super().__init__(parent)
         self.language_label = QLabel(self)
         bind(self.language_label, self.language_label.setText, "Language")
@@ -64,6 +66,11 @@ class PreferencesTab(QWidget):
         self.auto_log = QCheckBox(self)
         bind(self.auto_log, self.auto_log.setText, "Auto-start logging")
         _mirror(self.auto_log, logs)
+        self.menu_entry: QCheckBox | None = None
+        if menu_entry is not None:
+            self.menu_entry = QCheckBox(self)
+            bind(self.menu_entry, self.menu_entry.setText, "Show in the applications menu")
+            _mirror(self.menu_entry, menu_entry)
         self.blink = QCheckBox(self)
         bind(self.blink, self.blink.setText, "Blink when target area achieved")
         self.blink.setChecked(blink)
@@ -89,6 +96,8 @@ class PreferencesTab(QWidget):
         layout.addRow(self.show_labels)
         layout.addRow(self.auto_log)
         layout.addRow(self.blink)
+        if self.menu_entry is not None:
+            layout.addRow(self.menu_entry)
         zoom = QHBoxLayout()
         zoom.addWidget(self.max_zoom)
         unit = QLabel(self)

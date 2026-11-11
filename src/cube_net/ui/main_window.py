@@ -6,7 +6,7 @@
 from fractions import Fraction
 from pathlib import Path
 
-from PyQt6.QtCore import QEvent, QObject, Qt
+from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
 from PyQt6.QtGui import QAction, QCloseEvent
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
@@ -36,6 +36,7 @@ from cube_net.core.project import (
 from cube_net.core.project_settings import ProjectSettings, format_threshold
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.app_settings import AppSettings
+from cube_net.ui.desktop_integration import AppImage, DesktopEntry, data_home
 from cube_net.ui.help.about_dialog import AboutDialog
 from cube_net.ui.help.help_window import HelpWindow
 from cube_net.ui.help.updates_dialog import UpdatesDialog
@@ -44,6 +45,7 @@ from cube_net.ui.i18n.errors import error_text
 from cube_net.ui.instruments.bounding_controls import BoundingControls
 from cube_net.ui.instruments.logging_icons import record_icon, stop_icon
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
+from cube_net.ui.menu_entry_dialog import ask_menu_entry
 from cube_net.ui.no_wheel import ignore_wheel
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.save_state_label import SaveStateLabel
@@ -109,10 +111,16 @@ class MainWindow(QMainWindow):
         parent: QWidget | None = None,
         settings: AppSettings | None = None,
         session_dir: Path | None = None,
+        appimage: AppImage | None = None,
+        desktop_entry: DesktopEntry | None = None,
     ) -> None:
-        """`session_dir`: where session recordings go (default: the app data folder)."""
+        """`session_dir`: where session recordings go (default: the app data folder). `appimage`: the AppImage the
+        app runs from, if it does (Linux), and `desktop_entry` where its applications menu's entry goes (default: the
+        user's data folder)."""
         super().__init__(parent)
         self.settings = AppSettings() if settings is None else settings
+        self.appimage = appimage
+        self.desktop_entry = desktop_entry if desktop_entry is not None else DesktopEntry(data_home())
         apply_style(self.settings.style)  # before anything gets drawn
         TRANSLATIONS.set_language(self.settings.language)  # before any text is set
         self.point_labels = PointLabels()
@@ -438,6 +446,50 @@ class MainWindow(QMainWindow):
             if self.recorder is not None and self.project_path is None:
                 self._record_snapshot(self.recorder)  # it's the new project after all
 
+    def offer_menu_entry(self) -> None:
+        """At start, from an AppImage: the first time, ask whether to add Cube Net to the applications menu; once the
+        user wants it, keep the entry pointing at this AppImage (it may have been moved since, or be another copy)."""
+        if self.appimage is None:
+            return
+        wanted = self.settings.menu_entry
+        if wanted is None:
+            self._set_menu_entry(ask_menu_entry(self))
+        elif wanted:
+            try:
+                if self.desktop_entry.refresh(self.appimage) and self.recorder is not None:
+                    self.recorder.note("settings", "menu_entry", "moved", self.appimage.path)
+            except OSError as error:
+                self._menu_entry_failed(error)
+
+    def _on_menu_entry_toggled(self, checked: bool) -> None:
+        if checked != (self.settings.menu_entry is True):
+            self._set_menu_entry(checked)
+
+    def _set_menu_entry(self, wanted: bool) -> None:
+        """Install or remove the entry, and remember the choice (unless that failed: then nothing changed)."""
+        assert self.appimage is not None
+        try:
+            if wanted:
+                self.desktop_entry.install(self.appimage)
+            else:
+                self.desktop_entry.remove()
+        except OSError as error:
+            self._menu_entry_failed(error)
+            if self.menu_entry_action is not None:
+                # Back as it was, once the switch's own signal has reached everything (set back now, the checkbox
+                # would still get the switch's "on" after it, and switch it on again).
+                was = self.settings.menu_entry is True
+                QTimer.singleShot(0, lambda: self.menu_entry_action and self.menu_entry_action.setChecked(was))
+            return
+        self.settings.menu_entry = wanted
+        if self.recorder is not None:
+            self.recorder.note("settings", "menu_entry", "on" if wanted else "off")
+        if self.menu_entry_action is not None:
+            self.menu_entry_action.setChecked(wanted)  # the checkbox follows; the setting is already what it says
+
+    def _menu_entry_failed(self, error: OSError) -> None:
+        QMessageBox.warning(self, APP_TITLE, tr("Couldn't change the applications menu: {problem}", problem=error))
+
     def open_project_at_start(self, path: Path) -> None:
         """At start, with a project file to open (double-clicked, or given on the command line): that one instead of
         the last one. If it can't be loaded, the user decides, as when the last one can't."""
@@ -685,6 +737,13 @@ class MainWindow(QMainWindow):
         self.redo_action.triggered.connect(self._on_redo)
         edit_menu.addAction(self.redo_action)
 
+        # The applications menu's entry: only for an AppImage (the installers of the other systems make their own).
+        self.menu_entry_action: QAction | None = None
+        if self.appimage is not None:
+            self.menu_entry_action = QAction(self)
+            self.menu_entry_action.setCheckable(True)
+            self.menu_entry_action.setChecked(self.settings.menu_entry is True)
+            self.menu_entry_action.toggled.connect(self._on_menu_entry_toggled)
         self.settings_panel = SettingsPanel(
             self.show_labels_action,
             self.auto_log_action,
@@ -693,6 +752,7 @@ class MainWindow(QMainWindow):
             self.settings.style,
             self,
             self.settings.language,
+            self.menu_entry_action,
         )
         self.settings_panel.preferences.language_changed.connect(self._on_language_changed)
         self.settings_panel.preferences.blink_changed.connect(self._on_blink_changed)

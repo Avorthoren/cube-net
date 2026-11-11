@@ -105,6 +105,17 @@ RUSSIAN: dict[str, str] = {
     "Close": "Закрыть",
     "Check for updates": "Проверка обновлений",
     "Under development...": "В разработке...",
+    # The applications menu (Linux, an AppImage).
+    "Show in the applications menu": "Показывать в меню приложений",
+    "Add Cube Net to the applications menu?": "Добавить Cube Net в меню приложений?",
+    (
+        "It will be there with its icon, and project files (.cubenet) will open in it with a double-click. You can "
+        "change this any time in Settings → Preferences."
+    ): (
+        "Он появится там со своим значком, а файлы проектов (.cubenet) будут открываться в нём двойным щелчком. "
+        "Это можно изменить в любой момент: Настройки → Основные."
+    ),
+    "Couldn't change the applications menu: {problem}": "Не удалось изменить меню приложений: {problem}",
     # Whether the project is saved.
     "Unsaved changes": "Не сохранено",
     "Saved": "Сохранено",

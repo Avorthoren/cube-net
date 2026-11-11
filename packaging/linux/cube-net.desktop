@@ -6,5 +6,6 @@ Comment[ru]=Развёртки единичного куба: разрезать
 Exec=cube-net %f
 Icon=cube-net
 Terminal=false
+StartupWMClass=Cube Net
 Categories=Education;Science;Math;
 MimeType=application/x-cube-net-project;

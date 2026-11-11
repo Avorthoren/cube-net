@@ -3516,3 +3516,110 @@ class TestSavedOrNot:
         window.save_project_to(tmp_path / "net.cubenet")
         window.undo_action.trigger()
         assert window.save_state.text() == "Unsaved changes" and window.isWindowModified()
+
+
+class TestMenuEntry:
+    """Linux, AppImage: Cube Net in the applications menu, asked about once (a throwaway data folder)."""
+
+    def make(self, qtbot: QtBot, tmp_path: Path, appimage: object, settings: AppSettings | None = None) -> MainWindow:
+        from cube_net.ui.desktop_integration import DesktopEntry
+
+        window = MainWindow(
+            settings=settings or settings_in(tmp_path, record=False),
+            session_dir=tmp_path,
+            appimage=appimage,  # type: ignore[arg-type]
+            desktop_entry=DesktopEntry(tmp_path / "data"),
+        )
+        qtbot.addWidget(window)
+        return window
+
+    def appimage(self, tmp_path: Path, name: str = "Cube.AppImage") -> object:
+        import shutil
+
+        from cube_net.ui import desktop_integration
+        from cube_net.ui.desktop_integration import AppImage
+
+        root = Path(__file__).resolve().parents[2]
+        appdir = tmp_path / "mounted"
+        if not appdir.exists():
+            (appdir / "usr/share/mime/packages").mkdir(parents=True)
+            shutil.copy(root / "packaging/linux/cube-net.desktop", appdir / "cube-net.desktop")
+            shutil.copy(root / "packaging/linux/cube-net.xml", appdir / "usr/share/mime/packages/cube-net.xml")
+            shutil.copy(Path(desktop_integration.__file__).parent / "icons/cube_net.png", appdir / "cube-net.png")
+        file = tmp_path / name
+        file.write_text("an AppImage")
+        return AppImage(file, appdir)
+
+    def asked(self, monkeypatch: pytest.MonkeyPatch, answer: bool) -> list[bool]:
+        questions: list[bool] = []
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.ask_menu_entry", lambda _parent: questions.append(answer) or answer
+        )
+        monkeypatch.setattr("cube_net.ui.desktop_integration.subprocess.run", lambda *_, **__: None)
+        return questions
+
+    def test_asked_once_and_added(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        questions = self.asked(monkeypatch, True)
+        settings = settings_in(tmp_path, record=False)
+        window = self.make(qtbot, tmp_path, self.appimage(tmp_path), settings)
+        window.offer_menu_entry()
+        assert questions == [True] and settings.menu_entry is True
+        assert window.desktop_entry.installed_for() == tmp_path / "Cube.AppImage"
+        assert window.settings_panel.preferences.menu_entry is not None
+        assert window.settings_panel.preferences.menu_entry.isChecked()
+        window.offer_menu_entry()  # the next start
+        assert questions == [True]  # not asked again
+
+    def test_no_is_remembered(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        questions = self.asked(monkeypatch, False)
+        settings = settings_in(tmp_path, record=False)
+        window = self.make(qtbot, tmp_path, self.appimage(tmp_path), settings)
+        window.offer_menu_entry()
+        window.offer_menu_entry()
+        assert questions == [False] and settings.menu_entry is False
+        assert window.desktop_entry.installed_for() is None
+
+    def test_moved_it_follows_at_the_next_start(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self.asked(monkeypatch, True)
+        settings = settings_in(tmp_path, record=False)
+        self.make(qtbot, tmp_path, self.appimage(tmp_path), settings).offer_menu_entry()
+        moved = self.appimage(tmp_path, "Moved.AppImage")
+        window = self.make(qtbot, tmp_path, moved, settings)
+        window.offer_menu_entry()
+        assert window.desktop_entry.installed_for() == tmp_path / "Moved.AppImage"
+
+    def test_the_checkbox_adds_and_removes_it(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self.asked(monkeypatch, False)
+        window = self.make(qtbot, tmp_path, self.appimage(tmp_path))
+        window.offer_menu_entry()
+        box = window.settings_panel.preferences.menu_entry
+        assert box is not None and not box.isChecked()
+        box.setChecked(True)
+        assert window.desktop_entry.installed_for() is not None and window.settings.menu_entry is True
+        box.setChecked(False)
+        assert window.desktop_entry.installed_for() is None and window.settings.menu_entry is False
+
+    def test_a_failure_says_so_and_changes_nothing(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from PyQt6.QtWidgets import QMessageBox
+
+        warned: list[str] = []
+        monkeypatch.setattr(QMessageBox, "warning", lambda _parent, _title, text: warned.append(text))
+        window = self.make(qtbot, tmp_path, self.appimage(tmp_path))
+        monkeypatch.setattr(window.desktop_entry, "install", lambda appimage: (_ for _ in ()).throw(OSError("full")))
+        box = window.settings_panel.preferences.menu_entry
+        assert box is not None
+        box.setChecked(True)
+        qtbot.waitUntil(lambda: not box.isChecked())
+        assert warned == ["Couldn't change the applications menu: full"]
+        assert window.settings.menu_entry is None
+
+    def test_nothing_of_it_without_an_appimage(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, None)
+        window.offer_menu_entry()  # asks nothing
+        assert window.settings_panel.preferences.menu_entry is None

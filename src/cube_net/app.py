@@ -13,6 +13,7 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
 from cube_net.ui.app_settings import AppSettings
+from cube_net.ui.desktop_integration import ENTRY_NAME, running_appimage
 from cube_net.ui.file_requests import FileRequests
 from cube_net.ui.main_window import APP_TITLE, MainWindow
 
@@ -29,6 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv if argv is None else argv)
     app.setApplicationName(APP_TITLE)
     app.setOrganizationName("cube_net")
+    app.setDesktopFileName(ENTRY_NAME)  # which desktop entry the windows belong to: the Dock shows its icon
     app.setWindowIcon(QIcon(str(ICON)))  # every window's, and the taskbar's
     arguments = sys.argv if argv is None else argv
     if SMOKE_TEST in arguments[1:]:
@@ -38,8 +40,9 @@ def main(argv: list[str] | None = None) -> int:
             window.show()
             QTimer.singleShot(SMOKE_TEST_MS, app.quit)
             return app.exec()
-    window = MainWindow()
+    window = MainWindow(appimage=running_appimage())
     window.show()
+    window.offer_menu_entry()  # an AppImage asks once; later it only keeps the entry up to date
     # A file asked for later (macOS sends double-clicked ones so, even at launch) replaces what's shown then.
     app.installEventFilter(FileRequests(window.open_project_requested, app))
     project = project_argument(app.arguments())

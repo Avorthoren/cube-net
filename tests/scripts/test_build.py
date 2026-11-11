@@ -55,12 +55,14 @@ def test_the_linux_files_agree() -> None:
     desktop = (build.ROOT / "packaging/linux/cube-net.desktop").read_text()
     assert "Icon=cube-net\n" in desktop and "Name=Cube Net\n" in desktop
     assert "Exec=cube-net %f\n" in desktop  # a project file given to it comes on the command line
+    assert "StartupWMClass=Cube Net\n" in desktop  # X11: the windows' class (the app's name), for the Dock's icon
     mime = (build.ROOT / "packaging/linux/cube-net.xml").read_text()
     kind = re.search(r'<mime-type type="([^"]+)">', mime)
     assert kind is not None and f"MimeType={kind.group(1)};\n" in desktop  # the type it opens is the one defined
     assert '<glob pattern="*.cubenet"' in mime
     app_run = build.ROOT / "packaging/linux/AppRun"
     assert '"$HERE/usr/lib/cube-net/Cube Net"' in app_run.read_text()
+    assert 'export GIO_MODULE_DIR="$HERE/' in app_run.read_text()  # not the system's GLib modules
     assert app_run.stat().st_mode & 0o111  # it's run as it is
 
 

@@ -140,3 +140,12 @@ def test_a_style_saved_with_too_small_vertices_gets_them_large_enough(tmp_path: 
     s = settings_at(tmp_path / "s.ini")
     s.style = replace(DEFAULT_STYLE, edge_width=5.0, vertex_radius=3.0)  # before vertices had their least size
     assert settings_at(tmp_path / "s.ini").style.vertex_radius == 3.5
+
+
+def test_menu_entry_not_asked_yet_then_remembered(tmp_path: Path) -> None:
+    s = settings_at(tmp_path / "s.ini")
+    assert s.menu_entry is None
+    s.menu_entry = False
+    assert settings_at(tmp_path / "s.ini").menu_entry is False
+    s.menu_entry = True
+    assert settings_at(tmp_path / "s.ini").menu_entry is True

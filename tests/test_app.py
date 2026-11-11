@@ -28,6 +28,9 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         def setOrganizationName(self, _name: str) -> None:
             pass
 
+        def setDesktopFileName(self, name: str) -> None:
+            done.append(f"desktop entry {name}")
+
         def setWindowIcon(self, icon: str) -> None:
             done.append(f"icon {icon}")
 
@@ -43,7 +46,7 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
             return 7
 
     class FakeWindow:
-        def __init__(self, settings: object = None, session_dir: object = None) -> None:
+        def __init__(self, settings: object = None, session_dir: object = None, appimage: object = None) -> None:
             done.append("window" + (" with its own settings" if settings is not None else ""))
 
         def show(self) -> None:
@@ -51,6 +54,9 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
         def reopen_last_project(self) -> None:
             done.append("reopen")
+
+        def offer_menu_entry(self) -> None:
+            done.append("menu entry")
 
         def open_project_at_start(self, path: Path) -> None:
             done.append(f"open {path}")
@@ -68,7 +74,17 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 def test_the_window_is_shown_and_then_reopens_the_last_project(calls: list[str]) -> None:
     """In that order: if reopening has something to say, it says it over a window that's there."""
     assert app.main(["cube-net"]) == 7
-    assert calls == ["application", "icon cube_net.png", "window", "show", "file requests", "reopen", "exec"]
+    assert calls == [
+        "application",
+        "desktop entry cube-net",
+        "icon cube_net.png",
+        "window",
+        "show",
+        "menu entry",
+        "file requests",
+        "reopen",
+        "exec",
+    ]
 
 
 def test_a_project_given_opens_instead_of_the_last_one(calls: list[str]) -> None:
@@ -106,4 +122,4 @@ def test_the_smoke_test_shows_the_window_and_quits(calls: list[str], monkeypatch
     monkeypatch.setattr(app, "QTimer", FakeTimer)
     assert app.main(["cube-net", app.SMOKE_TEST]) == 7
     # Its own settings (not the user's), no project opened or reopened.
-    assert calls[2:] == ["window with its own settings", "show", f"quit in {app.SMOKE_TEST_MS} ms", "exec"]
+    assert calls[3:] == ["window with its own settings", "show", f"quit in {app.SMOKE_TEST_MS} ms", "exec"]

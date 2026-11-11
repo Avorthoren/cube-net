@@ -529,6 +529,12 @@ mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dr
   one), the checks unless skipped, no release; the builds are kept a week under the run (Artifacts), named by their
   commit, after the version once a version is released (`scripts/build.py: label`). Run from a tag for all systems,
   it's the same as pushing the tag.
+- Linux AppImage in the applications menu: `ui/desktop_integration.py` installs (and refreshes when the AppImage
+  moved, removes) the desktop entry, icon and file type from the running AppImage into `~/.local/share`, with
+  `Exec`/`TryExec` on the AppImage's path; the main window asks once (`menu_entry_dialog.py`, the `menu_entry`
+  setting) and has a Preferences checkbox. The system's tools that refresh the desktop's databases run with the
+  environment the system had (not PyInstaller's library path). `app.setDesktopFileName("cube-net")` and
+  `StartupWMClass=Cube Net`: the Dock finds the icon. `AppRun` sets `GIO_MODULE_DIR` to an empty folder.
 - Project files open from outside: `cube-net PROJECT_FILE` (`app.project_argument`; Windows and Linux), and
   `ui/file_requests.py` for macOS, which sends them as events. `.cubenet` is registered by the Windows installer
   (`[Registry]`), the macOS app (`Info.plist`: an exported type and a document type) and the AppImage

@@ -4,4 +4,9 @@
 
 # What the AppImage runs: the program in the folder PyInstaller made (usr/lib/cube-net inside the AppImage).
 HERE="$(dirname "$(readlink -f "$0")")"
+
+# GLib (inside, from the system it was built on) would load the system's own GLib modules, built for the system's
+# newer GLib: they don't load, and it says so at every start. A folder with none: it doesn't try (and needs none).
+export GIO_MODULE_DIR="$HERE/usr/lib/cube-net/gio-modules"
+
 exec "$HERE/usr/lib/cube-net/Cube Net" "$@"
