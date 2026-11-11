@@ -45,7 +45,7 @@ from cube_net.ui.i18n.errors import error_text
 from cube_net.ui.instruments.bounding_controls import BoundingControls
 from cube_net.ui.instruments.logging_icons import record_icon, stop_icon
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
-from cube_net.ui.menu_entry_dialog import ask_menu_entry
+from cube_net.ui.menu_entry_dialog import ask_menu_entry, confirm_menu_entry_removal
 from cube_net.ui.no_wheel import ignore_wheel
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.save_state_label import SaveStateLabel
@@ -462,8 +462,17 @@ class MainWindow(QMainWindow):
                 self._menu_entry_failed(error)
 
     def _on_menu_entry_toggled(self, checked: bool) -> None:
-        if checked != (self.settings.menu_entry is True):
-            self._set_menu_entry(checked)
+        if checked == (self.settings.menu_entry is True):
+            return
+        if not checked and not confirm_menu_entry_removal(self):
+            self._show_menu_entry_later(True)  # it stays
+            return
+        self._set_menu_entry(checked)
+
+    def _show_menu_entry_later(self, shown: bool) -> None:
+        """Set the switch back, once its own signal has reached everything (set back at once, the checkbox would
+        still get the switch's change after it, and change it again)."""
+        QTimer.singleShot(0, lambda: self.menu_entry_action and self.menu_entry_action.setChecked(shown))
 
     def _set_menu_entry(self, wanted: bool) -> None:
         """Install or remove the entry, and remember the choice (unless that failed: then nothing changed)."""
@@ -475,11 +484,7 @@ class MainWindow(QMainWindow):
                 self.desktop_entry.remove()
         except OSError as error:
             self._menu_entry_failed(error)
-            if self.menu_entry_action is not None:
-                # Back as it was, once the switch's own signal has reached everything (set back now, the checkbox
-                # would still get the switch's "on" after it, and switch it on again).
-                was = self.settings.menu_entry is True
-                QTimer.singleShot(0, lambda: self.menu_entry_action and self.menu_entry_action.setChecked(was))
+            self._show_menu_entry_later(self.settings.menu_entry is True)  # as it was
             return
         self.settings.menu_entry = wanted
         if self.recorder is not None:

@@ -28,3 +28,18 @@ def answer(button: QMessageBox.StandardButton) -> None:
 def test_yes_or_no(qtbot: QtBot, button: QMessageBox.StandardButton, wanted: bool) -> None:
     answer(button)
     assert ask_menu_entry(None) is wanted
+
+
+@pytest.mark.parametrize(("label", "removed"), [("Remove", True), ("Cancel", False)])
+def test_removing_is_confirmed(qtbot: QtBot, label: str, removed: bool) -> None:
+    from cube_net.ui.menu_entry_dialog import confirm_menu_entry_removal
+
+    def click() -> None:
+        box = QApplication.activeModalWidget()
+        assert isinstance(box, QMessageBox)
+        assert "no longer be in the applications menu" in box.informativeText()  # it says what it means
+        button = next(b for b in box.buttons() if b.text().replace("&", "") == label)
+        button.click()
+
+    QTimer.singleShot(0, click)
+    assert confirm_menu_entry_removal(None) is removed

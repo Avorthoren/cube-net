@@ -3600,8 +3600,26 @@ class TestMenuEntry:
         assert box is not None and not box.isChecked()
         box.setChecked(True)
         assert window.desktop_entry.installed_for() is not None and window.settings.menu_entry is True
+        monkeypatch.setattr("cube_net.ui.main_window.confirm_menu_entry_removal", lambda _parent: True)
         box.setChecked(False)
         assert window.desktop_entry.installed_for() is None and window.settings.menu_entry is False
+
+    def test_turning_it_off_is_confirmed_first(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self.asked(monkeypatch, True)
+        window = self.make(qtbot, tmp_path, self.appimage(tmp_path))
+        window.offer_menu_entry()
+        box = window.settings_panel.preferences.menu_entry
+        assert box is not None and box.isChecked()
+        confirmations: list[bool] = []
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.confirm_menu_entry_removal", lambda _parent: confirmations.append(False) or False
+        )
+        box.setChecked(False)
+        qtbot.waitUntil(box.isChecked)  # cancelled: it stays on
+        assert confirmations == [False]
+        assert window.desktop_entry.installed_for() is not None and window.settings.menu_entry is True
 
     def test_a_failure_says_so_and_changes_nothing(
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

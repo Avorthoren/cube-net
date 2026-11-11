@@ -116,6 +116,18 @@ RUSSIAN: dict[str, str] = {
         "Это можно изменить в любой момент: Настройки → Основные."
     ),
     "Couldn't change the applications menu: {problem}": "Не удалось изменить меню приложений: {problem}",
+    "Remove Cube Net from the applications menu?": "Убрать Cube Net из меню приложений?",
+    (
+        "Cube Net will no longer be in the applications menu, project files (.cubenet) will no longer open in it with "
+        "a double-click or appear with it in Open With, and the Dock will show a generic icon for it.\n\n"
+        "The AppImage itself, your projects and your settings stay as they are. You can add it to the menu again "
+        "here any time."
+    ): (
+        "Cube Net пропадёт из меню приложений, файлы проектов (.cubenet) перестанут открываться в нём двойным щелчком "
+        "и не будут предлагать его в «Открыть с помощью», а в доке у него будет стандартный значок.\n\n"
+        "Сам AppImage, ваши проекты и настройки останутся как есть. Вернуть его в меню можно здесь в любой момент."
+    ),
+    "Remove": "Убрать",
     # Whether the project is saved.
     "Unsaved changes": "Не сохранено",
     "Saved": "Сохранено",
