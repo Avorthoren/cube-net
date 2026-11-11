@@ -36,7 +36,7 @@ def test_main_window_opens(qtbot: QtBot) -> None:
     qtbot.addWidget(window)
     window.show()
     assert window.isVisible()
-    assert window.windowTitle() == f"Untitled[*] — {APP_TITLE}"
+    assert window.windowTitle() == f"[*]Untitled — {APP_TITLE}"
     assert window.centralWidget() is window.sheet_view
 
 
@@ -1529,7 +1529,7 @@ class TestProjects:
         window = self.make(qtbot, tmp_path)
         assert "cube.cubenet" not in window.windowTitle()
         window.save_project_to(tmp_path / "cube.cubenet")
-        assert window.windowTitle().startswith("cube.cubenet")
+        assert window.windowTitle().startswith("[*]cube.cubenet")
         assert window.project_path == tmp_path / "cube.cubenet"
 
     def test_opening_a_bad_file_tells_and_changes_nothing(
@@ -1734,9 +1734,9 @@ class TestUnsavedChanges:
 
     def test_the_title_shows_the_name(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
-        assert window.windowTitle().startswith("Untitled[*]")
+        assert window.windowTitle().startswith("[*]Untitled")
         window.save_project_to(tmp_path / "cube.cubenet")
-        assert window.windowTitle().startswith("cube.cubenet[*]")
+        assert window.windowTitle().startswith("[*]cube.cubenet")
 
     # --- Save --------------------------------------------------------------------------------------------------------
 
@@ -1833,7 +1833,7 @@ class TestUnsavedChanges:
         assert window.cut_tool.item.points() == ()
         assert not window.undo_action.isEnabled() and not window.redo_action.isEnabled()
         assert window.project_path is None
-        assert window.windowTitle().startswith("Untitled[*]")
+        assert window.windowTitle().startswith("[*]Untitled")
         assert not window.is_dirty and not window.isWindowModified()
         assert window.project_settings.area_threshold == DEFAULT_AREA_THRESHOLD
         assert window.point_labels.saved()[0] == {}
@@ -2146,7 +2146,7 @@ class TestReopeningAtStart:
         window = self.make(qtbot, tmp_path)
         window.reopen_last_project()
         assert window.project_path == path
-        assert window.windowTitle().startswith("cube.cubenet")
+        assert window.windowTitle().startswith("[*]cube.cubenet")
         assert window.editor.state.value == "cut_editing"
         assert not window.is_dirty
         window.undo_action.trigger()
@@ -3236,7 +3236,7 @@ class TestLanguage:
             "tabs": "Основные Оформление",
             "labels": "Показывать метки вершин",
             "language": "Язык",
-            "title": "Без имени[*] — Cube Net",
+            "title": "[*]Без имени — Cube Net",
         }
         self.choose(window, "English")
         assert self.texts(window) == english
@@ -3457,3 +3457,62 @@ class TestProjectFilesFromOutside:
         window.open_project_requested(given)
         assert window.is_dirty  # nothing reloaded, the change is still there
         monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", lambda *_: SaveChoice.DISCARD)  # closing
+
+
+class TestSavedOrNot:
+    """The user sees whether there are unsaved changes, and that saving did something."""
+
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def change(self, window: MainWindow) -> None:
+        from cube_net.ui.sheet import net_style
+
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - net_style.CUT_HITBOX_PX / 2 / view.scale_factor())  # a cut started
+
+    def test_a_new_project_says_nothing(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert not window.isWindowModified() and window.save_state.text() == ""
+
+    def test_a_change_shows(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", lambda *_: SaveChoice.DISCARD)  # closing
+        window = self.make(qtbot, tmp_path)
+        self.change(window)
+        assert window.isWindowModified()  # the "*" before the name
+        assert window.windowTitle().startswith("[*]")
+        assert window.save_state.text() == "Unsaved changes"
+
+    def test_saving_shows_where_and_that_all_is_saved(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.change(window)
+        path = tmp_path / "net.cubenet"
+        assert window.save_project_to(path)
+        assert not window.isWindowModified()
+        assert window.save_state.text() == "Saved"
+        assert window.statusBar().currentMessage() == f"Saved to {path}"
+
+    def test_saving_without_changes_still_answers(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        path = tmp_path / "net.cubenet"
+        window.save_project_to(path)
+        window.statusBar().clearMessage()
+        window.save_action.trigger()  # Ctrl+S with nothing changed
+        assert window.statusBar().currentMessage() == f"Saved to {path}"
+
+    def test_undo_is_a_change_too(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The project's file has its history: after an undo it would be another file."""
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", lambda *_: SaveChoice.DISCARD)  # closing
+        window = self.make(qtbot, tmp_path)
+        self.change(window)
+        window.save_project_to(tmp_path / "net.cubenet")
+        window.undo_action.trigger()
+        assert window.save_state.text() == "Unsaved changes" and window.isWindowModified()

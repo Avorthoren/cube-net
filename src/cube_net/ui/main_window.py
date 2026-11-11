@@ -46,6 +46,7 @@ from cube_net.ui.instruments.logging_icons import record_icon, stop_icon
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
 from cube_net.ui.no_wheel import ignore_wheel
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
+from cube_net.ui.save_state_label import SaveStateLabel
 from cube_net.ui.session.session_recorder import SessionRecorder
 from cube_net.ui.session.snapshots import snapshot_text
 from cube_net.ui.session.start import (
@@ -65,6 +66,9 @@ from cube_net.ui.style import Style, apply_style
 
 APP_TITLE = "Cube Net"
 NO_COORDINATES = "x: —   y: —"
+
+# How long the status bar says where the project was saved (ms).
+SAVED_MESSAGE_MS = 5000
 
 # What a project is called until it's saved.
 UNTITLED = "Untitled"
@@ -157,6 +161,8 @@ class MainWindow(QMainWindow):
         widest = format_coordinates(-8888.888, -8888.888)
         self.coords_label.setMinimumWidth(self.coords_label.fontMetrics().horizontalAdvance(widest) + 8)
         self.statusBar().addPermanentWidget(self.coords_label)
+        self.save_state = SaveStateLabel(self)
+        self.statusBar().addPermanentWidget(self.save_state)
         self.sheet_view.mouse_moved.connect(lambda x, y: self.coords_label.setText(format_coordinates(x, y)))
         self.sheet_view.mouse_left.connect(lambda: self.coords_label.setText(NO_COORDINATES))
 
@@ -323,7 +329,7 @@ class MainWindow(QMainWindow):
             self.quit_action,
         ):
             action.setEnabled(not dragging)  # they may ask something, and the mouse button is still down
-        self.setWindowModified(self.is_dirty)
+        self._update_saved_state()
 
     def _on_open_logs(self) -> None:
         if not open_session_log_folder(self._session_dir):
@@ -370,7 +376,14 @@ class MainWindow(QMainWindow):
         return tr(UNTITLED) if self.project_path is None else self.project_path.name
 
     def _update_title(self) -> None:
-        self.setWindowTitle(f"{self._project_name()}[*] — {APP_TITLE}")
+        # "[*]": a "*" before the name while there are unsaved changes (on macOS a dot in the close button instead).
+        self.setWindowTitle(f"[*]{self._project_name()} — {APP_TITLE}")
+
+    def _update_saved_state(self) -> None:
+        """The title's "*" and the status bar's word: whether there are unsaved changes."""
+        dirty = self.is_dirty
+        self.setWindowModified(dirty)
+        self.save_state.set_state(dirty, self.project_path is not None)
 
     def _project(self) -> Project:
         return Project(self.editor.snapshot(), self.editor.history, self.project_settings, self.point_labels)
@@ -387,7 +400,8 @@ class MainWindow(QMainWindow):
         self._saved_revision = self.editor.history.revision
         self._saved_settings = self.project_settings
         self._update_title()
-        self.setWindowModified(False)
+        self._update_saved_state()
+        self.statusBar().showMessage(tr("Saved to {path}", path=path), SAVED_MESSAGE_MS)  # Ctrl+S did something
         if self.recorder is not None:
             self.recorder.note("project", "saved", path)
         return True
@@ -474,6 +488,7 @@ class MainWindow(QMainWindow):
         self._saved_revision = project.history.revision
         self._saved_settings = project.settings
         self._update_title()
+        self._update_saved_state()
         self.cut_tool.reload()
         self.sheet_view.show_initial_view(self.net.bounding_box())
 
@@ -561,7 +576,7 @@ class MainWindow(QMainWindow):
             return
         self.project_settings = ProjectSettings(threshold)
         self._update_bounding()
-        self.setWindowModified(self.is_dirty)
+        self._update_saved_state()
         if self.recorder is not None:
             self.recorder.note("project", "threshold", format_threshold(threshold))
 

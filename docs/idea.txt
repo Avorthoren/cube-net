@@ -27,6 +27,10 @@ or with CTRL+S. The saved project contains the full snapshot of the current stat
 if any), project settings, the history of actions and the redo stack (see the undo/redo section below).
 Standard behaviour for unsaved changes: on New, Open and Quit, if the current project has unsaved changes, the
 application asks "Save changes?" (Save / Don't save / Cancel).
+The user always sees whether there are unsaved changes: a "*" before the project's name in the window title (on macOS
+a dot in the close button, as usual there), and on the right of the status bar "Unsaved changes" (orange) or "Saved"
+(nothing for a new project nobody has changed). Saving says where it saved for a few seconds ("Saved to <path>"), so
+CTRL+S always shows it did something, even with nothing to save. An undo is a change too: the file has the history.
 
 When user starts the application, it should attempt to load last project user worked on. If that fails - notify user
 about that and suggest creating a new project. If there are no saved projects user worked on - immediately start a new

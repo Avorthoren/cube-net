@@ -51,6 +51,10 @@ RULER = QColor("#C5221F")
 RULER_TEXT = QColor("#000000")
 RULER_LABEL_BACKGROUND = QColor(255, 255, 255, 210)
 
+# The status bar's word on the project: unsaved changes (it should catch the eye), or all saved (quiet).
+UNSAVED = QColor("#E37400")
+SAVED = QColor("#5F6368")
+
 # The bounding rectangle (thin line).
 BOUNDING_RECTANGLE = QColor("#000000")
 

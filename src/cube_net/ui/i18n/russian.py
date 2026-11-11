@@ -105,6 +105,10 @@ RUSSIAN: dict[str, str] = {
     "Close": "Закрыть",
     "Check for updates": "Проверка обновлений",
     "Under development...": "В разработке...",
+    # Whether the project is saved.
+    "Unsaved changes": "Не сохранено",
+    "Saved": "Сохранено",
+    "Saved to {path}": "Сохранено в {path}",
     # Help -> Help.
     "{name} Help": "{name} — справка",
     "How it works": "Как это работает",
