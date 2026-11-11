@@ -42,8 +42,8 @@ x64 programs.
 3. Follow the installer. It installs Cube Net for your user only, without administrator rights, and adds it to the
    Start menu (and to the desktop, if you tick that).
 
-Project files (`.cubenet`) then open in Cube Net with a double-click. To update, install a newer version the same way: it replaces the old one. To remove Cube Net: **Settings → Apps →
-Installed apps → Cube Net → Uninstall**.
+Project files (`.cubenet`) then open in Cube Net with a double-click. To update, install a newer version the same
+way: it replaces the old one. To remove Cube Net, see [Uninstallation](#uninstallation).
 
 ### Linux
 
@@ -66,7 +66,7 @@ To have it in the applications menu, use [Gear Lever](https://flathub.org/apps/i
 [AppImageLauncher](https://github.com/TheAssassin/AppImageLauncher); depending on the tool, project files (`.cubenet`)
 may then open in Cube Net with a double-click too. Without that, open them from the application (**File → Open**), or
 from a terminal: `./CubeNet-<version>-linux-x86_64.AppImage path/to/project.cubenet`. To update, download the newer
-AppImage; to remove Cube Net, delete the file.
+AppImage. To remove Cube Net, see [Uninstallation](#uninstallation).
 
 ### macOS
 
@@ -87,8 +87,8 @@ xattr -dr com.apple.quarantine "/Applications/Cube Net.app"
 ```
 
 Project files (`.cubenet`) then open in Cube Net with a double-click (or when dropped on its Dock icon). To update,
-drag the newer version onto Applications the same way (and repeat step 3 once). To remove Cube Net, move it from
-Applications to the Bin.
+drag the newer version onto Applications the same way (and repeat step 3 once). To remove Cube Net, see
+[Uninstallation](#uninstallation).
 
 ### Checking a download
 
@@ -97,6 +97,62 @@ Each release also has `SHA256SUMS`, with the checksum of every file. To check yo
 ```bash
 sha256sum -c SHA256SUMS --ignore-missing
 ```
+
+## Uninstallation
+
+Removing the application leaves two things behind, on every system, in your user's folders only:
+
+- **Its settings**: language, style, the settings panel's state, the window's size, the last project's location and
+  the like. Installing Cube Net again later finds them and starts as you left it.
+- **Session logs**, if logging was ever switched on (the record button on the instruments panel, or *Auto-start
+  logging* in the settings; both off unless you used them): a small text file per session, for reproducing problems.
+
+Your projects (`.cubenet` files) are wherever you saved them: uninstalling never touches them.
+
+Delete the settings and the logs too, if you want nothing left.
+
+### Windows
+
+1. **Settings → Apps → Installed apps** (on Windows 10: **Settings → Apps → Apps & features**), find **Cube Net**,
+   then **⋯** → **Uninstall**. This removes the program, its Start menu and desktop shortcuts, and the link between
+   `.cubenet` files and Cube Net.
+2. What's left:
+   - the settings, in the registry: `HKEY_CURRENT_USER\Software\cube_net`;
+   - the session logs: `%APPDATA%\cube_net` (that is `C:\Users\<you>\AppData\Roaming\cube_net`).
+
+   To delete both, in PowerShell:
+   ```powershell
+   Remove-Item -Recurse -Force "HKCU:\Software\cube_net", "$env:APPDATA\cube_net" -ErrorAction SilentlyContinue
+   ```
+
+### Linux
+
+1. Delete the AppImage file. If you added it to the applications menu with Gear Lever or AppImageLauncher, remove it
+   there instead: they delete the file and its menu entry together.
+2. What's left:
+   - the settings: `~/.config/cube_net/Cube Net.conf`;
+   - the session logs: `~/.local/share/cube_net/Cube Net/sessions`.
+
+   To delete both:
+   ```bash
+   rm -rf ~/.config/cube_net ~/.local/share/cube_net
+   ```
+
+### macOS
+
+1. Quit Cube Net, then move **Cube Net** from **Applications** to the **Bin**, and empty the Bin.
+2. What's left (in your Library folder, hidden in Finder: **Go → Go to Folder…**, then type the path):
+   - the settings: `~/Library/Preferences/com.cube-net.Cube Net.plist`;
+   - the session logs: `~/Library/Application Support/cube_net`;
+   - possibly the windows' saved state: `~/Library/Saved Application State/io.github.avorthoren.cubenet.savedState`.
+
+   To delete them, in Terminal (`defaults` removes the settings properly, as macOS keeps them in memory too):
+   ```bash
+   defaults delete "com.cube-net.Cube Net"
+   ```
+   ```bash
+   rm -rf ~/Library/"Application Support"/cube_net ~/Library/"Saved Application State"/io.github.avorthoren.cubenet.savedState
+   ```
 
 ## License
 
