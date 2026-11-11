@@ -1,8 +1,8 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""The Preferences tab: language, vertex labels, session logs, blinking on success, the applications menu's entry
-(Linux, an AppImage), how far the sheet can be zoomed in."""
+"""The Preferences tab: language, vertex labels, session logs, blinking on success, the daily check for updates, the
+applications menu's entry (Linux, an AppImage), how far the sheet can be zoomed in."""
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QAction
@@ -36,12 +36,16 @@ class PreferencesTab(QWidget):
     # The user chose another language.
     language_changed = pyqtSignal(object)
 
+    # The user switched the daily check for updates on or off.
+    check_updates_changed = pyqtSignal(bool)
+
     def __init__(
         self,
         labels: QAction,
         logs: QAction,
         blink: bool,
         max_zoom: int,
+        check_updates: bool = True,
         language: Language = Language.ENGLISH,
         menu_entry: QAction | None = None,
         parent: QWidget | None = None,
@@ -75,6 +79,11 @@ class PreferencesTab(QWidget):
         bind(self.blink, self.blink.setText, "Blink when target area achieved")
         self.blink.setChecked(blink)
         self.blink.toggled.connect(self.blink_changed)
+        self.check_updates = QCheckBox(self)
+        bind(self.check_updates, self.check_updates.setText, "Periodically check for updates")
+        bind(self.check_updates, self.check_updates.setToolTip, "Once a day")
+        self.check_updates.setChecked(check_updates)
+        self.check_updates.toggled.connect(self.check_updates_changed)
         self.max_zoom = QSpinBox(self)
         self.max_zoom.setRange(*MAX_ZOOM_RANGE)
         self.max_zoom.setSingleStep(MAX_ZOOM_STEP)
@@ -96,6 +105,7 @@ class PreferencesTab(QWidget):
         layout.addRow(self.show_labels)
         layout.addRow(self.auto_log)
         layout.addRow(self.blink)
+        layout.addRow(self.check_updates)
         if self.menu_entry is not None:
             layout.addRow(self.menu_entry)
         zoom = QHBoxLayout()

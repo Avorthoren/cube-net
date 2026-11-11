@@ -33,8 +33,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
 from pathlib import Path
+
+from cube_net.core.version import Version, parse_version
 
 # Whether a release first checks the code with ruff (lint and formatting; it never fixes anything).
 RUN_RUFF = True
@@ -50,9 +51,6 @@ REMOTE = "origin"
 
 # The heading of the changelog's section for what isn't released yet.
 UNRELEASED = "## Unreleased"
-
-# A version: numbers without leading zeros (but a lone 0), and an optional pre-release suffix.
-VERSION_PATTERN = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(alpha|beta|rc)(\.?(0|[1-9]\d*))?)?")
 
 # The lines of `__init__.py` the release sets.
 VERSION_LINE = re.compile(r'^__version__ = "[^"]*"$', re.MULTILINE)
@@ -71,36 +69,6 @@ RESET = "\033[0m"
 
 class ReleaseError(Exception):
     """A check failed: the message says what's wrong, and what to do."""
-
-
-@dataclass(frozen=True)
-class Version:
-    text: str
-    major: int
-    minor: int
-    patch: int
-
-    # The pre-release suffix (without the dash), if there's one: "beta.2".
-    pre: str | None
-
-    @property
-    def tag(self) -> str:
-        return f"v{self.text}"
-
-    @property
-    def order(self) -> tuple[int, int, int, int]:
-        """What versions are compared by: the numbers, then a pre-release below the version itself (pre-releases of
-        the same version are equal to each other)."""
-        return self.major, self.minor, self.patch, 0 if self.pre is not None else 1
-
-
-def parse_version(text: str) -> Version | None:
-    """The version written as `text`, or None if it isn't one."""
-    match = VERSION_PATTERN.fullmatch(text)
-    if match is None:
-        return None
-    major, minor, patch, suffix = match.group(1), match.group(2), match.group(3), match.group(4)
-    return Version(text, int(major), int(minor), int(patch), suffix[1:] if suffix else None)
 
 
 def check_version(text: str) -> Version:

@@ -3169,15 +3169,14 @@ class TestHelpMenu:
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         from cube_net.ui.help.about_dialog import AboutDialog
-        from cube_net.ui.help.updates_dialog import UpdatesDialog
 
         window = self.make(qtbot, tmp_path)
         opened: list[str] = []
         monkeypatch.setattr(AboutDialog, "exec", lambda self: opened.append(type(self).__name__) or 0)
-        monkeypatch.setattr(UpdatesDialog, "exec", lambda self: opened.append(type(self).__name__) or 0)
+        monkeypatch.setattr(MainWindow, "check_for_updates", lambda self, manual: opened.append(f"check {manual}"))
         window.about_action.trigger()
         window.updates_action.trigger()
-        assert opened == ["AboutDialog", "UpdatesDialog"]
+        assert opened == ["AboutDialog", "check True"]
 
 
 class TestLanguage:
@@ -3641,3 +3640,138 @@ class TestMenuEntry:
         window = self.make(qtbot, tmp_path, None)
         window.offer_menu_entry()  # asks nothing
         assert window.settings_panel.preferences.menu_entry is None
+
+
+class TestUpdates:
+    """Help -> Check for updates, and the daily check (the latest release comes from a stand-in, never GitHub)."""
+
+    def make(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, latest: object) -> MainWindow:
+        from cube_net.ui.updates.latest_release import LatestRelease, UpdateCheckError
+
+        def fetch() -> LatestRelease | None:
+            if isinstance(latest, Exception):
+                raise latest
+            return None if latest is None else LatestRelease(str(latest), "notes", "https://example.com/release")
+
+        assert UpdateCheckError  # what the failing stand-in raises
+        monkeypatch.setattr("cube_net.ui.main_window.fetch_latest_release", fetch)
+        monkeypatch.setattr("cube_net.ui.main_window.__version__", "1.0.0")
+        self.offered: list[str] = []
+        self.told: list[str] = []
+        self.opened: list[str] = []
+        self.answer = "later"
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.ask_update",
+            lambda _parent, release, current: self._offer(release.version),
+        )
+        monkeypatch.setattr("cube_net.ui.main_window.tell_up_to_date", lambda _parent, current: self.told.append("up"))
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.tell_check_failed", lambda _parent, problem: self.told.append(f"failed {problem}")
+        )
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.QDesktopServices.openUrl", lambda url: self.opened.append(url.toString())
+        )
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        return window
+
+    def _offer(self, version: str) -> object:
+        from cube_net.ui.updates.update_dialogs import UpdateChoice
+
+        self.offered.append(version)
+        return UpdateChoice.DOWNLOAD if self.answer == "download" else UpdateChoice.LATER
+
+    def check(self, qtbot: QtBot, window: MainWindow, manual: bool) -> None:
+        window.check_for_updates(manual)
+        assert window._update_check is not None
+        qtbot.waitUntil(lambda: not window._update_check.running())  # type: ignore[union-attr]
+        qtbot.wait(20)  # the answer's signal, delivered in the window's thread
+
+    def test_a_newer_version_is_offered_and_its_page_opened(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        window = self.make(qtbot, tmp_path, monkeypatch, "1.2.0")
+        self.answer = "download"
+        self.check(qtbot, window, manual=True)
+        assert self.offered == ["1.2.0"] and self.opened == ["https://example.com/release"]
+
+    def test_no_newer_version(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        window = self.make(qtbot, tmp_path, monkeypatch, "1.0.0")
+        self.check(qtbot, window, manual=True)
+        assert self.offered == [] and self.told == ["up"]
+
+    def test_no_release_at_all(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        window = self.make(qtbot, tmp_path, monkeypatch, None)
+        self.check(qtbot, window, manual=True)
+        assert self.told == ["up"]
+
+    def test_a_failure_is_told_when_asked(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.ui.updates.latest_release import UpdateCheckError
+
+        window = self.make(qtbot, tmp_path, monkeypatch, UpdateCheckError("no network"))
+        self.check(qtbot, window, manual=True)
+        assert self.told == ["failed no network"]
+
+    def test_not_now_from_the_menu_skips_nothing(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        window = self.make(qtbot, tmp_path, monkeypatch, "1.2.0")
+        self.check(qtbot, window, manual=True)
+        assert window.settings.skipped_update is None
+
+    def test_daily_check_and_a_turned_down_version(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import datetime
+
+        window = self.make(qtbot, tmp_path, monkeypatch, "1.2.0")
+        self.check(qtbot, window, manual=False)
+        assert self.offered == ["1.2.0"]
+        assert window.settings.skipped_update == "1.2.0"  # "Not now" from the daily check
+        assert window.settings.last_update_check == datetime.date.today()
+        self.check(qtbot, window, manual=False)  # tomorrow, say
+        assert self.offered == ["1.2.0"]  # not again
+        self.check(qtbot, window, manual=True)
+        assert self.offered == ["1.2.0", "1.2.0"]  # the menu still offers it
+
+    def test_a_newer_one_than_the_turned_down_one(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        window = self.make(qtbot, tmp_path, monkeypatch, "1.3.0")
+        window.settings.skipped_update = "1.2.0"
+        self.check(qtbot, window, manual=False)
+        assert self.offered == ["1.3.0"]
+
+    def test_a_daily_failure_is_silent_and_tried_again(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.updates.latest_release import UpdateCheckError
+
+        window = self.make(qtbot, tmp_path, monkeypatch, UpdateCheckError("no network"))
+        self.check(qtbot, window, manual=False)
+        assert self.told == [] and window.settings.last_update_check is None  # not done today: again at the next start
+
+    def test_at_start_once_a_day_if_on(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        import datetime
+
+        window = self.make(qtbot, tmp_path, monkeypatch, "1.0.0")
+        started: list[bool] = []
+        monkeypatch.setattr(MainWindow, "check_for_updates", lambda self, manual: started.append(manual))
+        today = datetime.date(2026, 11, 12)
+        window.check_for_updates_at_start(today)
+        assert started == [False]
+        window.settings.last_update_check = today
+        window.check_for_updates_at_start(today)  # 00:05 after 23:55 would be another day; this is the same one
+        assert started == [False]
+        window.check_for_updates_at_start(today + datetime.timedelta(days=1))
+        assert started == [False, False]
+        window.settings_panel.preferences.check_updates.setChecked(False)
+        window.check_for_updates_at_start(today + datetime.timedelta(days=2))
+        assert started == [False, False] and window.settings.check_updates is False
+
+    def test_the_checkbox(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        window = self.make(qtbot, tmp_path, monkeypatch, "1.0.0")
+        box = window.settings_panel.preferences.check_updates
+        assert box.isChecked()  # on unless switched off
+        assert box.text() == "Periodically check for updates" and box.toolTip() == "Once a day"
+        assert window.settings.check_updates is True

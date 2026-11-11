@@ -27,11 +27,12 @@ from scripts.release import (
     VERSION_FILE,
     Git,
     ReleaseError,
-    Version,
     check_not_lower,
     check_version,
     version_notes,
 )
+
+from cube_net.core.version import Version
 
 # The version in `cube_net/__init__.py`.
 PACKAGE_VERSION = re.compile(r'^__version__ = "([^"]*)"$', re.MULTILINE)

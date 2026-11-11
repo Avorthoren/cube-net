@@ -9,8 +9,9 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from scripts.release import ReleaseError, Version, parse_version
+from scripts.release import ReleaseError
 
+from cube_net.core.version import Version, parse_version
 from scripts import release
 
 DAY = datetime.date(2026, 11, 20)

@@ -495,6 +495,7 @@ sheet at once.
      red dot, "Start logging", while not logging; a red square in a frame, "Stop logging", while logging);
    - Blink when target area achieved (on by default): if it's off, the
      "Bounds" button doesn't blink on success, it's just green while the area is below the target;
+   - Periodically check for updates (on by default; tooltip "Once a day"): see Updates;
    - Maximum zoom (pixels per unit, see the zoom section).
 2. Style. Every section starts with its name and a "Restore default" button to the right of it, which restores the
    defaults of just that section after the user confirms it.
@@ -547,7 +548,7 @@ Help menu (to the right of Settings): About, Help, Check for updates.
    (and follow both when they change). The mouse wheel scrolls the page wherever the mouse is, over the animations
    too. All the text can be selected and copied, across paragraphs too (but not across an animation). Escape closes
    the window.
-3. Check for updates: a small window saying "Under development..." (with a traffic cone).
+3. Check for updates: see Updates.
 
 License: the application is free software under the GNU General Public License, version 3 or (at the user's option)
 any later version (it's built with PyQt6, which is GPL v3). Copyright (C) 2026 Viktor Podust. The LICENSE file has the
@@ -568,3 +569,17 @@ If the AppImage is moved, the menu hides the entry (TryExec) until it's started 
 entry there (also for another copy, or a newer download). The windows say which desktop entry they belong to
 (desktop file name, and the X11 window class), so the Dock shows the icon. The AppImage doesn't let its own GLib load
 the system's GLib modules (GIO_MODULE_DIR): they're built for another GLib, and only made it complain.
+
+Updates. The latest release on GitHub (published, not a pre-release) is compared with the application's version:
+1.2.0-alpha == 1.2.0-beta < 1.2.0 < 1.2.1; a version that isn't one (a copy run from the source, "1.0") is lower
+than every release.
+- Help -> Check for updates asks GitHub at once (in the background; the status bar says it's checking). If the latest
+  release is newer: "Cube Net 1.2.0 is available (you have 1.0.0).", its notes, the size of this system's package,
+  "Open the download page" (its page on GitHub) and "Not now". Otherwise "No newer version found", or why the check
+  failed.
+- The daily check (Settings -> Preferences, on by default): at the first start of each calendar day (the system's
+  clock) whose check works; a failed one is silent and tried again at the next start. It offers the latest release
+  only if it's newer than the application and than the version the user turned down ("Not now") when the daily
+  check offered it: that one is never offered again by it, while the menu's check still does.
+- Phase 2 (to do): "Download and update" instead of opening the page: the download with its progress and checksum,
+  and installing it, per system.

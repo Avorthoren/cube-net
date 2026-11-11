@@ -3,6 +3,7 @@
 
 """`AppSettings`: settings of the application as a whole (not of a project), stored with `QSettings`."""
 
+import datetime
 from dataclasses import fields, replace
 from pathlib import Path
 
@@ -23,6 +24,9 @@ DEFAULT_RECORD_SESSION = False
 # The Bounds button blinks while the area is below the target (otherwise it's just green).
 DEFAULT_BLINK_ON_SUCCESS = True
 
+# Look for a newer version at the first start of every day.
+DEFAULT_CHECK_UPDATES = True
+
 _SHOW_VERTEX_LABELS = "debug/show_vertex_labels"
 _RECORD_SESSION = "debug/record_session"
 _BLINK_ON_SUCCESS = "view/blink_on_success"
@@ -33,6 +37,9 @@ _SETTINGS_OPEN = "view/settings_open"
 _LANGUAGE = "view/language"
 _STYLE = "style/"
 _MENU_ENTRY = "linux/menu_entry"
+_CHECK_UPDATES = "updates/check"
+_LAST_UPDATE_CHECK = "updates/last_check"
+_SKIPPED_UPDATE = "updates/skipped"
 
 
 class AppSettings:
@@ -74,6 +81,37 @@ class AppSettings:
     @blink_on_success.setter
     def blink_on_success(self, value: bool) -> None:
         self._settings.setValue(_BLINK_ON_SUCCESS, value)
+
+    @property
+    def check_updates(self) -> bool:
+        """Whether the app looks for a newer version by itself (at the first start of a day)."""
+        return self._bool(_CHECK_UPDATES, DEFAULT_CHECK_UPDATES)
+
+    @check_updates.setter
+    def check_updates(self, value: bool) -> None:
+        self._settings.setValue(_CHECK_UPDATES, value)
+
+    @property
+    def last_update_check(self) -> datetime.date | None:
+        """The day of the last automatic check that worked (None: never, or not a date)."""
+        try:
+            return datetime.date.fromisoformat(str(self._settings.value(_LAST_UPDATE_CHECK, "")))
+        except ValueError:
+            return None
+
+    @last_update_check.setter
+    def last_update_check(self, day: datetime.date) -> None:
+        self._settings.setValue(_LAST_UPDATE_CHECK, day.isoformat())
+
+    @property
+    def skipped_update(self) -> str | None:
+        """The version the user turned down when the automatic check offered it: never offered again by it."""
+        value = self._settings.value(_SKIPPED_UPDATE)
+        return str(value) if value else None
+
+    @skipped_update.setter
+    def skipped_update(self, version: str) -> None:
+        self._settings.setValue(_SKIPPED_UPDATE, version)
 
     @property
     def language(self) -> Language:

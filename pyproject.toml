@@ -13,6 +13,7 @@ license-files = ["LICENSE"]
 authors = [{ name = "Viktor Podust" }]
 dependencies = [
     "PyQt6>=6.7",
+    "certifi>=2024.2.2",  # the certificates of HTTPS (the update check), the same on every system
 ]
 
 [project.optional-dependencies]

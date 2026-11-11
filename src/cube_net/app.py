@@ -50,6 +50,7 @@ def main(argv: list[str] | None = None) -> int:
         window.open_project_at_start(project)
     else:
         window.reopen_last_project()
+    window.check_for_updates_at_start()  # in the background; it says something only if there's a newer version
     return app.exec()
 
 

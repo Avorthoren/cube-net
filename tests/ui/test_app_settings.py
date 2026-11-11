@@ -149,3 +149,17 @@ def test_menu_entry_not_asked_yet_then_remembered(tmp_path: Path) -> None:
     assert settings_at(tmp_path / "s.ini").menu_entry is False
     s.menu_entry = True
     assert settings_at(tmp_path / "s.ini").menu_entry is True
+
+
+def test_update_settings(tmp_path: Path) -> None:
+    import datetime
+
+    s = settings_at(tmp_path / "s.ini")
+    assert s.check_updates is True and s.last_update_check is None and s.skipped_update is None
+    s.check_updates = False
+    s.last_update_check = datetime.date(2026, 11, 12)
+    s.skipped_update = "1.2.0"
+    again = settings_at(tmp_path / "s.ini")
+    assert again.check_updates is False
+    assert again.last_update_check == datetime.date(2026, 11, 12)
+    assert again.skipped_update == "1.2.0"

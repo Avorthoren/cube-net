@@ -312,7 +312,7 @@ Undo and redo are available in every state. Each public method either performs o
   - File: New (Ctrl+N), Open… (Ctrl+O), Save (Ctrl+S), Save As… (Ctrl+Shift+S), Quit (Ctrl+Q);
   - Edit: Approve cut (Ctrl+Enter), Undo (Ctrl+Z), Redo (Ctrl+Y);
   - Help (after Settings): About (name, version 1.0, build, credits with a link to the puzzle; Escape closes it),
-    Help (F1: `ui/help/help_window.py`), Check for updates ("Under development...");
+    Help (F1: `ui/help/help_window.py`), Check for updates (`ui/updates/`, the rules in `core/version.py` and `core/update_policy.py`);
   - Settings: shows or hides the settings panel (`ui/settings_panel/`), over the right side of the sheet, at most a
     third of the screen wide. Tabs: Preferences (vertex labels, session logs, blinking on success, maximum zoom) and Style (face colours,
     tiling, dashes and their thickness, vertex radius, grid colour and thickness; each section restores its defaults

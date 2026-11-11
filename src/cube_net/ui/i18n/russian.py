@@ -104,7 +104,6 @@ RUSSIAN: dict[str, str] = {
     "Source code: {source}": "Исходный код: {source}",
     "Close": "Закрыть",
     "Check for updates": "Проверка обновлений",
-    "Under development...": "В разработке...",
     # The applications menu (Linux, an AppImage).
     "Show in the applications menu": "Показывать в меню приложений",
     "Add Cube Net to the applications menu?": "Добавить Cube Net в меню приложений?",
@@ -128,6 +127,22 @@ RUSSIAN: dict[str, str] = {
         "Сам AppImage, ваши проекты и настройки останутся как есть. Вернуть его в меню можно здесь в любой момент."
     ),
     "Remove": "Убрать",
+    # Updates.
+    "Periodically check for updates": "Периодически проверять обновления",
+    "Once a day": "Раз в день",
+    "Checking for updates...": "Проверка обновлений...",
+    "Update available": "Доступно обновление",
+    "{name} {new} is available (you have {current}).": "Доступна версия {name} {new} (у вас {current}).",
+    "What's new:": "Что нового:",
+    "This release has no notes.": "У этой версии нет описания.",
+    "Download size: {size}": "Размер загрузки: {size}",
+    "{megabytes} MB": "{megabytes} МБ",
+    "Open the download page": "Открыть страницу загрузки",
+    "Not now": "Не сейчас",
+    "No newer version found: you have the latest one ({current}).": (
+        "Более новой версии не найдено: у вас последняя ({current})."
+    ),
+    "Couldn't check for updates: {problem}": "Не удалось проверить обновления: {problem}",
     # Whether the project is saved.
     "Unsaved changes": "Не сохранено",
     "Saved": "Сохранено",

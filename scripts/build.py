@@ -21,7 +21,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from scripts.release import parse_version
+from cube_net.core.version import parse_version
 
 ROOT = Path(__file__).resolve().parent.parent
 NAME = "Cube Net"

@@ -3,11 +3,12 @@
 
 """Main application window."""
 
+import datetime
 from fractions import Fraction
 from pathlib import Path
 
-from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
-from PyQt6.QtGui import QAction, QCloseEvent
+from PyQt6.QtCore import QEvent, QObject, Qt, QTimer, QUrl
+from PyQt6.QtGui import QAction, QCloseEvent, QDesktopServices
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
@@ -21,6 +22,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from cube_net import __version__
 from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels
@@ -35,11 +37,12 @@ from cube_net.core.project import (
 )
 from cube_net.core.project_settings import ProjectSettings, format_threshold
 from cube_net.core.sheet import sheet_box
+from cube_net.core.update_policy import due_today, offer_automatically
+from cube_net.core.version import newer
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.desktop_integration import AppImage, DesktopEntry, data_home
 from cube_net.ui.help.about_dialog import AboutDialog
 from cube_net.ui.help.help_window import HelpWindow
-from cube_net.ui.help.updates_dialog import UpdatesDialog
 from cube_net.ui.i18n import TRANSLATIONS, Language, bind, tr
 from cube_net.ui.i18n.errors import error_text
 from cube_net.ui.instruments.bounding_controls import BoundingControls
@@ -65,9 +68,15 @@ from cube_net.ui.sheet.bounding_item import BoundingItem
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.sheet.workspace import Workspace
 from cube_net.ui.style import Style, apply_style
+from cube_net.ui.updates.latest_release import LatestRelease, fetch_latest_release
+from cube_net.ui.updates.update_check import UpdateCheck
+from cube_net.ui.updates.update_dialogs import UpdateChoice, ask_update, tell_check_failed, tell_up_to_date
 
 APP_TITLE = "Cube Net"
 NO_COORDINATES = "x: —   y: —"
+
+# How long the status bar says a check for updates is under way, at most (ms).
+CHECKING_MESSAGE_MS = 20000
 
 # How long the status bar says where the project was saved (ms).
 SAVED_MESSAGE_MS = 5000
@@ -138,6 +147,9 @@ class MainWindow(QMainWindow):
 
         # Help -> Help, once it has been opened.
         self.help_window: HelpWindow | None = None
+
+        # The check for updates under way, or the last one.
+        self._update_check: UpdateCheck | None = None
 
         self.net: Net = default_net()
         net_box = self.net.bounding_box()
@@ -445,6 +457,56 @@ class MainWindow(QMainWindow):
             self._offer_another_project(error_text(e))
             if self.recorder is not None and self.project_path is None:
                 self._record_snapshot(self.recorder)  # it's the new project after all
+
+    # --- updates -------------------------------------------------------------------------------------------------
+
+    def check_for_updates_at_start(self, today: datetime.date | None = None) -> None:
+        """At start: the daily check, if it's on and today's hasn't worked yet (it runs in the background)."""
+        if self.settings.check_updates and due_today(self.settings.last_update_check, today or datetime.date.today()):
+            self.check_for_updates(manual=False)
+
+    def check_for_updates(self, manual: bool) -> None:
+        """Ask GitHub for the latest release, in the background; the answer comes to `_on_update_found` (or
+        `_on_update_check_failed`). One check at a time."""
+        if self._update_check is not None and self._update_check.running():
+            return
+        check = UpdateCheck(lambda: fetch_latest_release(), self)
+        check.found.connect(lambda release: self._on_update_found(release, manual))
+        check.failed.connect(lambda problem: self._on_update_check_failed(problem, manual))
+        self._update_check = check
+        if manual:
+            self.statusBar().showMessage(tr("Checking for updates..."), CHECKING_MESSAGE_MS)
+        check.start()
+
+    def _on_update_found(self, release: LatestRelease | None, manual: bool) -> None:
+        if self.recorder is not None:
+            self.recorder.note("updates", "manual" if manual else "auto", release.version if release else "none")
+        if not manual:
+            self.settings.last_update_check = datetime.date.today()  # it worked: not again today
+            if release is None or not offer_automatically(release.version, __version__, self.settings.skipped_update):
+                return
+        elif release is None or not newer(release.version, __version__):
+            self.statusBar().clearMessage()
+            tell_up_to_date(self, __version__)
+            return
+        self.statusBar().clearMessage()
+        if ask_update(self, release, __version__) is UpdateChoice.DOWNLOAD:
+            QDesktopServices.openUrl(QUrl(release.page))
+        elif not manual:
+            self.settings.skipped_update = release.version  # turned down: the daily check won't offer it again
+
+    def _on_update_check_failed(self, problem: str, manual: bool) -> None:
+        """Said only when the user asked; the daily check tries again at the next start (it's not done today)."""
+        if self.recorder is not None:
+            self.recorder.note("updates", "manual" if manual else "auto", "failed")
+        if manual:
+            self.statusBar().clearMessage()
+            tell_check_failed(self, problem)
+
+    def _on_check_updates_changed(self, checked: bool) -> None:
+        self.settings.check_updates = checked
+        if self.recorder is not None:
+            self.recorder.note("settings", "check_updates", "on" if checked else "off")
 
     def offer_menu_entry(self) -> None:
         """At start, from an AppImage: the first time, ask whether to add Cube Net to the applications menu; once the
@@ -758,7 +820,9 @@ class MainWindow(QMainWindow):
             self,
             self.settings.language,
             self.menu_entry_action,
+            self.settings.check_updates,
         )
+        self.settings_panel.preferences.check_updates_changed.connect(self._on_check_updates_changed)
         self.settings_panel.preferences.language_changed.connect(self._on_language_changed)
         self.settings_panel.preferences.blink_changed.connect(self._on_blink_changed)
         self.settings_panel.show_tab(self.settings.settings_tab)  # the one the user looked at last, even last time
@@ -786,7 +850,7 @@ class MainWindow(QMainWindow):
         help_menu.addAction(self.help_action)
         self.updates_action = QAction(self)
         bind(self.updates_action, self.updates_action.setText, "Check for &updates")
-        self.updates_action.triggered.connect(lambda: UpdatesDialog(self).exec())
+        self.updates_action.triggered.connect(lambda: self.check_for_updates(manual=True))
         help_menu.addAction(self.updates_action)
         self.settings_panel.hide_requested.connect(lambda: self.settings_action.setChecked(False))
         # Open as the user left it. It gets its place when the window is laid out (the view's first resize).
