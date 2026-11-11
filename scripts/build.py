@@ -46,9 +46,10 @@ def version() -> str:
 
 
 def numbers(text: str) -> str:
-    """Just the numbers of a version: 1.2.0-beta.2 -> 1.2.0."""
-    match = re.match(r"\d+\.\d+\.\d+", text)
-    return match.group(0) if match else "0.0.0"
+    """Just the three numbers of a version, as Windows and macOS want them: 1.2.0-beta.2 -> 1.2.0, 1.0 -> 1.0.0."""
+    match = re.match(r"\d+(?:\.\d+)*", text)
+    parts = match.group(0).split(".") if match else []
+    return ".".join([*parts, "0", "0", "0"][:3])
 
 
 def run(command: list[str], **kwargs: object) -> None:

@@ -4,15 +4,16 @@
 """PyInstaller's recipe for the application (`scripts/build.py` runs it): one folder with the program and everything
 it needs (Python, Qt, the icon, the license), "Cube Net.app" on macOS. No console window."""
 
-import re
 import sys
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files
 
 ROOT = Path(SPECPATH).parent  # noqa: F821 (PyInstaller gives it)
-NAME = "Cube Net"
-VERSION = re.search(r'^__version__ = "([^"]*)"$', (ROOT / "src/cube_net/__init__.py").read_text(), re.MULTILINE)[1]
+sys.path.insert(0, str(ROOT))
+from scripts.build import NAME, numbers, version  # noqa: E402
+
+VERSION = version()
 ICON = {"win32": ROOT / "packaging/icons/cube_net.ico", "darwin": ROOT / "packaging/icons/cube_net.icns"}.get(
     sys.platform
 )
@@ -36,16 +37,16 @@ exe = EXE(  # noqa: F821
 coll = COLLECT(exe, a.binaries, a.datas, name=NAME)  # noqa: F821
 
 if sys.platform == "darwin":
-    numbers = re.match(r"\d+\.\d+\.\d+", VERSION)[0]
+    plain = numbers(VERSION)
     app = BUNDLE(  # noqa: F821
         coll,
         name=f"{NAME}.app",
         icon=str(ICON),
         bundle_identifier="io.github.avorthoren.cubenet",
-        version=numbers,
+        version=plain,
         info_plist={
-            "CFBundleShortVersionString": numbers,
-            "CFBundleVersion": numbers,
+            "CFBundleShortVersionString": plain,
+            "CFBundleVersion": plain,
             "NSHighResolutionCapable": True,
             "NSHumanReadableCopyright": "Copyright © 2026 Viktor Podust. GNU GPL v3 or later.",
         },

@@ -17,7 +17,10 @@ def test_the_version_is_the_packages() -> None:
     assert build.version() == __version__
 
 
-@pytest.mark.parametrize(("text", "numbers"), [("1.2.0", "1.2.0"), ("1.2.0-beta.2", "1.2.0"), ("10.0.3-rc1", "10.0.3")])
+@pytest.mark.parametrize(
+    ("text", "numbers"),
+    [("1.2.0", "1.2.0"), ("1.2.0-beta.2", "1.2.0"), ("10.0.3-rc1", "10.0.3"), ("1.0", "1.0.0"), ("2", "2.0.0")],
+)
 def test_just_the_numbers(text: str, numbers: str) -> None:
     assert build.numbers(text) == numbers
 

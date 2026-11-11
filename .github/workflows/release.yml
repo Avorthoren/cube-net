@@ -67,6 +67,7 @@ jobs:
     name: Build (${{ matrix.system }})
     needs: check
     strategy:
+      fail-fast: false  # a failed build doesn't cancel the others: each system's result is seen
       matrix:
         include:
           - system: Linux
