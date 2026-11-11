@@ -4,7 +4,9 @@
 """Mouse cursors that tell what a click on the sheet would do (docs/idea.txt): scissors (start or go on cutting), a
 pencil (edit the cut line), a glue tube (glue the halves onto this cut), a plus (add a point), an x (delete one). Qt
 has none of them, so they're drawn here:
-white shapes with a dark outline, visible on every colour of the net and the sheet."""
+white shapes with a dark outline, visible on every colour of the net and the sheet.
+
+The README's animation shows them: after changing them, run scripts/make_readme_animation.py."""
 
 from enum import Enum
 from functools import cache

@@ -14,12 +14,15 @@ from PyQt6.QtCore import QEvent, QObject, QPointF, QSize, Qt
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QApplication, QFrame, QWidget
 
+from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.geometry import Box, Vec
 from cube_net.core.labels import PointLabels
 from cube_net.core.net import default_net
+from cube_net.core.project_settings import ProjectSettings
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.help.demo.pointer import Pointer
 from cube_net.ui.help.demo.steps import Keys, Move, Point, Press, Release, Step, Wait
+from cube_net.ui.sheet.bounding_item import BoundingItem
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.sheet.workspace import Workspace
 
@@ -51,10 +54,17 @@ USER_INPUT = {
 
 class DemoSheet(QWidget):
     def __init__(
-        self, size: QSize, shown: Box = AROUND_THE_NET, labels: bool = False, parent: QWidget | None = None
+        self,
+        size: QSize,
+        shown: Box = AROUND_THE_NET,
+        labels: bool = False,
+        bounds: bool = False,
+        parent: QWidget | None = None,
     ) -> None:
         """`shown`: what the view shows (as large as it fits), all the time: it's where the net is in every state of
-        the animation. `labels`: whether the vertices have their debug labels (an app setting)."""
+        the animation. `labels`: whether the vertices have their debug labels (an app setting). `bounds`: whether the
+        net's minimum-area bounding rectangle is shown, as the Bounds button shows it (green below the default target
+        area of a new project)."""
         super().__init__(parent)
         self.setFixedSize(size)
         net = default_net()
@@ -77,6 +87,14 @@ class DemoSheet(QWidget):
         tool.line_changed.connect(self._show_labels)
         self.workspace.net_changed.connect(self._show_labels)
         self._show_labels()
+        self.bounding_item: BoundingItem | None = None
+        if bounds:
+            self.bounding_item = BoundingItem()
+            scene = self.view.scene()
+            assert scene is not None
+            scene.addItem(self.bounding_item)
+            self.workspace.net_changed.connect(self._show_bounds)
+            self._show_bounds()
         viewport = self.view.viewport()
         assert viewport is not None
         self.pointer = Pointer(viewport, self.view.from_sheet)
@@ -91,6 +109,12 @@ class DemoSheet(QWidget):
     def eventFilter(self, watched: QObject | None, event: QEvent | None) -> bool:
         """Only the script's own events get through."""
         return event is not None and event.type() in USER_INPUT and not self._sending
+
+    def _show_bounds(self) -> None:
+        """The rectangle of the net on display (the rearranged one while it's approved or not), as the app does."""
+        assert self.bounding_item is not None
+        rectangle = min_area_rectangle(v.position for v in self.workspace.net.vertices)
+        self.bounding_item.set_rectangle(rectangle.corners, rectangle.area < ProjectSettings().area_threshold)
 
     def set_labels_shown(self, shown: bool) -> None:
         self._labels = shown

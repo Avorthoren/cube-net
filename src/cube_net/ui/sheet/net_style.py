@@ -5,6 +5,8 @@
 
 The values here are the defaults. Some of them are app settings the user can change (Settings -> Style); `set_sizes`
 puts the user's values in place, and everything reads them from here when it paints or hit-tests.
+
+The README's animation shows the default look: after changing a default here, run scripts/make_readme_animation.py.
 """
 
 # Width of fold edges and cuts (cuts lie fully inside their face).

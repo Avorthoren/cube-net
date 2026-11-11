@@ -61,3 +61,14 @@ def test_labels_of_the_cut_lines_new_points_too(qtbot: QtBot) -> None:
     assert sheet.workspace.cut_tool.item.labels() != ()  # the new point is named
     sheet.set_labels_shown(False)
     assert item.labels() is None and sheet.workspace.cut_tool.item.labels() == ()
+
+
+def test_the_bounding_rectangle_if_wanted(qtbot: QtBot) -> None:
+    from cube_net.core.geometry import Vec
+
+    assert DemoSheet(QSize(560, 400)).bounding_item is None
+    sheet = DemoSheet(QSize(560, 400), bounds=True)
+    qtbot.addWidget(sheet)
+    assert sheet.bounding_item is not None
+    assert set(sheet.bounding_item.corners()) == {Vec(10, 10), Vec(13, 10), Vec(13, 14), Vec(10, 14)}
+    assert not sheet.bounding_item.success()  # 12 isn't below a new project's target

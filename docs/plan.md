@@ -530,6 +530,10 @@ mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dr
 - The icon: the default net, faces filled with the default colours, transparent around it. `scripts/make_icon.py`
   draws it from the net and the colours into `src/cube_net/ui/icons/cube_net.png` (the window icon, 256 px) and
   `packaging/icons/` (`.ico` for Windows, `.icns` for macOS); a test fails when they're out of date.
+- The README's animation (`docs/media/cube-net.png`, an animated PNG): `scripts/make_readme_animation.py` plays a cut
+  with Help -> Help's engine (the real net and tools, the default style, no labels), records it and writes the APNG
+  (only the changed rectangle of each frame). Run it again whenever the default look changes (style, drawing, mouse
+  pointers); the modules that define it say so, and a test fails when the first picture no longer matches the app.
 
 ## 8. Open questions and deferred topics
 

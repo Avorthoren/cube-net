@@ -84,7 +84,8 @@ def _name(color: object) -> str:
     return str(color.name()).upper()  # type: ignore[attr-defined]
 
 
-# What the style files say, taken before anything could change it.
+# What the style files say, taken before anything could change it. The README's animation shows it: after changing
+# the defaults, run scripts/make_readme_animation.py.
 DEFAULT_STYLE = Style(
     face_colors=tuple(_name(palette.FACE_COLORS[face]) for face in range(1, 7)),  # type: ignore[arg-type]
     hatch_columns=net_style.HATCH_COLUMNS,

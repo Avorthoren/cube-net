@@ -1,10 +1,3 @@
-QT uses different plugins for "backends". `QT_QPA_PLATFORM` configures that:
- - `xcb` (default on Linux). Uses X11/Window system — creates actual windows on your screen
- - `offscreen`. Uses a virtual frame buffer — renders to memory, no window appears
- - ??? it's possible, on Wayland one must pass `wayland` in that env var
- - `windows`. Native Windows API
- - `cocoa`. Native macOS API
-
 For xcb to work these have to be installed:
 ```
 sudo apt-get update

@@ -6,6 +6,8 @@
 It looks like the real one would at that spot (the cursors of `cursors.py`; an arrow where the app shows the system's
 arrow or hand). A click shows a ring spreading from it, and while CTRL is held a key cap says so next to it: without
 them a click or a held key couldn't be seen.
+
+The README's animation shows it too: after changing it, run scripts/make_readme_animation.py.
 """
 
 import time
