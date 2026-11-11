@@ -4,6 +4,7 @@
 """Main application window."""
 
 import datetime
+import os
 from fractions import Fraction
 from pathlib import Path
 
@@ -68,9 +69,29 @@ from cube_net.ui.sheet.bounding_item import BoundingItem
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.sheet.workspace import Workspace
 from cube_net.ui.style import Style, apply_style
+from cube_net.ui.updates.appimage_update import install_appimage, start_appimage
+from cube_net.ui.updates.installation import (
+    Installation,
+    Kind,
+    ManualStepNeeded,
+    current_installation,
+    download_folder,
+)
 from cube_net.ui.updates.latest_release import LatestRelease, fetch_latest_release
+from cube_net.ui.updates.macos_update import install_macos, open_in_finder
+from cube_net.ui.updates.package_download import PackageDownload
 from cube_net.ui.updates.update_check import UpdateCheck
-from cube_net.ui.updates.update_dialogs import UpdateChoice, ask_update, tell_check_failed, tell_up_to_date
+from cube_net.ui.updates.update_dialogs import (
+    DownloadProgress,
+    UpdateChoice,
+    ask_update,
+    tell_appimage_downloaded,
+    tell_check_failed,
+    tell_macos_downloaded,
+    tell_up_to_date,
+    tell_update_failed,
+)
+from cube_net.ui.updates.windows_update import start_installer
 
 APP_TITLE = "Cube Net"
 NO_COORDINATES = "x: —   y: —"
@@ -148,8 +169,12 @@ class MainWindow(QMainWindow):
         # Help -> Help, once it has been opened.
         self.help_window: HelpWindow | None = None
 
-        # The check for updates under way, or the last one.
+        # The check for updates under way, or the last one; and the update's download.
         self._update_check: UpdateCheck | None = None
+        self._download: PackageDownload | None = None
+
+        # Quitting for an update: what happens to unsaved changes is decided already.
+        self._leaving_decided = False
 
         self.net: Net = default_net()
         net_box = self.net.bounding_box()
@@ -490,10 +515,72 @@ class MainWindow(QMainWindow):
             tell_up_to_date(self, __version__)
             return
         self.statusBar().clearMessage()
-        if ask_update(self, release, __version__) is UpdateChoice.DOWNLOAD:
-            QDesktopServices.openUrl(QUrl(release.page))
+        installation = current_installation()
+        can_update = installation is not None and release.package() is not None
+        if ask_update(self, release, __version__, can_update) is UpdateChoice.DOWNLOAD:
+            if installation is not None and can_update:
+                self._update_to(release, installation)
+            else:
+                QDesktopServices.openUrl(QUrl(release.page))  # run from the source: it can't update itself
         elif not manual:
             self.settings.skipped_update = release.version  # turned down: the daily check won't offer it again
+
+    def _update_to(self, release: LatestRelease, installation: Installation) -> None:
+        """Download this system's package of `release` (unsaved changes are asked about first: the application
+        restarts at the end), check it, and have it take this installation's place."""
+        package = release.package()
+        if package is None or not self._confirm_leaving_project():
+            return
+        name, file = package
+        download = PackageDownload(name, file, release.checksums(), download_folder(installation), self)
+        progress = DownloadProgress(release.version, self)
+        download.progress.connect(progress.show_progress)
+        progress.canceled.connect(download.cancel)
+        download.cancelled.connect(progress.close)
+        download.finished.connect(lambda path: (progress.close(), self._install_update(release, installation, path)))
+        download.failed.connect(lambda problem: (progress.close(), self._update_failed(release, problem)))
+        self._download = download
+        if self.recorder is not None:
+            self.recorder.note("updates", "download", release.version)
+        download.start()
+        progress.show()
+
+    def _install_update(self, release: LatestRelease, installation: Installation, package: Path) -> None:
+        """The checked package takes this installation's place, the new version starts, and this one quits (or the
+        user finishes it, where the application can't)."""
+        try:
+            if installation.kind is Kind.WINDOWS:
+                start_installer(package)
+            elif installation.kind is Kind.APPIMAGE:
+                start_appimage(install_appimage(package, installation.path))
+            else:
+                install_macos(package, installation.path, os.getpid())
+        except ManualStepNeeded as step:
+            if installation.kind is Kind.APPIMAGE:
+                if tell_appimage_downloaded(self, release.version, step.downloaded, step.target):
+                    start_appimage(step.downloaded)
+                    self._quit_for_update()
+            else:
+                open_in_finder(step.downloaded)
+                tell_macos_downloaded(self, release.version)
+            return
+        except OSError as error:
+            self._update_failed(release, str(error))
+            return
+        if self.recorder is not None:
+            self.recorder.note("updates", "installed", release.version)
+        self._quit_for_update()
+
+    def _quit_for_update(self) -> None:
+        """Quit for the new version: unsaved changes were asked about before the download."""
+        self._leaving_decided = True
+        self.close()
+
+    def _update_failed(self, release: LatestRelease, problem: str) -> None:
+        if self.recorder is not None:
+            self.recorder.note("updates", "failed", release.version)
+        if tell_update_failed(self, problem):
+            QDesktopServices.openUrl(QUrl(release.page))
 
     def _on_update_check_failed(self, problem: str, manual: bool) -> None:
         """Said only when the user asked; the daily check tries again at the next start (it's not done today)."""
@@ -731,7 +818,7 @@ class MainWindow(QMainWindow):
         if event is None:
             return
         self.cut_tool.cancel_drag()  # the question below would leave the mouse release unnoticed
-        if self._confirm_leaving_project():
+        if self._leaving_decided or self._confirm_leaving_project():
             event.accept()
         else:
             event.ignore()

@@ -143,6 +143,29 @@ RUSSIAN: dict[str, str] = {
         "Более новой версии не найдено: у вас последняя ({current})."
     ),
     "Couldn't check for updates: {problem}": "Не удалось проверить обновления: {problem}",
+    "Download and update": "Скачать и обновить",
+    "Update": "Обновление",
+    "Downloading {name} {version}...": "Загрузка {name} {version}...",
+    "{done} of {total}": "{done} из {total}",
+    "Couldn't update: {problem}": "Не удалось обновить: {problem}",
+    "{name} {version} is downloaded, but it couldn't take the old one's place.": (
+        "{name} {version} загружен, но не смог заменить старую версию."
+    ),
+    (
+        "The new version is {downloaded}. Start it from there (the applications menu follows it), or put it in "
+        "place yourself, in a terminal:"
+    ): (
+        "Новая версия: {downloaded}. Запустите её оттуда (меню приложений последует за ней) или поставьте на место "
+        "сами, в терминале:"
+    ),
+    "Start the new version": "Запустить новую версию",
+    (
+        "{name} {version} is downloaded and open in Finder. To finish, drag {name} onto Applications there, "
+        "replacing the old one, then start it again."
+    ): (
+        "{name} {version} загружен и открыт в Finder. Чтобы закончить, перетащите там {name} в «Программы», "
+        "заменив старую версию, и запустите его снова."
+    ),
     # Whether the project is saved.
     "Unsaved changes": "Не сохранено",
     "Saved": "Сохранено",

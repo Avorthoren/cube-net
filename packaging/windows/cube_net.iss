@@ -72,3 +72,5 @@ Name: "{autodesktop}\Cube Net"; Filename: "{app}\Cube Net.exe"; Tasks: desktopic
 
 [Run]
 Filename: "{app}\Cube Net.exe"; Description: "{cm:LaunchProgram,Cube Net}"; Flags: nowait postinstall skipifsilent
+; An update (the application starts the installer silently, then quits): the new version starts by itself.
+Filename: "{app}\Cube Net.exe"; Flags: nowait skipifnotsilent

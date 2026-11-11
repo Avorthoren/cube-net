@@ -38,8 +38,21 @@ PACKAGE_ENDINGS = {
 }
 
 
+# The release's file with the checksums of the others (the release workflow makes it).
+CHECKSUMS = "SHA256SUMS"
+
+
 class UpdateCheckError(Exception):
     """The latest release couldn't be found out: the message says why."""
+
+
+@dataclass(frozen=True)
+class ReleaseFile:
+    # Its size (bytes).
+    size: int
+
+    # Where it's downloaded from.
+    url: str
 
 
 @dataclass(frozen=True)
@@ -53,13 +66,20 @@ class LatestRelease:
     # Its page on GitHub.
     page: str
 
-    # Its files and their sizes (bytes).
-    files: dict[str, int] = field(default_factory=dict)
+    # Its files, by name.
+    files: dict[str, ReleaseFile] = field(default_factory=dict)
+
+    def package(self, platform: str | None = None) -> tuple[str, ReleaseFile] | None:
+        """The package for this system (or `platform`), with its name, if the release has one."""
+        ending = PACKAGE_ENDINGS.get(_system(platform or sys.platform))
+        return next(((name, file) for name, file in self.files.items() if ending and name.endswith(ending)), None)
 
     def package_size(self, platform: str | None = None) -> int | None:
-        """The size of the package for this system (or `platform`), if the release has one."""
-        ending = PACKAGE_ENDINGS.get(_system(platform or sys.platform))
-        return next((size for name, size in self.files.items() if ending and name.endswith(ending)), None)
+        package = self.package(platform)
+        return package[1].size if package is not None else None
+
+    def checksums(self) -> ReleaseFile | None:
+        return self.files.get(CHECKSUMS)
 
 
 def _system(platform: str) -> str:
@@ -93,7 +113,7 @@ def release_from(answer: object) -> LatestRelease:
     if not isinstance(answer, dict) or not isinstance(answer.get("tag_name"), str):
         raise UpdateCheckError("GitHub's answer has no release in it")
     files = {
-        str(asset.get("name")): int(asset.get("size", 0))
+        str(asset.get("name")): ReleaseFile(int(asset.get("size", 0)), str(asset.get("browser_download_url", "")))
         for asset in answer.get("assets") or []
         if isinstance(asset, dict)
     }

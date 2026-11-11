@@ -17,10 +17,10 @@ ANSWER = {
     "body": "- Ctrl+click deletes a point.",
     "html_url": "https://github.com/Avorthoren/cube-net/releases/tag/v1.2.0",
     "assets": [
-        {"name": "CubeNet-1.2.0-windows-x64-setup.exe", "size": 61_000_000},
-        {"name": "CubeNet-1.2.0-linux-x86_64.AppImage", "size": 78_400_000},
-        {"name": "CubeNet-1.2.0-macos-arm64.dmg", "size": 70_000_000},
-        {"name": "SHA256SUMS", "size": 300},
+        {"name": "CubeNet-1.2.0-windows-x64-setup.exe", "size": 61_000_000, "browser_download_url": "https://dl/w"},
+        {"name": "CubeNet-1.2.0-linux-x86_64.AppImage", "size": 78_400_000, "browser_download_url": "https://dl/l"},
+        {"name": "CubeNet-1.2.0-macos-arm64.dmg", "size": 70_000_000, "browser_download_url": "https://dl/m"},
+        {"name": "SHA256SUMS", "size": 300, "browser_download_url": "https://dl/sums"},
     ],
 }
 
@@ -37,6 +37,16 @@ def test_what_the_answer_says() -> None:
 )
 def test_the_size_of_this_systems_package(platform: str, size: int | None) -> None:
     assert release_from(ANSWER).package_size(platform) == size
+
+
+def test_this_systems_package_and_the_checksums() -> None:
+    release = release_from(ANSWER)
+    package = release.package("linux")
+    assert (
+        package is not None and package[0] == "CubeNet-1.2.0-linux-x86_64.AppImage" and package[1].url == "https://dl/l"
+    )
+    checksums = release.checksums()
+    assert checksums is not None and checksums.url == "https://dl/sums"
 
 
 def test_an_answer_without_a_release() -> None:

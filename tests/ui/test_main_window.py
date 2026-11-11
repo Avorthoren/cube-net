@@ -3662,7 +3662,7 @@ class TestUpdates:
         self.answer = "later"
         monkeypatch.setattr(
             "cube_net.ui.main_window.ask_update",
-            lambda _parent, release, current: self._offer(release.version),
+            lambda _parent, release, current, can_update=False: self._offer(release.version),
         )
         monkeypatch.setattr("cube_net.ui.main_window.tell_up_to_date", lambda _parent, current: self.told.append("up"))
         monkeypatch.setattr(
@@ -3775,3 +3775,148 @@ class TestUpdates:
         assert box.isChecked()  # on unless switched off
         assert box.text() == "Periodically check for updates" and box.toolTip() == "Once a day"
         assert window.settings.check_updates is True
+
+
+class TestUpdating:
+    """Download and update: the download stands in (it says done at once), installing and quitting are watched."""
+
+    def make(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> MainWindow:
+        from PyQt6.QtCore import QObject, pyqtSignal
+
+        from cube_net.ui.updates.installation import Installation, Kind
+        from cube_net.ui.updates.latest_release import LatestRelease, ReleaseFile
+
+        self.package = tmp_path / "CubeNet-1.2.0-linux-x86_64.AppImage"
+        self.done: list[str] = []
+        self.outcome = "finished"
+        test = self
+
+        class Download(QObject):
+            progress = pyqtSignal(int, int)
+            finished = pyqtSignal(object)
+            failed = pyqtSignal(str)
+            cancelled = pyqtSignal()
+
+            def __init__(self, name: str, *_: object) -> None:
+                super().__init__()
+                test.done.append(f"download {name}")
+
+            def start(self) -> None:
+                if test.outcome == "finished":
+                    self.finished.emit(test.package)
+                else:
+                    self.failed.emit("no network")
+
+            def cancel(self) -> None:
+                pass
+
+        release = LatestRelease(
+            "1.2.0",
+            "notes",
+            "https://example.com/release",
+            {self.package.name: ReleaseFile(10, "https://dl/l"), "SHA256SUMS": ReleaseFile(1, "https://dl/s")},
+        )
+        installation = Installation(Kind.APPIMAGE, tmp_path / "Cube.AppImage")
+        monkeypatch.setattr("cube_net.ui.updates.latest_release.sys.platform", "linux")
+        monkeypatch.setattr("cube_net.ui.main_window.__version__", "1.0.0")
+        monkeypatch.setattr("cube_net.ui.main_window.fetch_latest_release", lambda: release)
+        monkeypatch.setattr("cube_net.ui.main_window.current_installation", lambda: installation)
+        monkeypatch.setattr("cube_net.ui.main_window.download_folder", lambda installation: tmp_path)
+        monkeypatch.setattr("cube_net.ui.main_window.PackageDownload", Download)
+        monkeypatch.setattr("cube_net.ui.main_window.ask_update", self.ask)
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.install_appimage",
+            lambda new, current: self.done.append(f"install {new.name}") or new,
+        )
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.start_appimage", lambda path: self.done.append(f"start {path.name}")
+        )
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.QDesktopServices.openUrl", lambda url: self.done.append(f"open {url.toString()}")
+        )
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def ask(self, _parent: object, release: object, current: str, can_update: bool = False) -> object:
+        from cube_net.ui.updates.update_dialogs import UpdateChoice
+
+        self.done.append(f"asked, can update: {can_update}")
+        return UpdateChoice.DOWNLOAD
+
+    def check(self, qtbot: QtBot, window: MainWindow) -> None:
+        window.check_for_updates(manual=True)
+        assert window._update_check is not None
+        qtbot.waitUntil(lambda: not window._update_check.running())  # type: ignore[union-attr]
+        qtbot.wait(20)
+
+    def test_downloaded_installed_started_and_quit(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        window = self.make(qtbot, tmp_path, monkeypatch)
+        self.check(qtbot, window)
+        assert self.done == [
+            "asked, can update: True",
+            "download CubeNet-1.2.0-linux-x86_64.AppImage",
+            "install CubeNet-1.2.0-linux-x86_64.AppImage",
+            "start CubeNet-1.2.0-linux-x86_64.AppImage",
+        ]
+        assert not window.isVisible()  # quit for the new version
+
+    def test_unsaved_changes_first_and_not_again(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.save_changes_dialog import SaveChoice
+
+        window = self.make(qtbot, tmp_path, monkeypatch)
+        window._on_target_changed(F(5))  # an unsaved change
+        questions: list[str] = []
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.ask_save_changes", lambda *_: questions.append("asked") or SaveChoice.CANCEL
+        )
+        self.check(qtbot, window)
+        assert questions == ["asked"] and "download CubeNet-1.2.0-linux-x86_64.AppImage" not in self.done  # cancelled
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.ask_save_changes", lambda *_: questions.append("asked") or SaveChoice.DISCARD
+        )
+        self.check(qtbot, window)
+        assert questions == ["asked", "asked"]  # once for this update, not again when it quits
+        assert not window.isVisible()
+
+    def test_a_failed_download_offers_the_page(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        window = self.make(qtbot, tmp_path, monkeypatch)
+        self.outcome = "failed"
+        told: list[str] = []
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.tell_update_failed", lambda _parent, problem: told.append(problem) or True
+        )
+        self.check(qtbot, window)
+        assert told == ["no network"] and self.done[-1] == "open https://example.com/release"
+        assert window.isVisible()
+
+    def test_by_hand_when_it_cant_be_put_in_place(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.updates.installation import ManualStepNeeded
+
+        window = self.make(qtbot, tmp_path, monkeypatch)
+
+        def locked(new: Path, current: Path) -> Path:
+            raise ManualStepNeeded(new, Path("/opt") / new.name)
+
+        monkeypatch.setattr("cube_net.ui.main_window.install_appimage", locked)
+        monkeypatch.setattr("cube_net.ui.main_window.tell_appimage_downloaded", lambda *_: False)  # "Close"
+        self.check(qtbot, window)
+        assert window.isVisible() and not any(step.startswith("start") for step in self.done)
+
+    def test_run_from_the_source_it_opens_the_page(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        window = self.make(qtbot, tmp_path, monkeypatch)
+        monkeypatch.setattr("cube_net.ui.main_window.current_installation", lambda: None)
+        self.check(qtbot, window)
+        assert self.done == ["asked, can update: False", "open https://example.com/release"]

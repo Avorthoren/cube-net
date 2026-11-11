@@ -90,6 +90,12 @@ def test_windows_opens_project_files_with_it() -> None:
     assert "uninsdeletekey" in script  # and the uninstaller takes it away
 
 
+def test_after_an_update_the_new_version_starts() -> None:
+    """The application runs the installer silently for an update: then (only then) it starts the new version."""
+    script = (build.ROOT / "packaging/windows/cube_net.iss").read_text()
+    assert 'Filename: "{app}\\Cube Net.exe"; Flags: nowait skipifnotsilent' in script
+
+
 def test_macos_opens_project_files_with_it() -> None:
     spec = (build.ROOT / "packaging/cube_net.spec").read_text()
     assert '"public.filename-extension": ["cubenet"]' in spec

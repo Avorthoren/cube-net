@@ -575,11 +575,17 @@ Updates. The latest release on GitHub (published, not a pre-release) is compared
 than every release.
 - Help -> Check for updates asks GitHub at once (in the background; the status bar says it's checking). If the latest
   release is newer: "Cube Net 1.2.0 is available (you have 1.0.0).", its notes, the size of this system's package,
-  "Open the download page" (its page on GitHub) and "Not now". Otherwise "No newer version found", or why the check
-  failed.
+  "Download and update" and "Not now" (a copy that can't update itself, run from the source, has "Open the download
+  page" instead: its page on GitHub). Otherwise "No newer version found", or why the check failed.
 - The daily check (Settings -> Preferences, on by default): at the first start of each calendar day (the system's
   clock) whose check works; a failed one is silent and tried again at the next start. It offers the latest release
   only if it's newer than the application and than the version the user turned down ("Not now") when the daily
   check offered it: that one is never offered again by it, while the menu's check still does.
-- Phase 2 (to do): "Download and update" instead of opening the page: the download with its progress and checksum,
-  and installing it, per system.
+- Download and update: unsaved changes are asked about first (the application restarts; cancelling cancels the
+  update). The package downloads with its progress (Cancel stops it), and is checked against the release's
+  SHA256SUMS: a release without it, or a different file, isn't installed. Then: Windows starts the new installer
+  silently and quits (the installer starts the new version); Linux puts the new AppImage in the old one's place (its
+  own name; in a folder that needs administrator rights, with the desktop's password window, or else it stays in
+  Downloads and the user starts it from there or moves it) and starts it; macOS has a helper swap the new
+  Cube Net.app in after it quit, and start it (in a folder it can't write, the .dmg opens in Finder for dragging by
+  hand). If it fails, the release's page can be opened instead.
