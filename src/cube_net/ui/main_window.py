@@ -17,7 +17,6 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QLabel,
     QMainWindow,
-    QMessageBox,
     QSizePolicy,
     QToolBar,
     QWidget,
@@ -42,11 +41,13 @@ from cube_net.core.update_policy import due_today, offer_automatically
 from cube_net.core.version import newer
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.desktop_integration import AppImage, DesktopEntry, data_home
+from cube_net.ui.dialogs.message_window import MessageIcon, tell
 from cube_net.ui.help.about_dialog import AboutDialog
 from cube_net.ui.help.help_window import HelpWindow
 from cube_net.ui.i18n import TRANSLATIONS, Language, bind, tr
 from cube_net.ui.i18n.errors import error_text
 from cube_net.ui.instruments.bounding_controls import BoundingControls
+from cube_net.ui.instruments.button_look import tool_buttons_style
 from cube_net.ui.instruments.logging_icons import record_icon, stop_icon
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
 from cube_net.ui.menu_entry_dialog import ask_menu_entry, confirm_menu_entry_removal
@@ -294,6 +295,7 @@ class MainWindow(QMainWindow):
         bind(toolbar, toolbar.setWindowTitle, "Instruments")
         toolbar.setObjectName("instruments")
         toolbar.setMovable(False)
+        toolbar.setStyleSheet(tool_buttons_style())  # its buttons look like buttons
         self.addToolBar(Qt.ToolBarArea.LeftToolBarArea, toolbar)
         self.ruler_action = QAction(self)
         bind(self.ruler_action, self.ruler_action.setText, "Ruler")
@@ -438,7 +440,7 @@ class MainWindow(QMainWindow):
         try:
             save_project(self._project(), path)
         except ProjectFileError as e:
-            QMessageBox.critical(self, APP_TITLE, error_text(e))
+            tell(self, APP_TITLE, error_text(e), icon=MessageIcon.ERROR)
             return False
         self.project_path = path
         self.settings.last_project = path
@@ -456,7 +458,7 @@ class MainWindow(QMainWindow):
         try:
             self._load_and_show(path)
         except ProjectFileError as e:
-            QMessageBox.critical(self, APP_TITLE, error_text(e))
+            tell(self, APP_TITLE, error_text(e), icon=MessageIcon.ERROR)
             return False
         return True
 
@@ -517,7 +519,7 @@ class MainWindow(QMainWindow):
         self.statusBar().clearMessage()
         installation = current_installation()
         can_update = installation is not None and release.package() is not None
-        if ask_update(self, release, __version__, can_update) is UpdateChoice.DOWNLOAD:
+        if ask_update(self, release, __version__, can_update, automatic=not manual) is UpdateChoice.DOWNLOAD:
             if installation is not None and can_update:
                 self._update_to(release, installation)
             else:
@@ -536,9 +538,9 @@ class MainWindow(QMainWindow):
         progress = DownloadProgress(release.version, self)
         download.progress.connect(progress.show_progress)
         progress.canceled.connect(download.cancel)
-        download.cancelled.connect(progress.close)
-        download.finished.connect(lambda path: (progress.close(), self._install_update(release, installation, path)))
-        download.failed.connect(lambda problem: (progress.close(), self._update_failed(release, problem)))
+        download.cancelled.connect(progress.finish)
+        download.finished.connect(lambda path: (progress.finish(), self._install_update(release, installation, path)))
+        download.failed.connect(lambda problem: (progress.finish(), self._update_failed(release, problem)))
         self._download = download
         if self.recorder is not None:
             self.recorder.note("updates", "download", release.version)
@@ -642,7 +644,12 @@ class MainWindow(QMainWindow):
             self.menu_entry_action.setChecked(wanted)  # the checkbox follows; the setting is already what it says
 
     def _menu_entry_failed(self, error: OSError) -> None:
-        QMessageBox.warning(self, APP_TITLE, tr("Couldn't change the applications menu: {problem}", problem=error))
+        tell(
+            self,
+            APP_TITLE,
+            tr("Couldn't change the applications menu: {problem}", problem=error),
+            icon=MessageIcon.WARNING,
+        )
 
     def open_project_at_start(self, path: Path) -> None:
         """At start, with a project file to open (double-clicked, or given on the command line): that one instead of

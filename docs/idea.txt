@@ -27,6 +27,12 @@ or with CTRL+S. The saved project contains the full snapshot of the current stat
 if any), project settings, the history of actions and the redo stack (see the undo/redo section below).
 Standard behaviour for unsaved changes: on New, Open and Quit, if the current project has unsaved changes, the
 application asks "Save changes?" (Save / Don't save / Cancel).
+All the application's questions and messages (this one, the errors, About, the updates' windows...) are small windows
+with their own title bar: the title and a close button, no minimize or maximize. Tab goes from button to button,
+Enter and Space press the one that has the focus (at first the default one: the expected answer, or the harmless
+one when the other loses something), and Escape does what the close button does: Cancel (or what stands for it), or
+the only button of a message. Exceptions: About (no button selected), the daily check's offer of an update and the
+update's download (see Updates).
 The user always sees whether there are unsaved changes: a "*" before the project's name in the window title (on macOS
 a dot in the close button, as usual there), and on the right of the status bar "Unsaved changes" (orange) or "Saved"
 (nothing for a new project nobody has changed). Saving says where it saved for a few seconds ("Saved to <path>"), so
@@ -531,9 +537,9 @@ Help menu (to the right of Settings): About, Help, Check for updates.
    Viktor Podust", "Free software under the GNU GPL v3 or later, with ABSOLUTELY NO WARRANTY" (the license's name links
    to https://www.gnu.org/licenses/gpl-3.0.html) and "Source code: github.com/Avorthoren/cube-net" (a link). All its
    text can be selected and copied; the "Copy and close" button at the bottom copies all of it (a line per line, with
-   the links themselves instead of "this puzzle" and the license's name) and closes the window. Escape closes it, as does the close button in its corner. It has no minimize or maximize buttons (nor
-   does the next one): Ubuntu's GNOME draws them on every window it frames, so these two windows draw their own title
-   bar (title and close button; dragging it moves the window).
+   the links themselves instead of "this puzzle" and the license's name) and closes the window. Escape closes it, as does the close button in its corner. It has no minimize or maximize buttons:
+   Ubuntu's GNOME draws them on every window it frames, so it draws its own title bar (title and close button;
+   dragging it moves the window), like all the application's small windows.
 2. Help (F1): a big window (an ordinary one, it can be resized) that explains the application, with animations: what
    a cube net is (a simple polygon that folds onto the whole surface of the unit cube without overlaps, so its area
    is always 6); 1. make a cut (animation: a cut of two segments, not aligned, from A_1 to the middle of A_3-B_3);
@@ -576,13 +582,17 @@ than every release.
 - Help -> Check for updates asks GitHub at once (in the background; the status bar says it's checking). If the latest
   release is newer: "Cube Net 1.2.0 is available (you have 1.0.0).", its notes, the size of this system's package,
   "Download and update" and "Not now" (a copy that can't update itself, run from the source, has "Open the download
-  page" instead: its page on GitHub). Otherwise "No newer version found", or why the check failed.
+  page" instead: its page on GitHub), the first one selected. Otherwise "No newer version found", or why the check
+  failed.
 - The daily check (Settings -> Preferences, on by default): at the first start of each calendar day (the system's
   clock) whose check works; a failed one is silent and tried again at the next start. It offers the latest release
   only if it's newer than the application and than the version the user turned down ("Not now") when the daily
-  check offered it: that one is never offered again by it, while the menu's check still does.
+  check offered it: that one is never offered again by it, while the menu's check still does. Its offer starts with
+  no button selected (the user didn't ask for it: a key pressed just as it appears doesn't answer it): Tab first;
+  Escape still means "Not now".
 - Download and update: unsaved changes are asked about first (the application restarts; cancelling cancels the
-  update). The package downloads with its progress (Cancel stops it), and is checked against the release's
+  update). The package downloads with its progress (only its Cancel button stops it, and it isn't
+  selected at first: the window has no close button, and Escape does nothing), and is checked against the release's
   SHA256SUMS: a release without it, or a different file, isn't installed. Then: Windows starts the new installer
   silently and quits (the installer starts the new version); Linux puts the new AppImage in the old one's place (its
   own name; in a folder that needs administrator rights, with the desktop's password window, or else it stays in

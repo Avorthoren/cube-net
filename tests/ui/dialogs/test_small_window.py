@@ -4,7 +4,7 @@
 from PyQt6.QtCore import Qt
 from pytestqt.qtbot import QtBot
 
-from cube_net.ui.help.small_window import SmallWindow
+from cube_net.ui.dialogs.small_window import SmallWindow
 
 
 def make(qtbot: QtBot) -> SmallWindow:

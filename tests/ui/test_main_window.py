@@ -1535,13 +1535,12 @@ class TestProjects:
     def test_opening_a_bad_file_tells_and_changes_nothing(
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from PyQt6.QtWidgets import QMessageBox
 
         window = self.make(qtbot, tmp_path)
         self.close_line(window)
         before = self.shown(window)
         told: list[str] = []
-        monkeypatch.setattr(QMessageBox, "critical", lambda _p, _t, text: told.append(text))
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda _parent, _title, text, **_: told.append(text))
         bad = tmp_path / "bad.cubenet"
         bad.write_text("Hello!")
         assert not window.open_project_from(bad)
@@ -1552,11 +1551,10 @@ class TestProjects:
     def test_saving_to_a_bad_place_tells_and_changes_nothing(
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from PyQt6.QtWidgets import QMessageBox
 
         window = self.make(qtbot, tmp_path)
         told: list[str] = []
-        monkeypatch.setattr(QMessageBox, "critical", lambda _p, _t, text: told.append(text))
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda _parent, _title, text, **_: told.append(text))
         assert not window.save_project_to(tmp_path / "nowhere" / "cube.cubenet")
         assert len(told) == 1
         assert window.project_path is None
@@ -1793,10 +1791,9 @@ class TestUnsavedChanges:
     def test_a_failed_save_leaves_the_changes_unsaved(
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from PyQt6.QtWidgets import QMessageBox
 
         window = self.make(qtbot, tmp_path)
-        monkeypatch.setattr(QMessageBox, "critical", lambda *_: None)
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda *_, **__: None)
         self.start_line(window)
         assert not window.save_project_to(tmp_path / "nowhere" / "cube.cubenet")
         assert window.is_dirty
@@ -1892,12 +1889,11 @@ class TestUnsavedChanges:
         assert window.is_dirty
 
     def test_new_save_but_saving_fails(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        from PyQt6.QtWidgets import QMessageBox
 
         from cube_net.ui.save_changes_dialog import SaveChoice
 
         window = self.make(qtbot, tmp_path)
-        monkeypatch.setattr(QMessageBox, "critical", lambda *_: None)
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda *_, **__: None)
         self.answer(monkeypatch, SaveChoice.SAVE)
         self.file_dialogs(monkeypatch, save=str(tmp_path / "nowhere" / "cube.cubenet"))
         self.close_line(window)
@@ -2182,10 +2178,9 @@ class TestReopeningAtStart:
     def test_a_file_that_failed_to_open_is_not_remembered(
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from PyQt6.QtWidgets import QMessageBox
 
         path = self.worked_on(qtbot, tmp_path)
-        monkeypatch.setattr(QMessageBox, "critical", lambda *_: None)
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda *_, **__: None)
         window = self.make(qtbot, tmp_path)
         assert not window.open_project_from(tmp_path / "missing.cubenet")
         assert window.settings.last_project == path
@@ -2193,10 +2188,9 @@ class TestReopeningAtStart:
     def test_a_failed_save_is_not_remembered(
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from PyQt6.QtWidgets import QMessageBox
 
         path = self.worked_on(qtbot, tmp_path)
-        monkeypatch.setattr(QMessageBox, "critical", lambda *_: None)
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda *_, **__: None)
         window = self.make(qtbot, tmp_path)
         assert not window.save_project_to(tmp_path / "nowhere" / "cube.cubenet")
         assert window.settings.last_project == path
@@ -3291,12 +3285,11 @@ class TestLanguage:
     def test_error_messages_in_the_language(
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from PyQt6.QtWidgets import QMessageBox
 
         window = self.make(qtbot, tmp_path)
         self.choose(window, "Русский")
         told: list[str] = []
-        monkeypatch.setattr(QMessageBox, "critical", lambda _p, _t, text: told.append(text))
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda _parent, _title, text, **_: told.append(text))
         bad = tmp_path / "bad.cubenet"
         bad.write_text("Hello!")
         window.open_project_from(bad)
@@ -3623,10 +3616,9 @@ class TestMenuEntry:
     def test_a_failure_says_so_and_changes_nothing(
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from PyQt6.QtWidgets import QMessageBox
 
         warned: list[str] = []
-        monkeypatch.setattr(QMessageBox, "warning", lambda _parent, _title, text: warned.append(text))
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda _parent, _title, text, **_: warned.append(text))
         window = self.make(qtbot, tmp_path, self.appimage(tmp_path))
         monkeypatch.setattr(window.desktop_entry, "install", lambda appimage: (_ for _ in ()).throw(OSError("full")))
         box = window.settings_panel.preferences.menu_entry
@@ -3657,12 +3649,15 @@ class TestUpdates:
         monkeypatch.setattr("cube_net.ui.main_window.fetch_latest_release", fetch)
         monkeypatch.setattr("cube_net.ui.main_window.__version__", "1.0.0")
         self.offered: list[str] = []
+        self.automatic: list[bool] = []
         self.told: list[str] = []
         self.opened: list[str] = []
         self.answer = "later"
         monkeypatch.setattr(
             "cube_net.ui.main_window.ask_update",
-            lambda _parent, release, current, can_update=False: self._offer(release.version),
+            lambda _parent, release, current, can_update=False, automatic=False: self._offer(
+                release.version, automatic
+            ),
         )
         monkeypatch.setattr("cube_net.ui.main_window.tell_up_to_date", lambda _parent, current: self.told.append("up"))
         monkeypatch.setattr(
@@ -3675,10 +3670,11 @@ class TestUpdates:
         qtbot.addWidget(window)
         return window
 
-    def _offer(self, version: str) -> object:
+    def _offer(self, version: str, automatic: bool) -> object:
         from cube_net.ui.updates.update_dialogs import UpdateChoice
 
         self.offered.append(version)
+        self.automatic.append(automatic)
         return UpdateChoice.DOWNLOAD if self.answer == "download" else UpdateChoice.LATER
 
     def check(self, qtbot: QtBot, window: MainWindow, manual: bool) -> None:
@@ -3733,6 +3729,7 @@ class TestUpdates:
         assert self.offered == ["1.2.0"]  # not again
         self.check(qtbot, window, manual=True)
         assert self.offered == ["1.2.0", "1.2.0"]  # the menu still offers it
+        assert self.automatic == [True, False]  # the daily check's offer starts with no button selected
 
     def test_a_newer_one_than_the_turned_down_one(
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -3840,7 +3837,9 @@ class TestUpdating:
         qtbot.waitExposed(window)
         return window
 
-    def ask(self, _parent: object, release: object, current: str, can_update: bool = False) -> object:
+    def ask(
+        self, _parent: object, release: object, current: str, can_update: bool = False, automatic: bool = False
+    ) -> object:
         from cube_net.ui.updates.update_dialogs import UpdateChoice
 
         self.done.append(f"asked, can update: {can_update}")

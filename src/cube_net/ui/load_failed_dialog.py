@@ -5,8 +5,9 @@
 
 from enum import Enum
 
-from PyQt6.QtWidgets import QMessageBox, QWidget
+from PyQt6.QtWidgets import QDialogButtonBox, QWidget
 
+from cube_net.ui.dialogs.message_window import MessageIcon, MessageWindow
 from cube_net.ui.i18n import tr
 
 
@@ -17,16 +18,15 @@ class AfterLoadFailed(Enum):
 
 def ask_after_load_failed(parent: QWidget | None, message: str) -> AfterLoadFailed:
     """Tell why it failed, and suggest a new project. Closing the question means just that."""
-    box = QMessageBox(parent)
-    box.setIcon(QMessageBox.Icon.Warning)
-    box.setWindowTitle(tr("Can't open the project"))
-    box.setText(message)
-    box.setInformativeText(tr("Start a new project, or open another one?"))
-    new_project = box.addButton(tr("New project"), QMessageBox.ButtonRole.AcceptRole)
-    open_another = box.addButton(tr("&Open..."), QMessageBox.ButtonRole.ActionRole)
-    box.setDefaultButton(new_project)
-    box.setEscapeButton(new_project)
-    box.exec()
-    clicked = box.clickedButton()
-    box.deleteLater()  # its parent would keep it for as long as the window lives
-    return AfterLoadFailed.OPEN_ANOTHER if clicked is open_another else AfterLoadFailed.NEW_PROJECT
+    window = MessageWindow(
+        tr("Can't open the project"),
+        message,
+        tr("Start a new project, or open another one?"),
+        MessageIcon.WARNING,
+        parent,
+    )
+    new_project = window.add(tr("New project"), QDialogButtonBox.ButtonRole.AcceptRole)
+    open_another = window.add(tr("&Open..."), QDialogButtonBox.ButtonRole.ActionRole)
+    window.set_default(new_project)
+    window.set_escape(new_project)
+    return AfterLoadFailed.OPEN_ANOTHER if window.ask() is open_another else AfterLoadFailed.NEW_PROJECT

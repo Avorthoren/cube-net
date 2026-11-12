@@ -4,25 +4,26 @@
 from collections.abc import Callable
 
 from PyQt6.QtCore import QCoreApplication, QEvent, Qt, QTimer
-from PyQt6.QtWidgets import QApplication, QMessageBox, QWidget
+from PyQt6.QtWidgets import QApplication, QWidget
 from pytestqt.qtbot import QtBot
 
+from cube_net.ui.dialogs.message_window import MessageWindow
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
 
 
-def answering(act: Callable[[QMessageBox], None]) -> None:
+def answering(act: Callable[[MessageWindow], None]) -> None:
     """Once the question is up, do this to it."""
 
     def answer() -> None:
         box = QApplication.activeModalWidget()
-        assert isinstance(box, QMessageBox)
+        assert isinstance(box, MessageWindow)
         act(box)
 
     QTimer.singleShot(0, answer)
 
 
-def click_button(text: str) -> Callable[[QMessageBox], None]:
-    def click(box: QMessageBox) -> None:
+def click_button(text: str) -> Callable[[MessageWindow], None]:
+    def click(box: MessageWindow) -> None:
         next(button for button in box.buttons() if button.text() == text).click()
 
     return click
@@ -51,7 +52,7 @@ def test_escape_means_a_new_project(qtbot: QtBot) -> None:
 def test_it_tells_why(qtbot: QtBot) -> None:
     seen: list[str] = []
 
-    def look(box: QMessageBox) -> None:
+    def look(box: MessageWindow) -> None:
         seen.append(box.text())
         click_button("New project")(box)
 
@@ -66,4 +67,4 @@ def test_it_does_not_stay_behind(qtbot: QtBot) -> None:
     answering(click_button("New project"))
     ask_after_load_failed(parent, "Oops.")
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    assert parent.findChildren(QMessageBox) == []
+    assert parent.findChildren(MessageWindow) == []

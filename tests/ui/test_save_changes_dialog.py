@@ -5,25 +5,26 @@ from collections.abc import Callable
 
 import pytest
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QApplication, QMessageBox
+from PyQt6.QtWidgets import QApplication, QDialogButtonBox
 from pytestqt.qtbot import QtBot
 
+from cube_net.ui.dialogs.message_window import MessageWindow
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 
 
-def answering(act: Callable[[QMessageBox], None]) -> None:
+def answering(act: Callable[[MessageWindow], None]) -> None:
     """Once the question is up, do this to it."""
 
     def answer() -> None:
         box = QApplication.activeModalWidget()
-        assert isinstance(box, QMessageBox)
+        assert isinstance(box, MessageWindow)
         act(box)
 
     QTimer.singleShot(0, answer)
 
 
-def clicking(button: QMessageBox.StandardButton) -> Callable[[QMessageBox], None]:
-    def click(box: QMessageBox) -> None:
+def clicking(button: QDialogButtonBox.StandardButton) -> Callable[[MessageWindow], None]:
+    def click(box: MessageWindow) -> None:
         found = box.button(button)
         assert found is not None
         found.click()
@@ -34,12 +35,12 @@ def clicking(button: QMessageBox.StandardButton) -> Callable[[QMessageBox], None
 @pytest.mark.parametrize(
     ("button", "choice"),
     [
-        (QMessageBox.StandardButton.Save, SaveChoice.SAVE),
-        (QMessageBox.StandardButton.Discard, SaveChoice.DISCARD),
-        (QMessageBox.StandardButton.Cancel, SaveChoice.CANCEL),
+        (QDialogButtonBox.StandardButton.Save, SaveChoice.SAVE),
+        (QDialogButtonBox.StandardButton.Discard, SaveChoice.DISCARD),
+        (QDialogButtonBox.StandardButton.Cancel, SaveChoice.CANCEL),
     ],
 )
-def test_the_answers(qtbot: QtBot, button: QMessageBox.StandardButton, choice: SaveChoice) -> None:
+def test_the_answers(qtbot: QtBot, button: QDialogButtonBox.StandardButton, choice: SaveChoice) -> None:
     answering(clicking(button))
     assert ask_save_changes(None, "cube.cubenet") is choice
 
@@ -57,11 +58,11 @@ def test_escape_means_cancel(qtbot: QtBot) -> None:
 def test_what_it_says(qtbot: QtBot) -> None:
     seen: dict[str, object] = {}
 
-    def look(box: QMessageBox) -> None:
-        discard = box.button(QMessageBox.StandardButton.Discard)
+    def look(box: MessageWindow) -> None:
+        discard = box.button(QDialogButtonBox.StandardButton.Discard)
         assert discard is not None
         seen.update(text=box.text(), discard=discard.text(), default=box.defaultButton())
-        clicking(QMessageBox.StandardButton.Cancel)(box)
+        clicking(QDialogButtonBox.StandardButton.Cancel)(box)
 
     answering(look)
     ask_save_changes(None, "cube.cubenet")
@@ -76,7 +77,7 @@ def test_it_does_not_stay_behind(qtbot: QtBot) -> None:
 
     parent = QWidget()
     qtbot.addWidget(parent)
-    answering(clicking(QMessageBox.StandardButton.Cancel))
+    answering(clicking(QDialogButtonBox.StandardButton.Cancel))
     ask_save_changes(parent, "cube.cubenet")
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    assert parent.findChildren(QMessageBox) == []
+    assert parent.findChildren(MessageWindow) == []

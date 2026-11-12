@@ -4,21 +4,25 @@
 """`Section`: a titled part of a settings tab, with a button that restores its defaults (after asking)."""
 
 from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QDialogButtonBox, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from cube_net.ui.dialogs.message_window import MessageIcon, MessageWindow
 from cube_net.ui.i18n import bind, tr
 
 
 def confirm_restore(parent: QWidget | None, section: str) -> bool:
     """Ask before the section's values are replaced by the defaults."""
-    answer = QMessageBox.question(
-        parent,
+    window = MessageWindow(
         tr("Restore default"),
         tr('Restore the default values of "{section}"?', section=tr(section)),
-        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        QMessageBox.StandardButton.No,
+        icon=MessageIcon.QUESTION,
+        parent=parent,
     )
-    return answer == QMessageBox.StandardButton.Yes
+    yes = window.add_standard(QDialogButtonBox.StandardButton.Yes)
+    no = window.add_standard(QDialogButtonBox.StandardButton.No)
+    window.set_default(no)
+    window.set_escape(no)
+    return window.ask() is yes
 
 
 class Section(QWidget):

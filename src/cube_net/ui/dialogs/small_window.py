@@ -1,18 +1,31 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""`SmallWindow`: what the Help menu's small windows have in common: their own title bar, with just the title and a
-close button.
+"""`SmallWindow`: what the application's small windows have in common (its questions, messages, About, the update's):
+their own title bar, with just the title and a close button.
 
 The window manager's title bar can't be used: Ubuntu's GNOME on X11 draws minimize and maximize buttons on every window
 (by the desktop's button layout), even when the window says it can't be minimized or maximized; they just do nothing.
 So these windows have no frame from the window manager. The title bar here moves the window when dragged, like a real
 one (the window manager does the moving), and Escape closes the window.
+
+A window may start with no button selected (`select_no_button`: Enter and Space do nothing until Tab goes to one),
+and one that mustn't be closed by the user has no close button and ignores Escape (`make_unclosable`).
 """
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QIcon, QMouseEvent
-from PyQt6.QtWidgets import QDialog, QFrame, QHBoxLayout, QLabel, QStyle, QToolButton, QVBoxLayout, QWidget
+from PyQt6.QtGui import QCloseEvent, QIcon, QKeyEvent, QMouseEvent
+from PyQt6.QtWidgets import (
+    QDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QStyle,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from cube_net.ui.i18n import bind
 
@@ -34,6 +47,7 @@ class TitleBar(QWidget):
         self.close_button.setIcon(QIcon.fromTheme("window-close-symbolic", QIcon.fromTheme("window-close", fallback)))
         bind(self.close_button, self.close_button.setToolTip, "Close")
         self.close_button.setAutoRaise(True)
+        self.close_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Tab goes through the window's own buttons
         layout = QHBoxLayout(self)
         layout.setContentsMargins(8, 4, 4, 4)
         layout.addSpacing(self.close_button.sizeHint().width())  # so that the title is in the middle
@@ -74,3 +88,42 @@ class SmallWindow(QDialog):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(frame)
+        self._no_button_selected = False
+        self._closable = True
+
+    def select_no_button(self) -> None:
+        """Start with no button selected: Enter and Space do nothing until Tab goes to a button."""
+        self._no_button_selected = True
+        for button in self.findChildren(QPushButton):
+            button.setDefault(False)
+        self.setFocus()  # the window itself, so that it doesn't go to the first button when the window is activated
+
+    def make_unclosable(self) -> None:
+        """No close button, and Escape does nothing: the window closes itself (`close`, `accept`, `done`...)."""
+        self._closable = False
+        button = self.title_bar.close_button
+        policy = button.sizePolicy()
+        policy.setRetainSizeWhenHidden(True)  # the title stays in the middle
+        button.setSizePolicy(policy)
+        button.hide()
+
+    def setVisible(self, visible: bool) -> None:
+        super().setVisible(visible)
+        if visible and self._no_button_selected:
+            # Shown, QDialog makes the first button the default one when there's none: undone.
+            for button in self.findChildren(QPushButton):
+                if not button.hasFocus():
+                    button.setDefault(False)
+
+    def keyPressEvent(self, event: QKeyEvent | None) -> None:
+        if event is not None and event.key() == Qt.Key.Key_Escape and not self._closable:
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def closeEvent(self, event: QCloseEvent | None) -> None:
+        # The system's ways of closing a window (Alt+F4) don't close an unclosable one either.
+        if event is not None and event.spontaneous() and not self._closable:
+            event.ignore()
+            return
+        super().closeEvent(event)

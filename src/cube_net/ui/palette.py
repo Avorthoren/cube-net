@@ -51,6 +51,17 @@ RULER = QColor("#C5221F")
 RULER_TEXT = QColor("#000000")
 RULER_LABEL_BACKGROUND = QColor(255, 255, 255, 210)
 
+# The instrument panel's buttons: raised (lit from above), a little darker under the mouse, pushed in while pressed or
+# switched on (the Ruler, the Bounds).
+TOOL_BUTTON_TOP = QColor("#FFFFFF")
+TOOL_BUTTON_BOTTOM = QColor("#E3E6EA")
+TOOL_BUTTON_BORDER = QColor("#A9AEB5")
+TOOL_BUTTON_HOVER_BOTTOM = QColor("#D6DAE0")
+TOOL_BUTTON_HOVER_BORDER = QColor("#7C828A")
+TOOL_BUTTON_DOWN_TOP = QColor("#C6CBD2")
+TOOL_BUTTON_DOWN_BOTTOM = QColor("#E0E3E7")
+TOOL_BUTTON_DOWN_BORDER = QColor("#5F6368")
+
 # The status bar's word on the project: unsaved changes (it should catch the eye), or all saved (quiet).
 UNSAVED = QColor("#E37400")
 SAVED = QColor("#5F6368")

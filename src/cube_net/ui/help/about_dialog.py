@@ -10,7 +10,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QApplication, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from cube_net import __version__, __version_date__
-from cube_net.ui.help.small_window import SmallWindow
+from cube_net.ui.dialogs.small_window import SmallWindow
 from cube_net.ui.i18n import tr
 
 APP_NAME = "Cube Net"

@@ -22,7 +22,7 @@ In the application, **Help → Help** (F1) explains how it all works, with anima
 ## Installation
 
 Latest release is [here](https://github.com/Avorthoren/cube-net/releases/latest),
-or pick any on [Releases page](https://github.com/Avorthoren/cube-net/releases)<br/>
+or pick any on [Releases page](https://github.com/Avorthoren/cube-net/releases).<br/>
 Download the file for your system from release **Assets**. The application is free and needs nothing else installed.
 Once installed, it looks for a newer version on GitHub once a day, when it starts (you can switch that off
 in **Settings → Preferences**, and check any time with **Help → Check for updates**). When there's one,

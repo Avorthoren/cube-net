@@ -21,6 +21,7 @@ from cube_net.core.bounding import BoundingRectangle
 from cube_net.core.project_settings import MAX_AREA_THRESHOLD, MIN_AREA_THRESHOLD
 from cube_net.ui import palette
 from cube_net.ui.i18n import TRANSLATIONS, bind, tr
+from cube_net.ui.instruments.button_look import RADIUS_PX
 from cube_net.ui.sheet.bounding_item import BoundingItem
 
 # The target area has at most 3 decimals; the field's arrows change it by this much.
@@ -158,4 +159,5 @@ class BoundingControls(QObject):
                 # would change its width with every blink.
                 self.button.setFixedSize(self.button.sizeHint())
             green = palette.SUCCESS.name()
-            self.button.setStyleSheet(f"background-color: {green}; border: 1px solid {green};" if on else "")
+            on_style = f"background: {green}; border: 1px solid {green}; border-radius: {RADIUS_PX}px;"
+            self.button.setStyleSheet(on_style if on else "")  # off: the panel's look again
