@@ -10,7 +10,7 @@ readme = "docs/idea.txt"
 requires-python = ">=3.14"
 license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
-authors = [{ name = "Viktor Podust" }]
+authors = [{ name = "Viktor Podust", email = "undefeatvip@gmail.com" }]
 dependencies = [
     "PyQt6>=6.7",
     "certifi>=2024.2.2",  # the certificates of HTTPS (the update check), the same on every system

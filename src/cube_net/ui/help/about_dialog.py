@@ -25,7 +25,7 @@ PUZZLE_URL = "https://ru.braigam.com/?path=comments&puzzle=680"
 CREDITS = "by UNDEFEAT in attempts to solve {puzzle}"
 
 # Who holds the copyright, and since when.
-COPYRIGHT = "Copyright © 2026 Viktor Podust"
+COPYRIGHT = "Copyright © 2026 Viktor Podust <undefeatvip@gmail.com>"
 
 # The license (the GNU GPL v3 or any later version), with its name where the link to it goes.
 LICENSE_URL = "https://www.gnu.org/licenses/gpl-3.0.html"
@@ -69,6 +69,7 @@ class AboutDialog(SmallWindow):
         self.credits.setTextInteractionFlags(selectable | Qt.TextInteractionFlag.LinksAccessibleByMouse)
         # The notices of the GPL: who holds the copyright, that there's no warranty, the license and the source.
         self.copyright = QLabel(tr(COPYRIGHT), self)
+        self.copyright.setTextFormat(Qt.TextFormat.PlainText)  # the e-mail's <> aren't a tag
         self.copyright.setTextInteractionFlags(selectable)
         license_link = f'<a href="{LICENSE_URL}">{tr(LICENSE_NAME)}</a>'
         self.license = _link_label(tr(LICENSE_TEXT, license=license_link), self)

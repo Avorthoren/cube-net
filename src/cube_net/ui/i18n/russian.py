@@ -96,7 +96,7 @@ RUSSIAN: dict[str, str] = {
     "by UNDEFEAT in attempts to solve {puzzle}": "разработано UNDEFEAT в попытках решить {puzzle}",
     "this puzzle": "эту задачу",
     "Copy and close": "Скопировать и закрыть",
-    "Copyright © 2026 Viktor Podust": "© 2026 Viktor Podust",
+    "Copyright © 2026 Viktor Podust <undefeatvip@gmail.com>": "© 2026 Viktor Podust <undefeatvip@gmail.com>",
     "GNU GPL v3 or later": "GNU GPL версии 3 или более поздней",
     "Free software under the {license}, with ABSOLUTELY NO WARRANTY": (
         "Свободная программа под лицензией {license}, БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ"

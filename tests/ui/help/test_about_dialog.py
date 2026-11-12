@@ -92,7 +92,7 @@ class TestCopyAndClose:
             f"Version {__version__}, {__version_date__}",
             *build_info().split("\n"),
             f"by UNDEFEAT in attempts to solve {PUZZLE_URL}",
-            "Copyright © 2026 Viktor Podust",
+            "Copyright © 2026 Viktor Podust <undefeatvip@gmail.com>",
             "Free software under the GNU GPL v3 or later (https://www.gnu.org/licenses/gpl-3.0.html), with ABSOLUTELY "
             "NO WARRANTY",
             "Source code: https://github.com/Avorthoren/cube-net",
@@ -109,7 +109,7 @@ def test_the_notices_of_the_gpl(qtbot: QtBot) -> None:
     from cube_net.ui.help.about_dialog import LICENSE_URL, SOURCE_URL
 
     dialog = make(qtbot)
-    assert dialog.copyright.text() == "Copyright © 2026 Viktor Podust"
+    assert dialog.copyright.text() == "Copyright © 2026 Viktor Podust <undefeatvip@gmail.com>"
     assert "ABSOLUTELY NO WARRANTY" in dialog.license.text()
     assert f'<a href="{LICENSE_URL}">GNU GPL v3 or later</a>' in dialog.license.text()
     assert f'<a href="{SOURCE_URL}">github.com/Avorthoren/cube-net</a>' in dialog.source.text()
