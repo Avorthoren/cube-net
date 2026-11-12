@@ -21,11 +21,12 @@ In the application, **Help → Help** (F1) explains how it all works, with anima
 
 ## Installation
 
-Every release is on the [Releases page](https://github.com/Avorthoren/cube-net/releases/latest): download the file
-for your system from its **Assets**. The application is free and needs nothing else installed. Once installed, it looks
-for a newer version on GitHub once a day, when it starts (you can switch that off in **Settings → Preferences**, and
-check any time with **Help → Check for updates**). When there's one, **Download and update** downloads it, checks
-that it's the published file, installs it and restarts Cube Net.
+Latest release is [here](https://github.com/Avorthoren/cube-net/releases/latest),
+or pick any on [Releases page](https://github.com/Avorthoren/cube-net/releases)<br/>
+Download the file for your system from release **Assets**. The application is free and needs nothing else installed.
+Once installed, it looks for a newer version on GitHub once a day, when it starts (you can switch that off
+in **Settings → Preferences**, and check any time with **Help → Check for updates**). When there's one,
+**Download and update** downloads it, checks that it's the published file, installs it and restarts Cube Net.
 
 The downloads are checked automatically when they're built, but they aren't *signed*: Windows and macOS only trust
 programs signed with a certificate (Windows) or an Apple Developer account (macOS), which cost a yearly fee. The
