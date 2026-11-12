@@ -143,8 +143,9 @@ It stops at the first problem, in red, saying what to do.
 4. It fetches the tags and pulls `master` (fast-forward only). A dry run doesn't pull: it says if it would.
 5. The tag doesn't exist yet, and the version isn't lower than the highest release.
 6. `## Unreleased` in `CHANGELOG.md` has something in it.
-7. ruff finds nothing (`RUN_RUFF = False` at the top of `scripts/release.py` skips this), and the tests pass (their
-   output is shown if they don't).
+7. ruff finds nothing (`RUN_RUFF = False` at the top of `scripts/release.py` skips this), and the tests pass. While
+   they run, one line shows how far they are (`Running the tests... 812 of 1706 (47%)`); pytest's own output is shown
+   only if they fail.
 
 > [!NOTE]
 > On step 5 it compares with every tag that is a valid release version (`v` and a version), in the whole

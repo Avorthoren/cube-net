@@ -11,7 +11,8 @@ In this order, stopping at the first problem (in red, with what to do):
 5. The tag doesn't exist yet, 6. and the version isn't lower than the highest released one. Pre-releases of a version
    are all equal, and lower than the version itself: 1.2.0-alpha == 1.2.0-beta.2 < 1.2.0.
 7. CHANGELOG.md has a "## Unreleased" section with something in it: the notes of this release.
-8. ruff finds nothing (if `RUN_RUFF`), 9. and the tests pass (their output is shown if they don't).
+8. ruff finds nothing (if `RUN_RUFF`), 9. and the tests pass (one line shows their progress; their output is
+   shown if they fail).
 Then, after a summary and a "y" from the user: the version and today's date go into `cube_net/__init__.py`, the
 "Unreleased" section becomes this version's (and a new empty one starts above it), all that is committed as
 "Release vX", tagged "vX" (an annotated tag) and pushed with `master` at once (both or neither).
@@ -29,6 +30,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -55,6 +57,9 @@ UNRELEASED = "## Unreleased"
 # The lines of `__init__.py` the release sets.
 VERSION_LINE = re.compile(r'^__version__ = "[^"]*"$', re.MULTILINE)
 DATE_LINE = re.compile(r'^__version_date__ = "[^"]*"$', re.MULTILINE)
+
+# The variable that tells the tests' progress plugin where to write (scripts/pytest_progress.py).
+TEST_PROGRESS_VARIABLE = "CUBE_NET_TEST_PROGRESS_FD"
 
 # GitHub's API, and how long to wait for its answer (s).
 GITHUB_API = "https://api.github.com"
@@ -194,9 +199,58 @@ def run_checks(root: Path) -> None:
         for args, what in ((["check", "."], "ruff check"), (["format", "--check", "."], "ruff format --check")):
             say(f"Running {what}...")
             _tool(root, [sys.executable, "-m", "ruff", *args], f"{what} found problems (see above).")
-    say("Running the tests...")
-    env = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}  # no windows on the screen while they run
-    _tool(root, [sys.executable, "-m", "pytest", "-q", "--color=yes"], "The tests failed (see above).", env)
+    run_tests(root)
+
+
+def run_tests(root: Path, arguments: Sequence[str] = (), show: Callable[[str], None] | None = None) -> None:
+    """The tests, with one line of progress ("Running the tests... 812 of 1706 (47%)", updated in place on a
+    terminal), then how many passed. pytest's own output goes to a file, and is shown only if they fail.
+
+    The progress comes from `scripts/pytest_progress.py`, through a pipe of its own: pytest's printed output isn't
+    read for it."""
+    tell = show or _show_progress
+    read, write = os.pipe()
+    env = {
+        **os.environ,
+        "QT_QPA_PLATFORM": "offscreen",  # no windows on the screen while they run
+        TEST_PROGRESS_VARIABLE: str(write),
+        "PYTHONPATH": os.pathsep.join(filter(None, [str(root), os.environ.get("PYTHONPATH")])),  # for the plugin
+    }
+    command = [sys.executable, "-m", "pytest", "-q", "--color=yes", "-p", "scripts.pytest_progress", *arguments]
+    tell("Running the tests...")
+    total = 0
+    with tempfile.TemporaryFile() as output:
+        process = subprocess.Popen(
+            command, cwd=root, env=env, stdout=output, stderr=subprocess.STDOUT, pass_fds=(write,)
+        )
+        os.close(write)  # pytest's copy is the only one: the pipe ends when pytest does
+        with os.fdopen(read, encoding="utf-8") as progress:
+            for line in progress:
+                done, total = (int(n) for n in line.split())
+                percent = done * 100 // total if total else 100
+                tell(f"Running the tests... {done} of {total} ({percent}%)")
+        if process.wait() != 0:
+            _end_progress()
+            output.seek(0)
+            print(output.read().decode("utf-8", "replace"), end="")
+            raise ReleaseError("The tests failed (see above).")
+    tell(f"Running the tests... {total} passed")
+    _end_progress()
+
+
+def _show_progress(text: str) -> None:
+    """On a terminal, the line is rewritten in place; elsewhere (a log) only the end is worth a line."""
+    if sys.stdout.isatty():
+        sys.stdout.write(f"\r\033[K{text}")
+        sys.stdout.flush()
+    elif "passed" in text:
+        print(text, flush=True)
+
+
+def _end_progress() -> None:
+    if sys.stdout.isatty():
+        sys.stdout.write("\n")
+        sys.stdout.flush()
 
 
 def _tool(root: Path, command: list[str], failure: str, env: dict[str, str] | None = None) -> None:
