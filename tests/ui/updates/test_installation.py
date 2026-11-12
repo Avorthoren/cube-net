@@ -54,6 +54,42 @@ def test_or_into_downloads_if_it_cant(tmp_path: Path) -> None:
     assert folder != locked and os.access(folder, os.W_OK)
 
 
+def test_downloads_made_if_theres_none_yet(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A system may have no Downloads folder (GitHub's build machines haven't)."""
+    from cube_net.ui.updates import installation
+
+    locked = tmp_path / "opt"
+    locked.mkdir()
+    downloads = tmp_path / "home" / "Downloads"
+    monkeypatch.setattr(installation.QStandardPaths, "writableLocation", lambda _location: str(downloads))
+    locked.chmod(0o555)
+    try:
+        folder = download_folder(Installation(Kind.APPIMAGE, locked / "Cube.AppImage"))
+    finally:
+        locked.chmod(0o755)
+    assert folder == downloads and downloads.is_dir()
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can write anywhere")
+def test_a_temporary_folder_if_downloads_cant_be_made(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from cube_net.ui.updates import installation
+
+    locked = tmp_path / "opt"
+    locked.mkdir()
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(installation.QStandardPaths, "writableLocation", lambda _location: str(home / "Downloads"))
+    locked.chmod(0o555)
+    home.chmod(0o555)
+    try:
+        folder = download_folder(Installation(Kind.APPIMAGE, locked / "Cube.AppImage"))
+    finally:
+        locked.chmod(0o755)
+        home.chmod(0o755)
+    assert folder.name.startswith("cube-net-update-") and folder.is_dir()
+    folder.rmdir()
+
+
 def test_others_into_a_temporary_folder(tmp_path: Path) -> None:
     folder = download_folder(Installation(Kind.WINDOWS, tmp_path / "Cube Net.exe"))
     assert folder.is_dir() and folder.name.startswith("cube-net-update-")

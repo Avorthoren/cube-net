@@ -4,7 +4,7 @@
 from PyQt6.QtCore import Qt
 from pytestqt.qtbot import QtBot
 
-from cube_net import __version__
+from cube_net import __version__, __version_date__
 from cube_net.ui.help.about_dialog import PUZZLE_URL, AboutDialog, build_info
 
 
@@ -19,8 +19,8 @@ def make(qtbot: QtBot) -> AboutDialog:
 def test_name_version_build(qtbot: QtBot) -> None:
     dialog = make(qtbot)
     assert dialog.name.text() == "Cube Net"
-    assert __version__ == "1.0"
-    assert dialog.version.text() == "Version 1.0, 2026-11-10"
+    # The package's version and date, whatever they are (a release sets them).
+    assert dialog.version.text() == f"Version {__version__}, {__version_date__}"
     assert "Python" in dialog.build.text() and "Qt" in dialog.build.text()
     assert dialog.build.text() == build_info()
 
@@ -65,11 +65,11 @@ def test_selected_text_can_be_copied(qtbot: QtBot) -> None:
 
     dialog = make(qtbot)
     dialog.version.setSelection(0, len(dialog.version.text()))
-    assert dialog.version.selectedText() == "Version 1.0, 2026-11-10"
+    assert dialog.version.selectedText() == f"Version {__version__}, {__version_date__}"
     dialog.version.setFocus()
     qtbot.keyClick(dialog.version, Qt.Key.Key_C, Qt.KeyboardModifier.ControlModifier)
     clipboard = QApplication.clipboard()
-    assert clipboard is not None and clipboard.text() == "Version 1.0, 2026-11-10"
+    assert clipboard is not None and clipboard.text() == f"Version {__version__}, {__version_date__}"
 
 
 class TestCopyAndClose:
@@ -89,7 +89,7 @@ class TestCopyAndClose:
         assert clipboard is not None
         assert clipboard.text().split("\n") == [
             "Cube Net",
-            "Version 1.0, 2026-11-10",
+            f"Version {__version__}, {__version_date__}",
             *build_info().split("\n"),
             f"by UNDEFEAT in attempts to solve {PUZZLE_URL}",
             "Copyright © 2026 Viktor Podust",

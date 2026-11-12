@@ -66,11 +66,19 @@ def current_installation(
 
 def download_folder(installation: Installation) -> Path:
     """Where the package is downloaded: an AppImage right where it is (it then just takes the old one's place), or the
-    user's Downloads if that folder can't be written; anything else into a temporary folder."""
+    user's Downloads if that folder can't be written (made if there's none yet; a temporary folder if it can't be);
+    anything else into a temporary folder."""
     if installation.kind is Kind.APPIMAGE:
         here = installation.path.parent
         if os.access(here, os.W_OK):
             return here
         downloads = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DownloadLocation)
-        return Path(downloads) if downloads else Path.home()
+        if downloads:
+            try:
+                Path(downloads).mkdir(parents=True, exist_ok=True)  # a system may have no Downloads folder yet
+            except OSError:
+                pass
+            else:
+                if os.access(downloads, os.W_OK):
+                    return Path(downloads)
     return Path(tempfile.mkdtemp(prefix="cube-net-update-"))
