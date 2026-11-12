@@ -8,14 +8,17 @@ button in the title bar)."""
 from enum import Enum
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QFont, QIcon
 from PyQt6.QtWidgets import (
+    QApplication,
     QDialogButtonBox,
+    QHBoxLayout,
     QLabel,
     QProgressBar,
     QPushButton,
     QTextBrowser,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -23,12 +26,18 @@ from PyQt6.QtWidgets import (
 from cube_net.ui.dialogs.message_window import MessageIcon, MessageWindow, tell
 from cube_net.ui.dialogs.small_window import SmallWindow
 from cube_net.ui.i18n import tr
-from cube_net.ui.updates.latest_release import LatestRelease
+from cube_net.ui.updates.latest_release import LatestRelease, ReleaseNotes
 
 APP_NAME = "Cube Net"
 
-# The size of the window with the notes (px).
-NOTES_SIZE = (520, 220)
+# The width of the notes, and the least and the most of their height (px): they're as tall as they need to be between
+# the two, and scroll when they need more.
+NOTES_WIDTH_PX = 560
+NOTES_MIN_HEIGHT_PX = 120
+NOTES_MAX_HEIGHT_PX = 420
+
+# How long the Copy button says "Copied" (ms).
+COPIED_MS = 1500
 
 # How wide the progress window is (px).
 PROGRESS_WIDTH_PX = 400
@@ -43,8 +52,8 @@ class UpdateChoice(Enum):
 
 
 class UpdateAvailableDialog(SmallWindow):
-    """A newer version: which, against which the app is, its notes, the size of the download. Escape and the close
-    button mean "Not now"."""
+    """A newer version: which, against which the app is, what's new since that one (the notes of every version in
+    between, with a Copy button), the size of the download. Escape and the close button mean "Not now"."""
 
     def __init__(
         self,
@@ -69,17 +78,34 @@ class UpdateAvailableDialog(SmallWindow):
         layout = QVBoxLayout()
         layout.setContentsMargins(16, 12, 16, 12)
         layout.addWidget(self.heading)
+        changes = release.notes_since(current)
         self.notes = QTextBrowser(self)
         self.notes.setOpenExternalLinks(True)
-        self.notes.setMarkdown(release.notes or tr("This release has no notes."))
-        self.notes.setMinimumSize(*NOTES_SIZE)
+        self.notes.setMarkdown(notes_markdown(changes))
         self.notes.setFocusPolicy(Qt.FocusPolicy.ClickFocus)  # Tab goes through the buttons
-        layout.addWidget(QLabel(tr("What's new:")))
-        layout.addWidget(self.notes, 1)
+        self.notes.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._fit_notes()
+        self._notes_text = notes_text(changes)
+        self.copy_button = QToolButton(self)
+        self.copy_button.setText(tr("Copy"))
+        self.copy_button.setIcon(QIcon.fromTheme("edit-copy"))
+        self.copy_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.copy_button.setToolTip(tr("Copy what's new (to translate it, say)"))
+        self.copy_button.clicked.connect(self._copy_notes)
+        self._copied = QTimer(self)  # how long the button says "Copied"
+        self._copied.setSingleShot(True)
+        self._copied.setInterval(COPIED_MS)
+        self._copied.timeout.connect(lambda: self.copy_button.setText(tr("Copy")))
+        above = QHBoxLayout()
+        above.addWidget(QLabel(tr("What's new:")))
+        above.addStretch()
+        above.addWidget(self.copy_button)
+        layout.addLayout(above)
+        layout.addWidget(self.notes)
         size = release.package_size()
-        self.size = QLabel(tr("Download size: {size}", size=format_size(size)) if size else "")
-        self.size.setVisible(bool(size))
-        layout.addWidget(self.size)
+        self.download_size = QLabel(tr("Download size: {size}", size=format_size(size)) if size else "")
+        self.download_size.setVisible(bool(size))
+        layout.addWidget(self.download_size)
         buttons = QDialogButtonBox(self)
         self.download = QPushButton(tr("Download and update") if can_update else tr("Open the download page"))
         self.later = QPushButton(tr("Not now"))
@@ -95,8 +121,48 @@ class UpdateAvailableDialog(SmallWindow):
             self.download.setDefault(True)
             self.download.setFocus()
 
+    def _fit_notes(self) -> None:
+        """As tall as the notes need, between the least and the most."""
+        frame = 2 * self.notes.frameWidth()
+        shown = self.notes.document()
+        assert shown is not None
+        document = shown.clone(self)  # the browser lays out its own at its own width, which isn't known yet
+        document.setTextWidth(NOTES_WIDTH_PX - frame)
+        needed = int(document.size().height()) + frame + 2
+        document.deleteLater()
+        self.notes.setFixedSize(NOTES_WIDTH_PX, max(NOTES_MIN_HEIGHT_PX, min(NOTES_MAX_HEIGHT_PX, needed)))
+
+    def notes_text(self) -> str:
+        """What the Copy button copies."""
+        return self._notes_text
+
+    def _copy_notes(self) -> None:
+        clipboard = QApplication.clipboard()
+        assert clipboard is not None
+        clipboard.setText(self._notes_text)
+        self.copy_button.setText(tr("Copied"))
+        self._copied.start()
+
     def choice(self) -> UpdateChoice:
         return UpdateChoice.DOWNLOAD if self.result() == SmallWindow.DialogCode.Accepted else UpdateChoice.LATER
+
+
+def _heading(changes: ReleaseNotes) -> str:
+    return f"{changes.version} ({changes.date})" if changes.date else changes.version
+
+
+def notes_markdown(changes: list[ReleaseNotes]) -> str:
+    """What's new in each version (the newest first), under its version and date."""
+    return "\n\n".join(
+        f"### {_heading(each)}\n\n{each.notes.strip() or tr('This release has no notes.')}" for each in changes
+    )
+
+
+def notes_text(changes: list[ReleaseNotes]) -> str:
+    """The same as plain text, for the clipboard."""
+    return "\n\n".join(
+        f"{_heading(each)}\n{each.notes.strip() or tr('This release has no notes.')}" for each in changes
+    )
 
 
 def ask_update(

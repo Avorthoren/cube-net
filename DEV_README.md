@@ -38,7 +38,7 @@ python main.py
 | Variable | What it does |
 |---|---|
 | `QT_QPA_PLATFORM` | Like `-platform`: `xcb`, `wayland`, `offscreen`. The tests use `offscreen`. |
-| `CUBE_NET_UPDATES_URL` | Where the update check asks for the latest release, instead of GitHub. For trying updates without publishing one: see `scripts/make_test_release.py` below. |
+| `CUBE_NET_UPDATES_URL` | Where the update check asks for the releases, instead of GitHub (a JSON file shaped like GitHub's list of releases, or like a single release). For trying updates without publishing one: see `scripts/make_test_release.py` below. |
 
 ### Where it keeps its files
 

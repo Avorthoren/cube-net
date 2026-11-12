@@ -10,7 +10,14 @@ from pathlib import Path
 import pytest
 
 from cube_net.ui.updates import latest_release
-from cube_net.ui.updates.latest_release import LatestRelease, UpdateCheckError, fetch_latest_release, release_from
+from cube_net.ui.updates.latest_release import (
+    LatestRelease,
+    ReleaseNotes,
+    UpdateCheckError,
+    fetch_latest_release,
+    latest_from,
+    release_from,
+)
 
 ANSWER = {
     "tag_name": "v1.2.0",
@@ -60,6 +67,61 @@ def test_asked_somewhere_else_for_trying(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setenv(latest_release.URL_VARIABLE, answer.as_uri())
     release = fetch_latest_release()
     assert isinstance(release, LatestRelease) and release.version == "1.2.0"
+
+
+def listed(version: str, **more: object) -> dict[str, object]:
+    """A release as GitHub lists it."""
+    return {"tag_name": f"v{version}", "body": f"- In {version}.", "published_at": "2027-01-20T10:00:00Z", **more}
+
+
+LIST = [
+    listed("1.4.0", draft=True),  # (GitHub shows drafts only to the repository's owners)
+    listed("1.3.0-beta", prerelease=True),
+    listed("1.1.0"),  # the list is in the order they were made, not by version
+    listed("1.2.0"),
+    {"tag_name": "nightly"},  # not a version
+    listed("1.0.0"),
+]
+
+
+def test_the_latest_of_the_list_with_all_their_notes() -> None:
+    release = latest_from(LIST)
+    assert release is not None and release.version == "1.2.0" and release.date == "2027-01-20"
+    assert [notes.version for notes in release.history] == ["1.2.0", "1.1.0", "1.0.0"]
+    assert release.history[1] == ReleaseNotes("1.1.0", "2027-01-20", "- In 1.1.0.")
+
+
+def test_an_empty_list_has_no_release() -> None:
+    assert latest_from([]) is None
+    assert latest_from([listed("2.0.0", draft=True)]) is None
+
+
+@pytest.mark.parametrize(
+    ("current", "versions"),
+    [
+        ("1.1.0", ["1.2.0"]),
+        ("1.0.0", ["1.2.0", "1.1.0"]),
+        ("0.9.0", ["1.2.0", "1.1.0", "1.0.0"]),
+        ("1.0", ["1.2.0", "1.1.0", "1.0.0"]),
+    ],
+)
+def test_the_notes_since_the_users_version(current: str, versions: list[str]) -> None:
+    release = latest_from(LIST)
+    assert release is not None
+    assert [notes.version for notes in release.notes_since(current)] == versions
+
+
+def test_a_single_release_has_only_its_own_notes() -> None:
+    release = release_from(ANSWER)
+    assert release.notes_since("0.1.0") == [ReleaseNotes("1.2.0", "", "- Ctrl+click deletes a point.")]
+
+
+def test_the_list_read_from_somewhere_else(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    answer = tmp_path / "releases.json"
+    answer.write_text(json.dumps(LIST))
+    monkeypatch.setenv(latest_release.URL_VARIABLE, answer.as_uri())
+    release = fetch_latest_release()
+    assert release is not None and release.version == "1.2.0" and len(release.history) == 3
 
 
 def test_no_release_yet(monkeypatch: pytest.MonkeyPatch) -> None:

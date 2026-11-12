@@ -9,7 +9,7 @@ from pytestqt.qtbot import QtBot
 from cube_net.ui.dialogs.message_window import MessageWindow
 from cube_net.ui.dialogs.small_window import SmallWindow
 from cube_net.ui.updates import update_dialogs
-from cube_net.ui.updates.latest_release import LatestRelease, ReleaseFile
+from cube_net.ui.updates.latest_release import LatestRelease, ReleaseFile, ReleaseNotes
 from cube_net.ui.updates.update_dialogs import UpdateAvailableDialog, UpdateChoice, format_size
 
 RELEASE = LatestRelease(
@@ -36,14 +36,14 @@ def test_what_it_tells(qtbot: QtBot) -> None:
 def test_the_size_on_linux(qtbot: QtBot, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("cube_net.ui.updates.latest_release.sys.platform", "linux")
     dialog = make(qtbot)
-    assert dialog.size.text() == "Download size: 78.4 MB"
+    assert dialog.download_size.text() == "Download size: 78.4 MB"
 
 
 def test_no_size_or_notes_when_there_are_none(qtbot: QtBot) -> None:
     release = LatestRelease("1.2.0", "", "https://example.com", {})
     dialog = make(qtbot, release)
-    assert dialog.size.isHidden()
-    assert dialog.notes.toPlainText() == "This release has no notes."
+    assert dialog.download_size.isHidden()
+    assert dialog.notes.toPlainText() == "1.2.0\nThis release has no notes."
 
 
 @pytest.mark.parametrize(("accepted", "choice"), [(True, UpdateChoice.DOWNLOAD), (False, UpdateChoice.LATER)])
@@ -80,6 +80,8 @@ def test_from_the_automatic_check_no_button_is_selected(qtbot: QtBot, key: Qt.Ke
     qtbot.keyClick(dialog, key)
     assert dialog.isVisible()  # nothing pressed
     qtbot.keyClick(dialog, Qt.Key.Key_Tab)
+    if QApplication.focusWidget() is dialog.copy_button:  # it's a button too, but not one of the answers
+        qtbot.keyClick(dialog.copy_button, Qt.Key.Key_Tab)
     focused = QApplication.focusWidget()
     assert focused in (dialog.download, dialog.later)
     qtbot.keyClick(focused, key)
@@ -95,6 +97,71 @@ def test_from_the_automatic_check_escape_means_not_now(qtbot: QtBot) -> None:
     qtbot.keyClick(dialog, Qt.Key.Key_Escape)
     assert not dialog.isVisible()
     assert dialog.choice() is UpdateChoice.LATER
+
+
+def notes(version: str, text: str, date: str = "") -> ReleaseNotes:
+    return ReleaseNotes(version, date, text)
+
+
+HISTORY = (
+    notes("1.3.0", "- Cuts from any point.", "2027-03-02"),
+    notes("1.2.0", "- Themes.", "2027-02-10"),
+    notes("1.1.0", "", "2027-01-20"),
+    notes("1.0.0", "- First.", "2026-12-01"),
+)
+
+
+def several_versions_behind(qtbot: QtBot, history: tuple[ReleaseNotes, ...] = HISTORY) -> UpdateAvailableDialog:
+    release = LatestRelease("1.3.0", history[0].notes, "https://example.com", {}, history[0].date, history)
+    dialog = UpdateAvailableDialog(release, "1.0.0")
+    qtbot.addWidget(dialog)
+    return dialog
+
+
+def test_the_notes_of_every_version_since_the_users(qtbot: QtBot) -> None:
+    dialog = several_versions_behind(qtbot)
+    shown = dialog.notes.toPlainText()
+    assert shown == (
+        "1.3.0 (2027-03-02)\nCuts from any point.\n"
+        "1.2.0 (2027-02-10)\nThemes.\n"
+        "1.1.0 (2027-01-20)\nThis release has no notes."
+    )
+
+
+def test_copy_copies_all_the_notes_as_text(qtbot: QtBot) -> None:
+    dialog = several_versions_behind(qtbot)
+    clipboard = QApplication.clipboard()
+    assert clipboard is not None
+    dialog.copy_button.click()
+    assert (
+        clipboard.text()
+        == dialog.notes_text()
+        == (
+            "1.3.0 (2027-03-02)\n- Cuts from any point.\n\n"
+            "1.2.0 (2027-02-10)\n- Themes.\n\n"
+            "1.1.0 (2027-01-20)\nThis release has no notes."
+        )
+    )
+    assert dialog.copy_button.text() == "Copied"
+    qtbot.waitUntil(lambda: dialog.copy_button.text() == "Copy", timeout=update_dialogs.COPIED_MS + 2000)
+
+
+def test_short_notes_fit_without_scrolling(qtbot: QtBot) -> None:
+    dialog = make(qtbot)
+    wait_shown(qtbot, dialog)
+    assert dialog.notes.height() < update_dialogs.NOTES_MAX_HEIGHT_PX
+    scroll_bar = dialog.notes.verticalScrollBar()
+    assert scroll_bar is not None and scroll_bar.maximum() == 0
+
+
+def test_long_notes_scroll(qtbot: QtBot) -> None:
+    lines = "\n".join(f"- Change number {number}." for number in range(10))
+    history = tuple(notes(f"1.{minor}.0", lines) for minor in range(3, 0, -1))
+    dialog = several_versions_behind(qtbot, history)
+    wait_shown(qtbot, dialog)
+    assert dialog.notes.height() == update_dialogs.NOTES_MAX_HEIGHT_PX
+    scroll_bar = dialog.notes.verticalScrollBar()
+    assert scroll_bar is not None and scroll_bar.maximum() > 0
 
 
 def test_sizes() -> None:

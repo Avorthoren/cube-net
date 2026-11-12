@@ -364,7 +364,7 @@ def report_lines(report: Report) -> list[str]:
                 lines.append(_row(f"  {part}", report.parts[category, part]))
     lines += ["=" * len(header), _row("All", everything), ""]
     lines.append('"total" and "code" count characters, without indentation,')
-    lines.append('trailing whitespace and comment delimiters.')
+    lines.append("trailing whitespace and comment delimiters.")
     biggest = sorted(report.files, key=lambda measured: measured.measure.total, reverse=True)[:BIGGEST_COUNT]
     if biggest:
         lines += ["", "Biggest files:"]
