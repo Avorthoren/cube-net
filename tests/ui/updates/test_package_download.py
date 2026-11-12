@@ -68,14 +68,46 @@ def test_no_checksums_no_install(qtbot: QtBot, tmp_path: Path) -> None:
     assert "has no SHA256SUMS" in blocker.args[0]
 
 
+class HeldBack:
+    """A package that comes a piece at a time, and after its first piece waits until the download is cancelled: the
+    cancel always comes in the middle of the download (a local file would be read to its end before the test's
+    cancel, sent through the window's thread, reached the download)."""
+
+    def __init__(self, download: PackageDownload) -> None:
+        self.headers = {"Content-Length": "1000"}
+        self.download = download
+        self.pieces = 0
+
+    def __enter__(self) -> HeldBack:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        pass
+
+    def read(self, size: int) -> bytes:
+        self.pieces += 1
+        if self.pieces > 1:
+            assert self.download._stop.wait(timeout=5), "never cancelled"
+        return b"x" * size
+
+
 def test_cancelled(qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+
     monkeypatch.setattr(package_download, "CHUNK", 10)
     package, sums = published(tmp_path, b"x" * 1000)
     download = PackageDownload(NAME, package, sums, tmp_path / "into")
+    real_open = package_download._open
+    monkeypatch.setattr(
+        package_download,
+        "_open",
+        lambda url: HeldBack(download) if url == package.url else io.BytesIO(real_open(url).read()),
+    )
     download.progress.connect(lambda done, total: download.cancel())
     with qtbot.waitSignal(download.cancelled, timeout=5000):
         download.start()
-    assert list((tmp_path / "into").iterdir()) == []
+    qtbot.waitUntil(lambda: not download.running())
+    assert list((tmp_path / "into").iterdir()) == []  # nothing left of it
 
 
 def test_a_missing_file_says_so(qtbot: QtBot, tmp_path: Path) -> None:
