@@ -103,6 +103,7 @@ python -m mypy
 | `python scripts/make_icon.py` | Draws the application's icon (PNG, `.ico`, `.icns`). Run it if the default net or its default colours change. |
 | `python scripts/make_readme_animation.py` | Records the README's animation (`docs/media/cube-net.png`) with the application itself, about 20 s. Run it if the default look changes: style, drawing, mouse pointers. |
 | `python scripts/make_test_release.py PACKAGE VERSION` | Makes a fake release of a build's package, on the disk, for trying "Download and update" without publishing anything. It prints the `CUBE_NET_UPDATES_URL=...` to start the application with. |
+| `python scripts/measure_code.py` | How much there is of everything: characters (without indentation, and without comments, separately) and lines of the app's source, the tests, developer scripts, build and release files, and docs, and the biggest files. It counts the files git tracks; a new kind of file it doesn't know is listed at the end, to be given a category in the script. |
 | `python -m scripts.build` | Builds the application for this system, as the release workflow does (see below). Needs PyInstaller, and on Linux appimagetool (`$APPIMAGETOOL`), on Windows Inno Setup. |
 
 ## 4. Releasing
