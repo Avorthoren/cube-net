@@ -130,6 +130,9 @@ A release is a version tag on `master`, pushed to GitHub: the workflow then buil
 ./release.sh 1.2.0
 ```
 
+`--dry-run-no-tests` is the same dry run without the tests, which take the longest (ruff still runs); it can't be
+combined with `--dry-run`, and works with `--fix` too.
+
 It runs `scripts/release.py` with the active virtual environment's Python (or `$PYTHON`). Versions are
 `MAJOR.MINOR.PATCH` without leading zeros, optionally with `-alpha`, `-beta` or `-rc` and a number (`1.2.0-rc.2`):
 a pre-release.

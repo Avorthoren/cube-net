@@ -1,7 +1,8 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Make a release of Cube Net: `./release.sh 1.2.0` (or `python scripts/release.py 1.2.0`), `--dry-run` to only check.
+"""Make a release of Cube Net: `./release.sh 1.2.0` (or `python scripts/release.py 1.2.0`), `--dry-run` to only check
+(`--dry-run-no-tests`: the same without the tests, which take long; ruff still runs).
 
 In this order, stopping at the first problem (in red, with what to do):
 1. The version: MAJOR.MINOR.PATCH, without leading zeros, optionally with -alpha, -beta or -rc and a number
@@ -17,9 +18,9 @@ Then, after a summary and a "y" from the user: the version and today's date go i
 "Unreleased" section becomes this version's (and a new empty one starts above it), all that is committed as
 "Release vX", tagged "vX" (an annotated tag) and pushed with `master` at once (both or neither).
 
-`./release.sh 1.2.0 --fix` (with `--dry-run` too, if wanted): after such a release, when the workflow failed on GitHub
-and the problem is fixed in new commits, the same version is tagged again on the fix (see `fix`). Never for a version
-that's published: that one stays as it is, and the fix is the next version.
+`./release.sh 1.2.0 --fix` (with `--dry-run` or `--dry-run-no-tests` too, if wanted): after such a release, when the
+workflow failed on GitHub and the problem is fixed in new commits, the same version is tagged again on the fix (see
+`fix`). Never for a version that's published: that one stays as it is, and the fix is the next version.
 """
 
 import argparse
@@ -200,13 +201,16 @@ class Git:
         return done.stdout.strip()
 
 
-def run_checks(root: Path) -> None:
-    """ruff (if `RUN_RUFF`) and the tests; what they say is shown only if they fail."""
+def run_checks(root: Path, tests: bool = True) -> None:
+    """ruff (if `RUN_RUFF`) and the tests (unless not `tests`); what they say is shown only if they fail."""
     if RUN_RUFF:
         for args, what in ((["check", "."], "ruff check"), (["format", "--check", "."], "ruff format --check")):
             say(f"Running {what}...")
             _tool(root, [sys.executable, "-m", "ruff", *args], f"{what} found problems (see above).")
-    run_tests(root)
+    if tests:
+        run_tests(root)
+    else:
+        say("Not running the tests (--dry-run-no-tests).")
 
 
 def run_tests(root: Path, arguments: Sequence[str] = (), show: Callable[[str], None] | None = None) -> None:
@@ -268,9 +272,9 @@ def _tool(root: Path, command: list[str], failure: str, env: dict[str, str] | No
         raise ReleaseError(failure)
 
 
-def check_tools() -> None:
+def check_tools(tests: bool = True) -> None:
     """The tools the checks need are in this Python."""
-    needed = ["packaging", "pytest", *(["ruff"] if RUN_RUFF else [])]
+    needed = ["packaging", *(["pytest"] if tests else []), *(["ruff"] if RUN_RUFF else [])]
     missing = [name for name in needed if importlib.util.find_spec(name) is None]
     if missing:
         raise ReleaseError(
@@ -319,12 +323,12 @@ def confirm(question: str) -> bool:
 # --- the release --------------------------------------------------------------------------------------------------
 
 
-def prepare(git: Git, text: str, dry_run: bool) -> Version:
+def prepare(git: Git, text: str, dry_run: bool, tests: bool = True) -> Version:
     """What every run checks and does first: the version, the tools, a clean tree on master, the tags fetched and
     master pulled (a dry run doesn't pull: it tells if it would)."""
     version = check_version(text)
     say(f"Version {version.text}, tag {version.tag}")
-    check_tools()
+    check_tools(tests)
     if git("status", "--porcelain"):
         raise ReleaseError("The working tree isn't clean: commit or stash the changes first.")
     branch = git("rev-parse", "--abbrev-ref", "HEAD")
@@ -341,17 +345,21 @@ def prepare(git: Git, text: str, dry_run: bool) -> Version:
     return version
 
 
-def release(text: str, dry_run: bool, root: Path = ROOT, today: datetime.date | None = None) -> None:
+def release(
+    text: str, dry_run: bool, root: Path = ROOT, today: datetime.date | None = None, tests: bool = True
+) -> None:
+    """`tests`: False only with `dry_run` (--dry-run-no-tests)."""
+    assert tests or dry_run
     day = today or datetime.date.today()
     git = Git(root)
-    version = prepare(git, text, dry_run)
+    version = prepare(git, text, dry_run, tests)
     if git("tag", "--list", version.tag):
         raise ReleaseError(f"The tag {version.tag} exists already: choose another version (or --fix it).")
     latest = check_not_lower(version, git("tag", "--list", "v*").split())
     changelog_path = root / CHANGELOG_FILE
     changelog = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else None
     notes = check_notes(changelog)
-    run_checks(root)
+    run_checks(root, tests)
 
     say("")
     say(f"{BOLD}Release {version.tag}{RESET}" + (f" (the latest so far: {latest.tag})" if latest else " (the first)"))
@@ -360,7 +368,7 @@ def release(text: str, dry_run: bool, root: Path = ROOT, today: datetime.date | 
         say(f"  {git('rev-list', '--count', f'{latest.tag}..HEAD')} commit(s) since {latest.tag}")
     _show_notes(notes)
     if dry_run:
-        say(f"{GREEN}Dry run: every check passed; nothing was changed.{RESET}")
+        _dry_run_passed(tests)
         return
     if not confirm(f"Commit, tag {version.tag} and push to {REMOTE}?"):
         say("Nothing was changed.")
@@ -386,7 +394,7 @@ def release(text: str, dry_run: bool, root: Path = ROOT, today: datetime.date | 
     _show_links(git)
 
 
-def fix(text: str, dry_run: bool, root: Path = ROOT) -> None:
+def fix(text: str, dry_run: bool, root: Path = ROOT, tests: bool = True) -> None:
     """Tag the version again, on the commit that fixes what made its workflow fail. After `prepare`:
     1. The tag exists, here and on the remote (the same one: fetching would have failed otherwise).
     2. It's on a commit `release` made ("Release vX"), and it's an annotated tag, as `release` makes them.
@@ -398,8 +406,9 @@ def fix(text: str, dry_run: bool, root: Path = ROOT) -> None:
     7. ruff and the tests.
     Then, after a summary and a "y": the local tag is made again on the current commit, the remote one is deleted
     (only if it's still the one checked here) and master is pushed with the new tag, which starts the workflow."""
+    assert tests or dry_run
     git = Git(root)
-    version = prepare(git, text, dry_run)
+    version = prepare(git, text, dry_run, tests)
     tag = version.tag
     if not git("tag", "--list", tag):
         raise ReleaseError(f"There's no tag {tag}: --fix moves the tag of a release made before (without --fix).")
@@ -431,7 +440,7 @@ def fix(text: str, dry_run: bool, root: Path = ROOT) -> None:
     if higher:
         raise ReleaseError(f"{', '.join(higher)} came after {tag}: only the latest release can be fixed this way.")
     _check_not_released(git, tag)
-    run_checks(root)
+    run_checks(root, tests)
 
     say("")
     say(f"{BOLD}Fix {tag}{RESET}: move it from {git('log', '-1', '--format=%h %s', old)}")
@@ -440,7 +449,7 @@ def fix(text: str, dry_run: bool, root: Path = ROOT) -> None:
         say(f"    {line}")
     _show_notes(notes)
     if dry_run:
-        say(f"{GREEN}Dry run: every check passed; nothing was changed.{RESET}")
+        _dry_run_passed(tests)
         return
     if not confirm(f"Move {tag} to this commit and push it with {BRANCH} to {REMOTE}?"):
         say("Nothing was changed.")
@@ -508,6 +517,11 @@ def say(text: str) -> None:
     print(text if sys.stdout.isatty() else _plain(text), flush=True)  # before anything that goes to stderr
 
 
+def _dry_run_passed(tests: bool) -> None:
+    passed = "every check passed" if tests else "every check passed (the tests weren't run)"
+    say(f"{GREEN}Dry run: {passed}; nothing was changed.{RESET}")
+
+
 def _plain(text: str) -> str:
     return re.sub(r"\033\[\d+m", "", text)
 
@@ -517,16 +531,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         description="Make a release of Cube Net (see the docstring of scripts/release.py)."
     )
     parser.add_argument("version", help="the version, without the v: 1.2.0, 1.2.0-beta, 1.2.0-rc.2")
-    parser.add_argument("--dry-run", action="store_true", help="only check: change, commit and push nothing")
+    dry = parser.add_mutually_exclusive_group()
+    dry.add_argument("--dry-run", action="store_true", help="only check: change, commit and push nothing")
+    dry.add_argument(
+        "--dry-run-no-tests", action="store_true", help="the same as --dry-run, without the tests (ruff still runs)"
+    )
     parser.add_argument(
         "--fix", action="store_true", help="tag this released (but not published) version again, on the fix"
     )
     args = parser.parse_args(argv)
     try:
+        dry_run, tests = args.dry_run or args.dry_run_no_tests, not args.dry_run_no_tests
         if args.fix:
-            fix(args.version, args.dry_run)
+            fix(args.version, dry_run, tests=tests)
         else:
-            release(args.version, args.dry_run)
+            release(args.version, dry_run, tests=tests)
     except ReleaseError as error:
         message = str(error)
         print(f"{RED}{message}{RESET}" if sys.stderr.isatty() else message, file=sys.stderr)

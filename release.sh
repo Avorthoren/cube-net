@@ -7,9 +7,13 @@
 # Usage:
 #   ./release.sh 1.2.0             release version 1.2.0 (tag v1.2.0)
 #   ./release.sh 1.2.0 --dry-run   only run the checks; change nothing
+#   ./release.sh 1.2.0 --dry-run-no-tests
+#                                  the same, without the tests (ruff still
+#                                  runs); not with --dry-run
 #   ./release.sh 1.2.0 --fix       tag 1.2.0 again, on the commit that fixes
 #                                  what made its workflow fail (only while
-#                                  the release isn't published)
+#                                  the release isn't published); with
+#                                  either dry run too, if wanted
 #
 # Before releasing, write what's new under "## Unreleased" in CHANGELOG.md:
 # that becomes the release's notes.

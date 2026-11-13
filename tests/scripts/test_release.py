@@ -164,7 +164,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     git(root, "add", ".")
     git(root, "commit", "-m", "Start")
     git(root, "push", "-u", "origin", "master")
-    monkeypatch.setattr(release, "run_checks", lambda root: None)
+    monkeypatch.setattr(release, "run_checks", lambda root, tests=True: None)
     monkeypatch.setattr(release, "confirm", lambda question: True)
     return root
 
@@ -246,7 +246,7 @@ def test_an_empty_changelog_section_stops_it(repo: Path) -> None:
 
 
 def test_failing_checks_stop_it(repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def failing(root: Path) -> None:
+    def failing(root: Path, tests: bool = True) -> None:
         raise ReleaseError("The tests failed (see above).")
 
     monkeypatch.setattr(release, "run_checks", failing)
@@ -370,10 +370,48 @@ def test_without_a_token_a_reminder_about_drafts(
 
 
 def test_fix_on_the_command_line(released: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[str, bool]] = []
-    monkeypatch.setattr(release, "fix", lambda text, dry_run: calls.append((text, dry_run)))
+    calls: list[tuple[str, bool, bool]] = []
+    monkeypatch.setattr(release, "fix", lambda text, dry_run, tests: calls.append((text, dry_run, tests)))
     assert release.main(["1.1.0", "--fix", "--dry-run"]) == 0
-    assert calls == [("1.1.0", True)]
+    assert release.main(["1.1.0", "--fix", "--dry-run-no-tests"]) == 0
+    assert calls == [("1.1.0", True, True), ("1.1.0", True, False)]
+
+
+@pytest.mark.parametrize(
+    ("flags", "dry_run", "tests"),
+    [([], False, True), (["--dry-run"], True, True), (["--dry-run-no-tests"], True, False)],
+)
+def test_the_dry_runs_on_the_command_line(
+    monkeypatch: pytest.MonkeyPatch, flags: list[str], dry_run: bool, tests: bool
+) -> None:
+    calls: list[tuple[str, bool, bool]] = []
+    monkeypatch.setattr(release, "release", lambda text, dry_run, tests: calls.append((text, dry_run, tests)))
+    assert release.main(["1.1.0", *flags]) == 0
+    assert calls == [("1.1.0", dry_run, tests)]
+
+
+def test_the_two_dry_runs_are_exclusive(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit):
+        release.main(["1.1.0", "--dry-run", "--dry-run-no-tests"])
+    assert "not allowed with argument" in capsys.readouterr().err
+
+
+def test_a_dry_run_without_tests_runs_ruff_only(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    ran: list[str] = []
+    monkeypatch.setattr(release, "RUN_RUFF", True)
+    monkeypatch.setattr(release, "_tool", lambda root, command, failure: ran.append(" ".join(command[2:4])))
+    monkeypatch.setattr(release, "run_tests", lambda root: ran.append("tests"))
+    release.run_checks(tmp_path, tests=False)
+    assert ran == ["ruff check", "ruff format"]
+    release.run_checks(tmp_path)
+    assert ran[-1] == "tests"
+
+
+def test_a_dry_run_without_tests_says_so(repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    head = git(repo, "rev-parse", "HEAD")
+    release.release("1.1.0", dry_run=True, root=repo, today=DAY, tests=False)
+    assert "every check passed (the tests weren't run); nothing was changed" in capsys.readouterr().out
+    assert git(repo, "rev-parse", "HEAD") == head and git(repo, "tag") == ""
 
 
 class TestGitHubReleases:
