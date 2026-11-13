@@ -210,7 +210,9 @@ even for invalid rearrangements, that can't be approved.
 In addition to visual differences for the button when it's ON and OFF there should be additional feature:
 In the settings of the project there should be configurable variable, the target area, with default value of 7.100
 (from 0 to 20, max 3 decimals). It's edited on the instruments panel, below the area: the text "Target area" and an
-input for it. If current area of the bounding rectangle is less than that number, the
+input for it. What's typed there is taken on Enter, or when the input loses the focus: when the user clicks anywhere
+else in the window, the instruments panel's buttons and labels included (it's taken before the clicked button acts).
+If current area of the bounding rectangle is less than that number, the
 button should blink, changing states of regular look and being fully green in equal durations, changing 6 times per
 second (so, 3 times being regular and 3 times being green). And the color of the displayed area value should be green,
 together with color of the bounding rectangle. This "success" green must be clearly different from the green of

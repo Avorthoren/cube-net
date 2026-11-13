@@ -5,7 +5,9 @@
 
 - The area of the minimum-area bounding rectangle is always shown, with 3 decimals.
 - The toggle button shows / hides the rectangle on the sheet.
-- Below the area: the project's target area, which the user can edit there.
+- Below the area: the project's target area, which the user can edit there. What's typed is taken on Enter, or when
+  the field loses the focus: when the user clicks anywhere else in the window, even on what doesn't take the focus
+  (the instrument panel's buttons and labels).
 - When the area is below the project's threshold, the area and the rectangle turn green, and the button blinks:
   regular and fully green in equal parts, 6 changes per second. Or, if the user switched blinking off, the button is
   just green all the time.
@@ -13,9 +15,9 @@
 
 from fractions import Fraction
 
-from PyQt6.QtCore import QLocale, QObject, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QLocale, QObject, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QFont, QFontMetrics
-from PyQt6.QtWidgets import QDoubleSpinBox, QLabel, QToolBar, QWidget
+from PyQt6.QtWidgets import QApplication, QDoubleSpinBox, QLabel, QToolBar, QWidget
 
 from cube_net.core.bounding import BoundingRectangle
 from cube_net.core.project_settings import MAX_AREA_THRESHOLD, MIN_AREA_THRESHOLD
@@ -71,6 +73,9 @@ class BoundingControls(QObject):
         bind(self.target, self.target.setToolTip, "The project's goal: an area below this is a success")
         self.target.valueChanged.connect(self._on_target)
         toolbar.addWidget(self.target)
+        app = QApplication.instance()
+        assert app is not None
+        app.installEventFilter(self)  # see `eventFilter`
         self.action = QAction(toolbar)
         bind(self.action, self.action.setText, "Bounds")
         self.action.setCheckable(True)
@@ -84,6 +89,21 @@ class BoundingControls(QObject):
         self._timer = QTimer(self)
         self._timer.setInterval(BLINK_INTERVAL_MS)
         self._timer.timeout.connect(self._blink)
+
+    def eventFilter(self, watched: QObject | None, event: QEvent | None) -> bool:
+        """A mouse press elsewhere in the window takes the focus from the target field, which takes what was typed
+        then (before what was clicked acts: a button acts when the mouse is released)."""
+        if (
+            event is not None
+            and event.type() == QEvent.Type.MouseButtonPress
+            and isinstance(watched, QWidget)
+            and self.target.hasFocus()
+            and watched is not self.target
+            and not self.target.isAncestorOf(watched)
+            and watched.window() is self.target.window()
+        ):
+            self.target.clearFocus()
+        return False
 
     @property
     def success(self) -> bool:

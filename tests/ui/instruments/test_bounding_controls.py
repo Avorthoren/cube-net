@@ -5,7 +5,8 @@ from collections.abc import Iterator
 from fractions import Fraction as F
 
 import pytest
-from PyQt6.QtWidgets import QToolBar
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QLabel, QToolBar, QToolButton
 from pytestqt.qtbot import QtBot
 
 from cube_net.core.bounding import BoundingRectangle
@@ -166,3 +167,63 @@ class TestBlinkSwitchedOff:
         controls.set_blink_enabled(False)
         controls.set_blink_enabled(True)
         assert not controls.blinking and not self.green(controls)
+
+
+class TestTakingWhatWasTyped:
+    """The target field takes what was typed when it loses the focus: also when the user clicks on what doesn't
+    take the focus, as the instrument panel's buttons and labels."""
+
+    @pytest.fixture
+    def panel(self, qtbot: QtBot) -> Iterator[tuple[QToolBar, BoundingControls, QToolButton]]:
+        toolbar = QToolBar()
+        qtbot.addWidget(toolbar)
+        controls = BoundingControls(toolbar, BoundingItem())
+        controls.set_target(F(71, 10))
+        other = toolbar.addAction("Ruler")
+        assert other is not None
+        button = toolbar.widgetForAction(other)
+        assert isinstance(button, QToolButton)
+        toolbar.show()
+        qtbot.waitExposed(toolbar)
+        toolbar.activateWindow()
+        controls.target.setFocus()
+        qtbot.waitUntil(controls.target.hasFocus)
+        controls.target.lineEdit().selectAll()
+        qtbot.keyClicks(controls.target.lineEdit(), "5.5")
+        yield toolbar, controls, button
+
+    def test_a_click_on_a_button_of_the_panel(
+        self, qtbot: QtBot, panel: tuple[QToolBar, BoundingControls, QToolButton]
+    ) -> None:
+        _toolbar, controls, button = panel
+        assert button.focusPolicy() != Qt.FocusPolicy.StrongFocus  # it doesn't take the focus by itself
+        with qtbot.waitSignal(controls.target_changed) as blocker:
+            qtbot.mousePress(button, Qt.MouseButton.LeftButton)  # taken already: before the button acts
+        assert blocker.args == [F(11, 2)]
+        assert not controls.target.hasFocus()
+        qtbot.mouseRelease(button, Qt.MouseButton.LeftButton)
+
+    def test_a_click_on_a_label_of_the_panel(
+        self, qtbot: QtBot, panel: tuple[QToolBar, BoundingControls, QToolButton]
+    ) -> None:
+        _toolbar, controls, _button = panel
+        with qtbot.waitSignal(controls.target_changed) as blocker:
+            qtbot.mouseClick(controls.label, Qt.MouseButton.LeftButton)
+        assert blocker.args == [F(11, 2)]
+
+    def test_clicks_in_the_field_itself_keep_it_editing(
+        self, qtbot: QtBot, panel: tuple[QToolBar, BoundingControls, QToolButton]
+    ) -> None:
+        _toolbar, controls, _button = panel
+        with qtbot.assertNotEmitted(controls.target_changed):
+            qtbot.mouseClick(controls.target.lineEdit(), Qt.MouseButton.LeftButton)
+        assert controls.target.hasFocus()
+
+    def test_clicks_in_another_window_dont_count(
+        self, qtbot: QtBot, panel: tuple[QToolBar, BoundingControls, QToolButton]
+    ) -> None:
+        _toolbar, controls, _button = panel
+        other = QLabel("Another window")
+        qtbot.addWidget(other)
+        with qtbot.assertNotEmitted(controls.target_changed):
+            qtbot.mouseClick(other, Qt.MouseButton.LeftButton)
