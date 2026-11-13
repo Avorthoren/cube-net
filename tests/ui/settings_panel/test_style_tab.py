@@ -13,6 +13,7 @@ from cube_net.ui.settings_panel.style_tab import (
     StyleTab,
 )
 from cube_net.ui.style import DEFAULT_STYLE, Style
+from cube_net.ui.style.style import least_vertex_radius
 
 
 def make(qtbot: QtBot) -> StyleTab:
@@ -29,7 +30,8 @@ def test_it_shows_the_style(qtbot: QtBot) -> None:
     tab = make(qtbot)
     assert [f.color() for f in tab.face_fields] == list(DEFAULT_STYLE.face_colors)
     assert (tab.hatch_columns.value(), tab.hatch_rows.value()) == (10, 5)
-    assert (tab.dashes.value(), tab.edge_width.value(), tab.vertex_radius.value()) == (10, 5.0, 8.0)
+    shown = (tab.dashes.value(), tab.edge_width.value(), tab.vertex_radius.value())
+    assert shown == (DEFAULT_STYLE.dashes_per_edge, DEFAULT_STYLE.edge_width, DEFAULT_STYLE.vertex_radius)
     assert tab.grid_width.value() == 1.0
     assert tab.edge_width.suffix() == ""
 
@@ -41,7 +43,7 @@ def test_it_shows_the_style(qtbot: QtBot) -> None:
         ("hatch_rows", 1, 30),
         ("dashes", 1, 30),
         ("edge_width", 1, 15),
-        ("vertex_radius", 3.5, 30),  # at least 140% of the default edges (5 px) across
+        ("vertex_radius", least_vertex_radius(DEFAULT_STYLE.edge_width), 30),  # 140% of the default edges across
         ("grid_width", 0, 5),
     ],
 )
@@ -145,10 +147,11 @@ def test_vertices_grow_with_thicker_edges_just_as_much_as_needed(qtbot: QtBot) -
 
 def test_vertices_cant_be_made_smaller_than_the_edges_allow(qtbot: QtBot) -> None:
     tab = make(qtbot)
-    tab.vertex_radius.setValue(5)
-    assert tab.style().vertex_radius == 5  # below 7 the cut line's small dots just keep their least size
-    tab.vertex_radius.setValue(3)
-    assert tab.vertex_radius.value() == 3.5 and tab.style().vertex_radius == 3.5
+    least = least_vertex_radius(DEFAULT_STYLE.edge_width)
+    tab.vertex_radius.setValue(least + 0.5)
+    assert tab.style().vertex_radius == least + 0.5
+    tab.vertex_radius.setValue(least - 0.5)
+    assert tab.vertex_radius.value() == least and tab.style().vertex_radius == least
 
 
 def test_restoring_the_vertices_keeps_them_large_enough(qtbot: QtBot, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,4 +159,4 @@ def test_restoring_the_vertices_keeps_them_large_enough(qtbot: QtBot, monkeypatc
     tab.edge_width.setValue(15)
     monkeypatch.setattr("cube_net.ui.settings_panel.section.confirm_restore", lambda *_: True)
     tab.sections[VERTICES].restore_button.click()
-    assert tab.style().vertex_radius == 10.5  # the default 8 is too small for these edges
+    assert tab.style().vertex_radius == 10.5  # the default is too small for these edges

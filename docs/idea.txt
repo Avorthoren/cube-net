@@ -514,8 +514,8 @@ disappear as soon as it leaves (no delay either way).
      RGB hex digits.
    - Faces tiling: the number of columns and rows each face is divided into (now 10 x 5), integers from 1 to 30.
    - Cuts and folds: number of dashes of each colour along a whole cube edge (1 to 30, now 10), and their thickness
-     in pixels (1 to 15, now 5). Hovered elements are drawn 1.5 times as thick, as before.
-   - Vertices: radius of the vertex circles in pixels (from 0.7 times the edge thickness to 30, now 8).
+     in pixels (1 to 15, now 4). Hovered elements are drawn 1.5 times as thick, as before.
+   - Vertices: radius of the vertex circles in pixels (from 0.7 times the edge thickness to 30, now 6).
    - Grid: a white 10x10 square crossed in its middle by a vertical and a horizontal grid line, the colour of the
      grid, and the thickness of its lines in pixels (0 to 5; 0: no grid).
 

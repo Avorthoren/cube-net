@@ -14,8 +14,8 @@ def default_sizes() -> object:
     net_style.EDGE_WIDTH_PX, net_style.VERTEX_RADIUS_PX = before
 
 
-def test_the_default_vertex_radius() -> None:
-    assert net_style.VERTEX_RADIUS_PX == 8
+def test_the_default_vertex_radius_fits_the_default_edges() -> None:
+    assert net_style.least_vertex_radius(net_style.EDGE_WIDTH_PX) <= net_style.VERTEX_RADIUS_PX
 
 
 def test_shares_of_the_vertex_radius() -> None:

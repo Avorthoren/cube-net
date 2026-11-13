@@ -10,10 +10,10 @@ The README's animation shows the default look: after changing a default here, ru
 """
 
 # Width of fold edges and cuts (cuts lie fully inside their face).
-EDGE_WIDTH_PX = 5.0
+EDGE_WIDTH_PX = 4.0
 
 # Radius of the vertex circles on the perimeter.
-VERTEX_RADIUS_PX = 8.0
+VERTEX_RADIUS_PX = 6.0
 
 # A face is divided into 10 x 5 rectangles of 1/10 x 1/5 units (docs/idea.txt).
 HATCH_COLUMNS = 10
