@@ -56,6 +56,11 @@ def test_this_systems_package_and_the_checksums() -> None:
     assert checksums is not None and checksums.url == "https://dl/sums"
 
 
+def test_the_notes_as_github_keeps_them() -> None:
+    release = release_from({**ANSWER, "body": "\r\n - One.\r\n - Two:\r\n   - inside it.\r\n"})
+    assert release.notes == "- One.\n- Two:\n  - inside it."
+
+
 def test_an_answer_without_a_release() -> None:
     with pytest.raises(UpdateCheckError):
         release_from({"message": "rate limit"})

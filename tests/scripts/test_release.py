@@ -102,6 +102,10 @@ class TestChangelog:
         with pytest.raises(ReleaseError, match=problem):
             release.check_notes(changelog)
 
+    def test_the_notes_keep_their_lines_in_line(self) -> None:
+        changelog = "## Unreleased\n - First.\n - Second:\n   - inside it.\n\n## 1.0.0\n"
+        assert release.check_notes(changelog) == "- First.\n- Second:\n  - inside it."
+
     def test_the_section_becomes_the_versions_and_a_new_one_starts(self) -> None:
         released = release.released_changelog(CHANGELOG, v("1.1.0"), DAY)
         assert "## Unreleased\n\n## 1.1.0 (2026-11-20)\n\n- New: Ctrl+click deletes a point.\n\n## 1.0.0" in released

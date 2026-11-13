@@ -17,6 +17,7 @@ import json
 import os
 import ssl
 import sys
+import textwrap
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field, replace
@@ -158,6 +159,17 @@ def latest_from(answer: list[object]) -> LatestRelease | None:
     return replace(releases[0], history=history)
 
 
+def tidy_notes(notes: str) -> str:
+    """A release's notes as GitHub keeps them ("\\r\\n" between the lines), with "\\n" between them, without the empty
+    lines around them, and without the indentation all their lines share."""
+    lines = [line.rstrip() for line in notes.replace("\r\n", "\n").split("\n")]
+    while lines and not lines[0]:
+        lines.pop(0)
+    while lines and not lines[-1]:
+        lines.pop()
+    return textwrap.dedent("\n".join(lines))
+
+
 def release_from(answer: object) -> LatestRelease:
     """The release in GitHub's answer (a release's JSON)."""
     if not isinstance(answer, dict) or not isinstance(answer.get("tag_name"), str):
@@ -169,7 +181,7 @@ def release_from(answer: object) -> LatestRelease:
     }
     return LatestRelease(
         version=answer["tag_name"].removeprefix("v"),
-        notes=str(answer.get("body") or ""),
+        notes=tidy_notes(str(answer.get("body") or "")),
         page=str(answer.get("html_url") or "https://github.com/Avorthoren/cube-net/releases/latest"),
         files=files,
         date=str(answer.get("published_at") or "")[:10],

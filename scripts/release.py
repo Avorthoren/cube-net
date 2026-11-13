@@ -31,6 +31,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import textwrap
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -115,14 +116,20 @@ def check_not_lower(version: Version, tags: Sequence[str]) -> Version | None:
 
 def section_notes(changelog: str, heading: Callable[[str], bool]) -> str | None:
     """What's under the first "## " heading that `heading` accepts (up to the next "## " heading), or None if there's
-    no such section."""
+    no such section: without the empty lines around it, and without the indentation all its lines share (" - a" and
+    " - b" become "- a" and "- b", each line keeping its own place against the others)."""
     lines = changelog.splitlines()
     try:
         start = next(i for i, line in enumerate(lines) if line.startswith("## ") and heading(line.rstrip()))
     except StopIteration:
         return None
     end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
-    return "\n".join(lines[start + 1 : end]).strip()
+    section = [line.rstrip() for line in lines[start + 1 : end]]
+    while section and not section[0]:
+        section.pop(0)
+    while section and not section[-1]:
+        section.pop()
+    return textwrap.dedent("\n".join(section))
 
 
 def unreleased_notes(changelog: str) -> str | None:
