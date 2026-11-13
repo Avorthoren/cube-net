@@ -12,6 +12,7 @@ from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QFrame, QScrollArea, QTabWidget, QToolButton, QVBoxLayout, QWidget
 
 from cube_net.ui.i18n import Language, bind
+from cube_net.ui.instant_tooltips import InstantTooltips
 from cube_net.ui.settings_panel.preferences_tab import PreferencesTab
 from cube_net.ui.settings_panel.style_tab import StyleTab
 from cube_net.ui.style import Style
@@ -82,6 +83,7 @@ class SettingsPanel(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         layout.addWidget(self.tabs)
+        self.tooltips = InstantTooltips(self)  # the hints show while the mouse is on their widget, and only then
         self.hide()
 
     def _add_tab(self, key: str, tab: QWidget) -> None:

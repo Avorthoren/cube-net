@@ -488,13 +488,16 @@ are listed horizontally, and scroll if they don't fit. The panel opens on the ta
 earlier run of the application), and the application starts with the panel open if it was open when the user left it.
 The very first time the application starts, the panel is open.
 A small button in the panel's upper right corner (a double chevron pointing right, not a cross, which would look like
-closing the application) hides the panel, like clicking "Settings" again. Every change is applied and saved at once, and shows on the
-sheet at once.
+closing the application) hides the panel, like clicking "Settings" again. Every change is applied and saved at once,
+and shows on the sheet at once. The panel's hints (tooltips) show as soon as the mouse is over their element, and
+disappear as soon as it leaves (no delay either way).
 1. Preferences:
    - Language (first): "Language" and a drop-down list with "English" and "Русский" to the right of it ("Язык" when
      it's Russian). The list stays where it is when the language changes. Every text of the application is shown in
      the chosen language (Qt's own too: standard buttons, file dialogs), at once, and the choice is remembered;
-   - Show vertex labels;
+   - Show vertex labels (its hint: "Hotkey: L"). The L key switches it too, anywhere in the main window, with the settings
+     panel open or not: when the key is released (once, however long it's held), not while a text or number field has
+     the focus, and not with SHIFT, CTRL or ALT;
    - Auto-start logging (off by default): when it's on, logging (the session log) starts by itself when the
      application starts.
      Switching it doesn't start or stop logging now: the button above "Logs" on the instruments panel does that (a

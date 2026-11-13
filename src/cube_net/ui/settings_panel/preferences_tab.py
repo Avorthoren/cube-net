@@ -66,6 +66,7 @@ class PreferencesTab(QWidget):
         self.language.currentIndexChanged.connect(lambda i: self.language_changed.emit(self.language.itemData(i)))
         self.show_labels = QCheckBox(self)
         bind(self.show_labels, self.show_labels.setText, "Show vertex labels")
+        bind(self.show_labels, self.show_labels.setToolTip, "Hotkey: L")  # its key (see `MainWindow`)
         _mirror(self.show_labels, labels)
         self.auto_log = QCheckBox(self)
         bind(self.auto_log, self.auto_log.setText, "Auto-start logging")

@@ -59,3 +59,19 @@ def test_hide_button(qtbot: QtBot) -> None:
     assert panel.hide_button.toolTip() == "Hide settings"
     with qtbot.waitSignal(panel.hide_requested):
         panel.hide_button.click()
+
+
+def test_its_hints_are_instant(qtbot: QtBot) -> None:
+    from PyQt6.QtCore import QEvent, QPoint, QPointF
+    from PyQt6.QtGui import QEnterEvent
+    from PyQt6.QtWidgets import QApplication
+
+    panel = make(qtbot)
+    panel.show()
+    qtbot.waitExposed(panel)
+    box = panel.preferences.show_labels
+    where = QPointF(5, 5)
+    QApplication.sendEvent(box, QEnterEvent(where, where, QPointF(box.mapToGlobal(QPoint(5, 5)))))
+    assert panel.tooltips.label.isVisible() and panel.tooltips.label.text() == "Hotkey: L"
+    QApplication.sendEvent(box, QEvent(QEvent.Type.Leave))
+    assert not panel.tooltips.label.isVisible()

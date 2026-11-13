@@ -91,6 +91,29 @@ def test_vertex_labels_toggle(qtbot: QtBot, tmp_path: Path) -> None:
     assert item.labels() is not None and settings.show_vertex_labels is True
 
 
+def test_l_switches_the_vertex_labels_when_released(qtbot: QtBot, tmp_path: Path) -> None:
+    from PyQt6.QtTest import QTest
+
+    settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    window = MainWindow(settings=settings)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    handle = window.windowHandle()
+    assert handle is not None
+    box = window.settings_panel.preferences.show_labels
+    assert box.toolTip() == "Hotkey: L"
+    for panel_shown in (True, False):
+        window.settings_panel.setVisible(panel_shown)
+        QTest.keyPress(handle, Qt.Key.Key_L)
+        assert window.show_labels_action.isChecked()  # not yet
+        QTest.keyRelease(handle, Qt.Key.Key_L)
+        assert not window.show_labels_action.isChecked() and not box.isChecked()
+        assert settings.show_vertex_labels is False
+        QTest.keyClick(handle, Qt.Key.Key_L)
+        assert window.show_labels_action.isChecked() and box.isChecked()
+
+
 def test_labels_off_at_start_when_disabled_in_settings(qtbot: QtBot, tmp_path: Path) -> None:
     settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
     settings.show_vertex_labels = False

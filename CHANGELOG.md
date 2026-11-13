@@ -5,6 +5,7 @@ What's new in every version of Cube Net. While working, write the changes under 
 
 ## Unreleased
  - Release notes indentation fixed
+ - Hotkey (L) for vertex labels added
 
 ## 1.0.0 (2026-11-13)
  - Instruments panel buttons style improved

@@ -72,6 +72,7 @@ RUSSIAN: dict[str, str] = {
     "Hide settings": "Скрыть настройки",
     "Language": "Язык",
     "Show vertex labels": "Показывать метки вершин",
+    "Hotkey: L": "Клавиша: L",
     "Auto-start logging": "Автоматически начинать логирование",
     "Blink when target area achieved": "Мигать, когда цель достигнута",
     "Maximum zoom:": "Макс. масштаб:",

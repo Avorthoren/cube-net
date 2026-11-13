@@ -49,6 +49,7 @@ from cube_net.ui.i18n.errors import error_text
 from cube_net.ui.instruments.bounding_controls import BoundingControls
 from cube_net.ui.instruments.button_look import tool_buttons_style
 from cube_net.ui.instruments.logging_icons import record_icon, stop_icon
+from cube_net.ui.key_release_shortcut import KeyReleaseShortcut
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
 from cube_net.ui.menu_entry_dialog import ask_menu_entry, confirm_menu_entry_removal
 from cube_net.ui.no_wheel import ignore_wheel
@@ -869,6 +870,9 @@ class MainWindow(QMainWindow):
         self.show_labels_action.setCheckable(True)
         self.show_labels_action.setChecked(self.settings.show_vertex_labels)
         self.show_labels_action.toggled.connect(self._on_show_labels_toggled)
+        # L switches them, when it's released (with the settings panel open or not).
+        self.labels_key = KeyReleaseShortcut(Qt.Key.Key_L, self)
+        self.labels_key.activated.connect(self.show_labels_action.toggle)
         self.auto_log_action = QAction(self)
         bind(self.auto_log_action, self.auto_log_action.setText, "Auto-start logging")
         self.auto_log_action.setCheckable(True)
