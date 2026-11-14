@@ -83,10 +83,15 @@ APPROVE_BUTTON_SHADOW_PX = 2.0
 APPROVE_CHECK_WIDTH_PX = 3.0
 
 # The coordinates hint (a point's exact coordinates): the size of its monospace text, the space around the text inside
-# its box, and how far its corner is from the mouse (above and to the right of it, unless it wouldn't fit there).
+# its box, and how far its corner is from the mouse (above and to the right of it, unless it wouldn't fit there):
+# above it (or below), and to its left (where it doesn't fit on the right).
 COORDINATES_FONT_PX = 12
 COORDINATES_PADDING_PX = 4
 COORDINATES_OFFSET_PX = 14
+
+# How far right of the mouse the hint starts: clear of the pointers that go up and to the right of it (the pencil over
+# a point of the cut line, its whole 32 px image), so they don't hide the start of its lines.
+COORDINATES_RIGHT_OFFSET_PX = 32
 
 
 def set_sizes(

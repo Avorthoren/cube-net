@@ -15,8 +15,8 @@ SIZE = QSize(200, 40)
 
 
 def test_above_and_to_the_right_of_the_mouse() -> None:
-    offset = net_style.COORDINATES_OFFSET_PX
-    assert hint_place(QPoint(300, 300), SIZE, AREA) == QPoint(300 + offset, 300 - offset - SIZE.height())
+    offset, right = net_style.COORDINATES_OFFSET_PX, net_style.COORDINATES_RIGHT_OFFSET_PX
+    assert hint_place(QPoint(300, 300), SIZE, AREA) == QPoint(300 + right, 300 - offset - SIZE.height())
 
 
 def test_to_the_left_where_it_doesnt_fit_on_the_right() -> None:
@@ -25,8 +25,31 @@ def test_to_the_left_where_it_doesnt_fit_on_the_right() -> None:
 
 
 def test_below_where_it_doesnt_fit_above() -> None:
-    offset = net_style.COORDINATES_OFFSET_PX
-    assert hint_place(QPoint(300, 20), SIZE, AREA) == QPoint(300 + offset, 20 + offset)
+    offset, right = net_style.COORDINATES_OFFSET_PX, net_style.COORDINATES_RIGHT_OFFSET_PX
+    assert hint_place(QPoint(300, 20), SIZE, AREA) == QPoint(300 + right, 20 + offset)
+
+
+def test_the_pencil_pointer_doesnt_cover_it(qtbot: QtBot) -> None:
+    """Over a point of the cut line the pointer is a pencil, going up and to the right from its tip (the mouse): none
+    of its pixels is over the hint."""
+    from PyQt6.QtCore import QRect
+
+    from cube_net.ui.sheet.cursors import CursorKind, cursor_for
+
+    cursor = cursor_for(CursorKind.PENCIL)
+    image = cursor.pixmap().toImage()
+    ratio = cursor.pixmap().devicePixelRatio()
+    hot = cursor.hotSpot()
+    mouse = QPoint(300, 300)
+    box = QRect(hint_place(mouse, SIZE, AREA), SIZE)
+    covered = [
+        (x, y)
+        for x in range(image.width())
+        for y in range(image.height())
+        if image.pixelColor(x, y).alpha() > 0
+        and box.contains(mouse + QPoint(round(x / ratio) - hot.x(), round(y / ratio) - hot.y()))
+    ]
+    assert covered == []
 
 
 def test_in_the_corner_both() -> None:

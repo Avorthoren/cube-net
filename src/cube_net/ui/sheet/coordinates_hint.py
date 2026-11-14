@@ -31,7 +31,7 @@ def hint_place(mouse: QPoint, size: QSize, area: QSize) -> QPoint:
     pixels): above and to the right of the mouse; to its left if it doesn't fit on the right, below it if it doesn't
     fit above."""
     offset = net_style.COORDINATES_OFFSET_PX
-    x = mouse.x() + offset
+    x = mouse.x() + net_style.COORDINATES_RIGHT_OFFSET_PX  # clear of a pointer going up and right (the pencil)
     if x + size.width() > area.width():
         x = mouse.x() - offset - size.width()
     y = mouse.y() - offset - size.height()

@@ -554,8 +554,9 @@ disappear as soon as it leaves (no delay either way).
      the focus, and not with SHIFT, CTRL or ALT;
    - Show vertex coordinates (on by default; its hint: "Hotkey: C"; the C key switches it as L does the labels). The
      coordinates hint: a point's exact coordinates, where they aren't just the mouse's (the footer's), since points,
-     the perimeter and the fold lines have hitboxes. It's shown at once, above and to the right of the mouse (to its
-     left, or below it, where it wouldn't fit in the view), in a translucent box, in a monospace font, for:
+     the perimeter and the fold lines have hitboxes. It's shown at once, above and to the right of the mouse, far
+     enough right that the pencil pointer (over a point of the cut line) doesn't cover it (to the left of the mouse,
+     or below it, where it wouldn't fit in the view), in a translucent box, in a monospace font, for:
      - a point under the mouse (in its circle): the net's vertices (the rearranged net's too, while approving), the
        cut line's points, its small dots (the crossings with fold lines, the endpoints' counterpart images);
      - where a click would make a point that snaps to something: the line's first point on the perimeter, the next
