@@ -127,6 +127,10 @@ class Editor:
     def _point_at_vertex(self, vertex: NetVertex) -> CutPoint:
         return CutPoint(vertex.position, boundary_edge_from(self.net, vertex), vertex)
 
+    def point_on_cut(self, position: Vec, cut: HalfEdge) -> CutPoint:
+        """The line's point at `position`, exactly on `cut`: the vertex, if it's one of the cut's ends."""
+        return self._point_on_cut(position, cut)
+
     def _point_on_cut(self, position: Vec, cut: HalfEdge) -> CutPoint:
         for end in (cut.origin, cut.destination):
             if position == end.position:  # exactly on the end of the cut: that's the vertex
@@ -175,6 +179,27 @@ class Editor:
                 return self._extend(self.candidate(p, cut, vertex, fold, straight))
             case _:
                 return None
+
+    def start_at(self, point: CutPoint) -> None:
+        """DEFAULT: the line starts at `point`, exactly there (typed coordinates: nothing is rounded). It must be on the
+        perimeter."""
+        if self.state is not EditorState.DEFAULT or not point.on_perimeter:
+            raise ValueError(f"a line starts on the perimeter, in DEFAULT (now {self.state.name}): {point}")
+        before = self.snapshot()
+        self.cut_line = CutLine([point])
+        self._record(ActionKind.ADD_POINT, before)
+
+    def add_point(self, point: CutPoint) -> Rejection | None:
+        """CUTTING: `point`, exactly there, is the line's next point (on the perimeter: its last one). Rejected, as a
+        click would be, if the new segment breaks the rules or the line has as many points as it may."""
+        if self.state is not EditorState.CUTTING:
+            raise ValueError(f"points are added in CUTTING, not in {self.state.name}")
+        return self._extend(point)
+
+    def too_many_points(self, point: CutPoint) -> bool:
+        """CUTTING: the line already has as many points inside the net as it may, and `point` would be one more."""
+        line = self.cut_line
+        return line is not None and line.inner_count >= MAX_POINTS_AFTER_FIRST and not point.on_perimeter
 
     # --- CUT_EDITING ------------------------------------------------------------------------------------------------
 

@@ -11,6 +11,7 @@ from collections.abc import Callable
 
 from PyQt6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
+    QCursor,
     QGuiApplication,
     QKeyEvent,
     QMouseEvent,
@@ -42,6 +43,9 @@ def _to_rect(box: Box) -> QRectF:
 # How often (ms) the modifier keys are read while the mouse is over the sheet (see `SheetView.__init__`).
 MODIFIER_POLL_MS = 50
 
+# How often (ms) the mouse's position is read while a modal window keeps its moves from the sheet (`follow_cursor`).
+FOLLOW_CURSOR_MS = 30
+
 
 class SheetView(QGraphicsView):
     # Mouse position in sheet coordinates (emitted on every move over the view).
@@ -61,6 +65,9 @@ class SheetView(QGraphicsView):
 
     # Left button released at a sheet point (x, y), unless it ended panning.
     left_released = pyqtSignal(float, float)
+
+    # Right button pressed at a sheet point (x, y) (not while the sheet is being dragged).
+    right_pressed = pyqtSignal(float, float)
 
     # The zoom changed: new scale in pixels per unit.
     zoom_changed = pyqtSignal(float)
@@ -100,6 +107,16 @@ class SheetView(QGraphicsView):
         self._fixed: tuple[Box, float] | None = None
         # Where the viewport's top-left corner was in the window, so the sheet can be kept in place when it moves.
         self._viewport_origin: QPoint | None = None
+        # While a modal window is open, the mouse's moves don't reach the sheet: they're read from here (see
+        # `follow_cursor`). The window, and whether the mouse was over the sheet at the last reading.
+        self._follow_timer = QTimer(self)
+        self._follow_timer.setInterval(FOLLOW_CURSOR_MS)
+        self._follow_timer.timeout.connect(self.follow_tick)
+        self._followed_past: QWidget | None = None
+        self._followed_at: QPoint | None = None
+        # The mouse is over that window (from its own Enter and Leave: on Wayland, an application doesn't know where
+        # its windows are on the screen, so their geometry can't tell).
+        self._over_modal = False
         app = QApplication.instance()
         if app is not None and follow_keyboard:
             app.installEventFilter(self)  # see `eventFilter`
@@ -305,6 +322,11 @@ class SheetView(QGraphicsView):
                 self.left_pressed.emit(p.x(), p.y())
             event.accept()
             return
+        if event.button() == Qt.MouseButton.RightButton and self._pan_last is None:
+            p = self.to_sheet(event.position())
+            self.right_pressed.emit(p.x(), p.y())
+            event.accept()
+            return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
@@ -336,6 +358,12 @@ class SheetView(QGraphicsView):
         """SHIFT and CTRL, whichever widget of the app has the keyboard focus (a spin box, the settings panel...): the
         sheet shows what they do at once. Coming back to the window, they're read anew (they may have changed while
         it was in the background)."""
+        if watched is not None and watched is self._followed_past and event is not None:
+            if event.type() == QEvent.Type.Enter:
+                self._over_modal = True
+                self.follow_tick()  # off the sheet at once
+            elif event.type() == QEvent.Type.Leave:
+                self._over_modal = False  # the next reading: right now the position may still be the window's
         if isinstance(event, QKeyEvent) and event.type() in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
             held = event.type() == QEvent.Type.KeyPress
             if event.key() == Qt.Key.Key_Shift:
@@ -354,6 +382,42 @@ class SheetView(QGraphicsView):
     def _poll_modifiers(self) -> None:
         if self.isActiveWindow():
             self._note_modifiers(QGuiApplication.queryKeyboardModifiers())
+
+    def follow_cursor(self, modal: QWidget | None) -> None:
+        """While the modal window `modal` is open, the sheet gets no mouse moves (Qt keeps all input from it): read
+        where the mouse is, and tell it as moves, so that whatever follows the mouse (the footer, the hints) does as
+        usual. The mouse over `modal` itself is off the sheet (and there, on Wayland, its position isn't the sheet's
+        to read at all). None: stop (the real moves come again)."""
+        if self._followed_past is not None:
+            self._followed_past.removeEventFilter(self)
+        self._followed_past = modal
+        self._followed_at = None
+        self._over_modal = False
+        if modal is None:
+            self._follow_timer.stop()
+        else:
+            modal.installEventFilter(self)
+            self._over_modal = modal.underMouse()
+            self._follow_timer.start()
+            self.follow_tick()
+
+    def cursor_position(self) -> QPoint:
+        """Where the mouse is, on the screen."""
+        return QCursor.pos()
+
+    def follow_tick(self) -> None:
+        """One reading of `follow_cursor`."""
+        viewport = self.viewport()
+        assert viewport is not None
+        where = self.cursor_position()
+        local = viewport.mapFromGlobal(where)
+        inside = viewport.rect().contains(local) and not self._over_modal
+        if inside and local != self._followed_at:
+            p = self.to_sheet(QPointF(local))
+            self.mouse_moved.emit(p.x(), p.y())
+        elif not inside and self._followed_at is not None:
+            self.mouse_left.emit()
+        self._followed_at = local if inside else None
 
     def leaveEvent(self, event: object) -> None:
         self._modifier_poll.stop()

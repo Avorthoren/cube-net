@@ -55,11 +55,13 @@ def coordinate_lines(point: Vec, limit: int | None = MAX_DIGITS) -> list[str]:
     rows = [("y", point.y), ("x", point.x)]
     numerators = [_number(value.numerator, limit) for _, value in rows]
     fractional = [value.denominator != 1 for _, value in rows]
-    denominators = [_number(value.denominator, limit) if has else "" for (_, value), has in zip(rows, fractional)]
+    denominators = [
+        _number(value.denominator, limit) if has else "" for (_, value), has in zip(rows, fractional, strict=True)
+    ]
     decimals = [decimal_text(value) for _, value in rows]
     numerator_width = max(len(numerator) for numerator in numerators)
-    denominator_width = max((len(d) for d, has in zip(denominators, fractional) if has), default=0)
-    whole_width = max((len(t.split(".")[0]) for t, has in zip(decimals, fractional) if has), default=0)
+    denominator_width = max((len(d) for d, has in zip(denominators, fractional, strict=True) if has), default=0)
+    whole_width = max((len(t.split(".")[0]) for t, has in zip(decimals, fractional, strict=True) if has), default=0)
     lines = []
     for (name, value), numerator, denominator, decimal, has in zip(
         rows, numerators, denominators, decimals, fractional, strict=True

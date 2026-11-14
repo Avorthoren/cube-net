@@ -34,6 +34,7 @@ from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 from cube_net.core.cutting import CutPoint, straighten
+from cube_net.core.cutting.placement import Action, Constraint, LineKind, Placement, Problem, fold_through
 from cube_net.core.editor import Editor, EditorState, Rejection
 from cube_net.core.geometry import Vec, quantize
 from cube_net.core.net import HalfEdge, NetVertex, boundary_edge_at
@@ -97,6 +98,9 @@ class CutTool(QObject):
         self._drag_target: CutPoint | None = None
         self._drag_over_perimeter = False
 
+        # A window (Place a vertex) is open: a point being dragged stays where it is, whatever the mouse does.
+        self._drag_frozen = False
+
         # Where (in window pixels) Shift+press hit an inner point, until it's clear whether that's a click or a drag.
         self._delete_press: QPointF | None = None
         self._mouse: tuple[float, float] | None = None
@@ -122,6 +126,11 @@ class CutTool(QObject):
     @property
     def dragging(self) -> bool:
         return self._drag_index is not None
+
+    def freeze_drag(self, frozen: bool) -> None:
+        """While a window is open over a drag (Place a vertex), the dragged point doesn't follow the mouse, and the
+        hints describe what's under the mouse, as when nothing is dragged."""
+        self._drag_frozen = frozen
 
     @property
     def busy(self) -> bool:
@@ -263,7 +272,7 @@ class CutTool(QObject):
           snapped to the perimeter or (while cutting) to a fold line."""
         if self._on_approve_button(x, y):
             return None
-        if self._drag_index is not None and self._drag_target is not None:
+        if self._drag_index is not None and self._drag_target is not None and not self._drag_frozen:
             target = self._drag_target
             snapped = target.on_perimeter or (target.fold is not None and not self._drag_over_perimeter)
             return target.position if snapped else None
@@ -279,6 +288,88 @@ class CutTool(QObject):
         target = self._editor.candidate(p, cut, vertex, fold, self._view.shift_held())
         if target.on_perimeter or (state is EditorState.CUTTING and target.fold is not None):
             return target.position
+        return None
+
+    def placement_at(self, x: float, y: float) -> Placement | None:
+        """What a right click at sheet point (x, y) offers to place at typed coordinates: the point a left click there
+        would make (DEFAULT, CUTTING), or where the dragged point is now (CUT_EDITING), with what it's snapped to
+        (docs/idea.txt). None where there's nothing to place or nothing to type: no point would be made, or it would be
+        a vertex of the perimeter (both its coordinates are fixed)."""
+        if self._ruler.active:
+            return None
+        line = self._editor.cut_line
+        straight = self._view.shift_held()
+        if self._drag_index is not None and line is not None:
+            i = self._drag_index
+            target = self._drag_target or line.points[i]
+            if target.vertex is not None:
+                return None
+            if target.edge is not None:
+                return Placement(Action.MOVE, target.position, Constraint.on_edge(target.edge), i)
+            if straight and i > 0:
+                anchor = line.points[i - 1].position
+                constraint = Constraint.straight(anchor, horizontal=target.position.y == anchor.y)
+            elif target.fold is not None and not self._drag_over_perimeter:
+                constraint = Constraint.on_fold(target.fold)
+            else:
+                constraint = Constraint.free()
+            return Placement(Action.MOVE, target.position, constraint, i)
+        state = self._editor.state
+        if state not in (EditorState.DEFAULT, EditorState.CUTTING):
+            return None
+        p, cut, vertex, fold = self._hit(x, y)
+        target = self._editor.candidate(p, cut, vertex, fold, straight)
+        action = Action.START if state is EditorState.DEFAULT else Action.ADD
+        if target.vertex is not None:
+            return None
+        if target.edge is not None:  # the edge wins over SHIFT's line
+            return Placement(action, target.position, Constraint.on_edge(target.edge))
+        if state is EditorState.DEFAULT or not self._editor.net.contains(target.position):
+            return None  # a line starts on the perimeter; outside the net, no point is made
+        if straight and line is not None:
+            anchor = line.last.position
+            constraint = Constraint.straight(anchor, horizontal=target.position.y == anchor.y)
+        elif target.fold is not None:
+            constraint = Constraint.on_fold(target.fold)
+        else:
+            constraint = Constraint.free()
+        return Placement(action, target.position, constraint)
+
+    def place(self, placement: Placement, p: Vec) -> Problem | None:
+        """Put the point of `placement` exactly at `p` (typed: nothing is rounded); or why it can't go there, and
+        nothing changes (a dragged point stays dragged)."""
+        net = self._editor.net
+        constraint = placement.constraint
+        problem = constraint.problem(net, p)
+        if problem is not None:
+            return problem
+        if constraint.kind is LineKind.EDGE:
+            assert constraint.edge is not None
+            point = self._editor.point_on_cut(p, constraint.edge)
+        elif constraint.kind is LineKind.FOLD:
+            point = CutPoint(p, fold=constraint.edge)
+        else:
+            point = CutPoint(p, fold=fold_through(net, p))
+        if placement.action is Action.START:
+            self._editor.start_at(point)
+        elif placement.action is Action.ADD:
+            if self._editor.too_many_points(point):
+                return Problem.TOO_MANY_POINTS
+            if self._editor.add_point(point) is not None:
+                return Problem.BREAKS_LINE
+        else:
+            assert placement.index is not None
+            if self._editor.move_point(placement.index, point) is not None:
+                return Problem.BREAKS_LINE
+            self._drag_index, self._drag_target, self._drag_over_perimeter = None, None, False
+            self._delete_press = None
+            self._highlight_fold(None)
+            self._highlight_vertex(None)
+            self.refresh()
+            self.edited.emit("move", placement.index, p)
+            return None
+        self.refresh()
+        self.point_added.emit(p)
         return None
 
     def _on_approve_button(self, x: float, y: float) -> bool:
@@ -520,7 +611,8 @@ class CutTool(QObject):
             self._show_pressed(self._on_armed(x, y))  # pressed while the mouse is on it
             return
         if self._drag_index is not None:
-            self._drag_to(x, y)
+            if not self._drag_frozen:
+                self._drag_to(x, y)
             return
         line = self._editor.cut_line
         if self._editor.state is not EditorState.CUTTING or self._ruler.active or line is None:

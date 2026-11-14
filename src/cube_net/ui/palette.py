@@ -87,6 +87,9 @@ VERTEX_HIGHLIGHT = QColor(255, 214, 0, 230)
 # Translucent box behind debug labels, so they're readable on the hatch too.
 LABEL_BACKGROUND = QColor(255, 255, 255, 200)
 
+# Text that says what's wrong (in a window: why a typed point can't be placed).
+ERROR_TEXT = QColor("#C5221F")
+
 # The coordinates hint (a point's exact coordinates, next to the mouse): its translucent box, its border and its text.
 COORDINATES_BACKGROUND = QColor(255, 255, 255, 190)
 COORDINATES_BORDER = QColor(95, 99, 104, 160)

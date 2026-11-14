@@ -391,3 +391,91 @@ def test_a_view_that_does_not_follow_the_keyboard(qtbot: QtBot) -> None:
         qtbot.keyPress(other, Qt.Key.Key_Control)
         qtbot.keyRelease(other, Qt.Key.Key_Control)
     assert not view.ctrl_held()
+
+
+class TestRightPressed:
+    def test_anywhere_on_the_sheet(self, view: SheetView, qtbot: QtBot) -> None:
+        for x, y in ((11.5, 12.5), (7.0, 7.0)):  # on the net and off it: the tools decide what it means
+            with qtbot.waitSignal(view.right_pressed) as blocker, qtbot.assertNotEmitted(view.left_pressed):
+                qtbot.mousePress(
+                    view.viewport(), Qt.MouseButton.RightButton, pos=view.from_sheet(QPointF(x, y)).toPoint()
+                )
+            assert blocker.args == pytest.approx([x, y], abs=2 / view.scale_factor())
+            assert not view.is_panning()
+            qtbot.mouseRelease(view.viewport(), Qt.MouseButton.RightButton)
+
+    def test_not_while_the_sheet_is_dragged(self, view: SheetView, qtbot: QtBot) -> None:
+        pos = view.from_sheet(QPointF(7, 7)).toPoint()
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        assert view.is_panning()
+        with qtbot.assertNotEmitted(view.right_pressed):
+            qtbot.mousePress(view.viewport(), Qt.MouseButton.RightButton, pos=pos)
+        qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+
+
+class TestFollowCursor:
+    """While a modal window keeps the mouse's moves from the sheet, the view reads where the mouse is."""
+
+    def test_tells_the_moves_over_the_sheet(
+        self, view: SheetView, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from PyQt6.QtWidgets import QWidget
+
+        viewport = view.viewport()
+        assert viewport is not None
+        modal = QWidget()
+        qtbot.addWidget(modal)
+        modal.setGeometry(viewport.mapToGlobal(QPointF(0, 0).toPoint()).x(), 0, 1, 1)  # out of the way
+        where = [viewport.mapToGlobal(view.from_sheet(QPointF(11.5, 12.5)).toPoint())]
+        monkeypatch.setattr(view, "cursor_position", lambda: where[0])
+        moves: list[tuple[float, float]] = []
+        left: list[bool] = []
+        view.mouse_moved.connect(lambda x, y: moves.append((x, y)))
+        view.mouse_left.connect(lambda: left.append(True))
+        view.follow_cursor(modal)
+        assert moves[-1] == pytest.approx((11.5, 12.5), abs=2 / view.scale_factor())
+        view.follow_tick()
+        assert len(moves) == 1  # it didn't move: nothing to tell
+        where[0] = viewport.mapToGlobal(view.from_sheet(QPointF(10.0, 13.0)).toPoint())
+        view.follow_tick()
+        assert moves[-1] == pytest.approx((10.0, 13.0), abs=2 / view.scale_factor())
+        where[0] = viewport.mapToGlobal(QPointF(-50, -50).toPoint())  # off the sheet
+        view.follow_tick()
+        assert left == [True]
+        view.follow_cursor(None)
+        where[0] = viewport.mapToGlobal(view.from_sheet(QPointF(11.5, 12.5)).toPoint())
+        qtbot.wait(100)
+        assert len(moves) == 2  # stopped: the real moves come again
+
+    def test_over_the_window_itself_is_off_the_sheet(
+        self, view: SheetView, qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Told by the window's own Enter and Leave, not by its geometry: on Wayland, an application doesn't know where
+        its windows are (Qt's idea of the window's place may be elsewhere, here: right over the mouse's spot)."""
+        from PyQt6.QtCore import QEvent, QRect
+        from PyQt6.QtWidgets import QApplication, QWidget
+
+        viewport = view.viewport()
+        assert viewport is not None
+        spot = viewport.mapToGlobal(view.from_sheet(QPointF(11.5, 12.5)).toPoint())
+        modal = QWidget()
+        qtbot.addWidget(modal)
+        modal.setGeometry(QRect(spot.x() - 20, spot.y() - 20, 40, 40))  # where Qt thinks it is: no matter
+        monkeypatch.setattr(view, "cursor_position", lambda: spot)
+        moves: list[tuple[float, float]] = []
+        left: list[bool] = []
+        view.mouse_moved.connect(lambda x, y: moves.append((x, y)))
+        view.mouse_left.connect(lambda: left.append(True))
+        view.follow_cursor(modal)
+        assert len(moves) == 1  # the mouse isn't in the window: it's on the sheet
+        QApplication.sendEvent(modal, QEvent(QEvent.Type.Enter))
+        assert left == [True]  # in the window: off the sheet at once
+        view.follow_tick()
+        assert len(moves) == 1  # and its position there means nothing to the sheet
+        QApplication.sendEvent(modal, QEvent(QEvent.Type.Leave))
+        assert len(moves) == 1  # not at the very moment of leaving: the position may still be the window's
+        view.follow_tick()
+        assert len(moves) == 2  # the next reading
+        view.follow_cursor(None)
+        QApplication.sendEvent(modal, QEvent(QEvent.Type.Enter))
+        assert left == [True]  # not followed any more

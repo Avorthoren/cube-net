@@ -760,3 +760,49 @@ class TestLongSession:
         positions = [v.position for v in editor.net.vertices]
         largest = max(max(p.x.denominator, p.y.denominator) for p in positions)
         assert largest < 10**100  # with the exact closest point it's thousands of digits by 45 cuts, and growing fast
+
+
+class TestTypedPoints:
+    """Points placed at typed coordinates (right click -> Place a vertex): exactly there, nothing rounded."""
+
+    def test_the_line_starts_exactly_there(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        p = Vec(10, F(37, 3))  # between steps of 1/1000: a click would round it
+        editor.start_at(editor.point_on_cut(p, cut("A_2-E_2")))
+        assert positions(editor) == [p]
+        assert editor.state is EditorState.CUTTING
+        assert editor.undo() and editor.state is EditorState.DEFAULT  # one step of the history
+
+    def test_a_start_off_the_perimeter_is_a_mistake(self, net: Net) -> None:
+        with pytest.raises(ValueError, match="perimeter"):
+            Editor(net).start_at(CutPoint(v("10.5", "12.5")))
+
+    def test_the_end_of_a_cut_is_its_vertex(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        point = Editor(net).point_on_cut(Vec(10, 13), cut("A_2-E_2"))
+        assert point.vertex is not None and point.vertex.position == Vec(10, 13)
+
+    def test_the_next_points_exactly_there(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        editor.click(v("10", "12.5"), cut("A_2-E_2"))
+        inner = Vec(F(31, 3), F(37, 3))
+        assert editor.add_point(CutPoint(inner)) is None
+        end = Vec(F(32, 3), 13)
+        assert editor.add_point(editor.point_on_cut(end, cut("C_1-A_2"))) is None
+        assert positions(editor) == [v("10", "12.5"), inner, end]
+        assert editor.state is EditorState.CUT_EDITING
+
+    def test_a_typed_point_breaking_the_rules_is_rejected(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        editor.click(v("10", "12.5"), cut("A_2-E_2"))
+        assert editor.add_point(CutPoint(v("10", "12.5"))) is not None  # the same point again
+        assert positions(editor) == [v("10", "12.5")]
+
+    def test_too_many_points(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        editor.click(v("10", "12.01"), cut("A_2-E_2"))
+        for i in range(MAX_POINTS_AFTER_FIRST):
+            x = F(1001, 100) + F(i, 100) * F(97, 100)
+            y = F(1202, 100) if i % 2 else F(1298, 100)
+            editor.click(Vec(x, y), None)
+        assert editor.too_many_points(CutPoint(v("10.9", "12.5")))
+        assert not editor.too_many_points(editor.point_on_cut(v("10.9", "13"), cut("C_1-A_2")))  # it may still end

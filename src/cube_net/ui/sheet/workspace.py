@@ -19,6 +19,7 @@ from cube_net.core.sheet import sheet_box
 from cube_net.ui.sheet.counterpart_blink import CounterpartBlink
 from cube_net.ui.sheet.cut_hover import CutHover
 from cube_net.ui.sheet.cut_tool import CutTool
+from cube_net.ui.sheet.place_vertex import PlaceVertex
 from cube_net.ui.sheet.ruler_tool import RulerTool
 from cube_net.ui.sheet.sheet_cursor import SheetCursor
 from cube_net.ui.sheet.sheet_view import SheetView
@@ -44,6 +45,8 @@ class Workspace(QObject):
         self.cut_hover.set_target(self.cut_tool.hover_target)
         view.set_press_claim(self.cut_tool.claims)
         self.sheet_cursor = SheetCursor(view, self.cut_tool, self.ruler_tool) if mouse_cursor else None
+        # Right click -> Place a vertex (typed coordinates): only where the user's mouse means something.
+        self.place_vertex = PlaceVertex(view, self.cut_tool) if mouse_cursor else None
 
     @property
     def net(self) -> Net:

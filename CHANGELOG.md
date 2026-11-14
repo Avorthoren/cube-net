@@ -9,6 +9,7 @@ What's new in every version of Cube Net. While working, write the changes under 
  - Focus-off for target area input improved
  - Default edge thickness → 4 px, default vertex radius → 6 px
  - "Show vertex coordinates" setting added
+ - "Place vertex" feature implemented
 
 ## 1.0.0 (2026-11-13)
  - Instruments panel buttons style improved

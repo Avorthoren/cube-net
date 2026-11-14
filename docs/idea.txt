@@ -482,6 +482,36 @@ Few more notes:
    - Snapping: points of the cut line snap to vertices and segments of the outer perimeter and to fold lines, and
      SHIFT restricts segments (see above). Nothing snaps to the unit grid, and ruler points don't snap.
 
+Place a vertex (right click)
+In DEFAULT, in CUTTING, and while a point is being dragged in CUT_EDITING, a right click on the sheet opens a menu with
+"Place a vertex". The menu is the application's own, drawn inside the window like a system one (on Wayland a system
+menu can't open while a mouse button is held, as during a drag): an item is chosen by a click on it, or with Up, Down
+and Enter; Escape, a click elsewhere (used up) or leaving the window closes it. Meanwhile the rest of the window takes
+no clicks, no wheel and no keys, a dragged point stays where it is, and releasing the drag's button changes nothing. It's disabled where there's nothing to place: where a left click (the release) would make no point
+(in DEFAULT: off the perimeter; in CUTTING: outside the net), or would make a vertex of the perimeter (both its
+coordinates are fixed). Chosen, it opens a small window, "Place a vertex", with two lines, y first:
+    y: [numerator] / [denominator]  ≈ 12.922
+    x: [numerator] / [denominator]  = 11.000
+Its fields start with the exact coordinates of the point a left click there would make (where the drag has brought the
+dragged point), in full however long. A numerator is an integer, a denominator a positive one; at most 10 digits can be
+typed (a longer number there can be shortened, and can always get a minus sign). Each line shows "=" or "≈" and its
+value with 3 digits, as it's typed. A field shows a 10-digit number whole; a longer one has to be scrolled.
+If the point would snap to a line, its coordinates are tied by the line's equation: as one is typed, the other follows
+at once (while the typed one is a number; half typed, the other keeps its value), and Place takes the one typed last.
+On a slanted line either coordinate can be typed; on a vertical line x is fixed, on a horizontal one y (its fields
+are disabled). The line is the perimeter edge or the fold line the point would snap to; with SHIFT held, SHIFT's
+horizontal or vertical line, unless the point would snap to an edge (the edge wins). The y numerator has the focus at
+first (x's, if y is fixed), its text selected.
+Place (the default: ENTER) puts the point exactly there (nothing is rounded, unlike a click): the line's first point,
+its next one, or where the dragged point goes (that ends the drag). If it can't go there, the window stays and says
+why, in red: outside the net; on the perimeter (only the line's ends can be); beyond the ends of its edge or fold
+line; too many points; or the line would leave the net, or touch or cross itself. Cancel, ESCAPE and the close button
+change nothing; for a drag, they (and closing the menu without choosing) end it with the point back where it was.
+While the window is open, the rest of the application takes no input, but the mouse over the sheet still shows what
+it always shows: the footer's coordinates and the coordinates hint follow it (over the window itself, it's off the
+sheet). A point being dragged stays where the drag brought it meanwhile.
+Not in Help's animations.
+
 Settings
 In the menu bar, to the right of Edit, there's "Settings": it opens a panel on the right side of the window, over the
 sheet (the sheet doesn't move, and the rest of it works as usual); clicking "Settings" again hides it. These are

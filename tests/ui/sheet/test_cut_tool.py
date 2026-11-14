@@ -1065,3 +1065,101 @@ class TestCoordinates:
         assert tool.coordinates_at(float(end.x), float(end.y)) == end
         monkeypatch.setattr(net_style, "APPROVE_BUTTON_RADIUS_PX", 10_000.0)  # zoomed out: it covers the vertex
         assert tool.coordinates_at(float(end.x), float(end.y)) is None
+
+
+class TestPlacement:
+    """What a right click offers to place at typed coordinates (`CutTool.placement_at`), and placing it (`place`)."""
+
+    def test_default_on_an_edge(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.core.cutting.placement import Action, Axis, LineKind
+
+        view, tool, _ = setup
+        placement = tool.placement_at(*just_inside_top_of_face_1(view))
+        assert placement is not None
+        assert (placement.action, placement.position) == (Action.START, X)  # where a click would start the line
+        assert placement.constraint.kind is LineKind.EDGE and placement.constraint.axis is Axis.X  # y = 14: x typed
+
+    def test_nothing_to_type_on_a_vertex_or_where_no_point_is_made(
+        self, setup: tuple[SheetView, CutTool, RulerTool]
+    ) -> None:
+        view, tool, ruler = setup
+        assert tool.placement_at(10, 13) is None  # a vertex: both coordinates fixed
+        assert tool.placement_at(11.5, 13.5) is None  # DEFAULT: inside a face, a click does nothing
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        assert tool.placement_at(9, 9) is None  # CUTTING: outside the net
+        ruler.set_active(True)
+        assert tool.placement_at(11.6, 13.6) is None  # the ruler takes the clicks
+
+    def test_cutting_free_on_a_fold_and_with_shift(
+        self, setup: tuple[SheetView, CutTool, RulerTool], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.core.cutting.placement import Action, Axis, LineKind
+
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        free = tool.placement_at(11.6, 13.6)
+        assert free is not None and free.action is Action.ADD and free.constraint.axis is Axis.BOTH
+        on_fold = tool.placement_at(11.6, 13 + half_fold_hitbox(view))
+        assert (
+            on_fold is not None and on_fold.constraint.kind is LineKind.FOLD and on_fold.position == Vec(F(58, 5), 13)
+        )
+        monkeypatch.setattr(view, "shift_held", lambda: True)
+        straight = tool.placement_at(11.6, 13 + half_fold_hitbox(view))  # SHIFT's line wins over the fold
+        assert straight is not None and straight.constraint.kind is LineKind.STRAIGHT
+        assert straight.constraint.axis is Axis.Y and straight.position.x == X.x  # down from X: y typed
+        tool.place(free, Vec(F(23, 2), F(27, 2)))  # Y: the line goes on from there
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        edge = tool.placement_at(12 - h, 13.55)  # SHIFT's line y = 13.5 meets the edge x = 12: the edge wins
+        assert edge is not None and edge.constraint.kind is LineKind.EDGE and edge.position == Z
+        assert edge.constraint.axis is Axis.Y
+
+    def test_placing_exactly_without_rounding(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        start = tool.placement_at(*just_inside_top_of_face_1(view))
+        assert start is not None
+        typed = Vec(F(34, 3), 14)  # 11.333...: between the steps a click lands on
+        with qtbot.waitSignal(tool.point_added):
+            assert tool.place(start, typed) is None
+        assert positions(tool) == [typed]
+        free = tool.placement_at(11.6, 13.6)
+        assert free is not None
+        assert tool.place(free, Vec(F(35, 3), F(40, 3))) is None
+        assert positions(tool) == [typed, Vec(F(35, 3), F(40, 3))]
+
+    def test_why_a_typed_point_cant_go_there(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.core.cutting.placement import Problem
+
+        view, tool, _ = setup
+        start = tool.placement_at(*just_inside_top_of_face_1(view))
+        assert start is not None
+        assert tool.place(start, Vec(13, 14)) is Problem.OFF_EDGE
+        assert tool.editor.cut_line is None  # nothing changed
+        tool.place(start, X)
+        free = tool.placement_at(11.6, 13.6)
+        assert free is not None
+        assert tool.place(free, Vec(9, 9)) is Problem.OUTSIDE_NET
+        assert tool.place(free, Vec(F(23, 2), 13)) is None  # on a fold: fine, it's on that fold then
+        assert tool.item.points()[1].fold is not None
+        assert tool.place(free, Vec(F(23, 2), F(27, 2))) is Problem.BREAKS_LINE  # back across the line
+        assert positions(tool) == [X, Vec(F(23, 2), 13)]
+
+    def test_while_dragging(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        from cube_net.core.cutting.placement import Action, Axis, LineKind
+
+        view, tool, _ = setup
+        corner_cut(view)
+        assert tool.placement_at(11.5, 13.5) is None  # CUT_EDITING without a drag: nothing
+        view.left_pressed.emit(11.5, 13.5)  # Y, an inner point
+        view.mouse_moved.emit(11.6, 13.6)
+        inner = tool.placement_at(11.6, 13.6)
+        assert inner is not None and inner.action is Action.MOVE and inner.index == 1
+        assert inner.constraint.axis is Axis.BOTH and inner.position == Vec(F(58, 5), F(68, 5))
+        with qtbot.waitSignal(tool.edited):
+            assert tool.place(inner, Vec(F(35, 3), F(40, 3))) is None
+        assert not tool.dragging  # placing ends the drag
+        assert positions(tool) == [X, Vec(F(35, 3), F(40, 3)), Z]
+        view.left_pressed.emit(*(float(c) for c in (Z.x, Z.y)))  # the end on B_1-D_1 (x = 12)
+        view.mouse_moved.emit(12.0, 13.4)
+        end = tool.placement_at(12.0, 13.4)
+        assert end is not None and end.constraint.kind is LineKind.EDGE and end.constraint.axis is Axis.Y
+        tool.cancel_drag()
