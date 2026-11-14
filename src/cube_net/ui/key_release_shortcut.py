@@ -40,6 +40,9 @@ class KeyReleaseShortcut(QObject):
         assert app is not None
         app.installEventFilter(self)  # every key event reaches the window (QWindow) first, once
 
+    def key(self) -> Qt.Key:
+        return self._key
+
     def eventFilter(self, watched: QObject | None, event: QEvent | None) -> bool:
         if (
             isinstance(watched, QWindow)

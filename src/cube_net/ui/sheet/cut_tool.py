@@ -8,9 +8,8 @@
 - While cutting, a click inside the net adds a point (on a fold line, if clicked in its hitbox); a thin line follows the
   mouse from the last point (hidden while the ruler is active, which then takes the clicks).
 - In CUT_EDITING, a click on a segment's hollow middle circle adds a point there; Ctrl+click on an inner point deletes
-  it (on release on the same point; while CTRL is held over it the mouse shows a red x), and so does Shift+click (on
-  release, if the mouse has hardly moved: Shift+drag moves it); dragging a point moves it, and it's checked when
-  the mouse is released. An endpoint walks along the perimeter and
+  it (on release on the same point; while CTRL is held over it the mouse shows a red x); dragging a point moves it
+  (with SHIFT too: see below), and it's checked when the mouse is released. An endpoint walks along the perimeter and
   snaps to perimeter vertices. An inner point snaps to fold lines, and may not be released in a hitbox of the perimeter.
 - A fold line is highlighted while the mouse is in its hitbox, whenever that means a point would land on it: while
   cutting, and while dragging an inner point.
@@ -31,7 +30,6 @@ import math
 from collections.abc import Callable
 
 from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
-from PyQt6.QtWidgets import QApplication
 
 from cube_net.core.cutting import CutPoint, straighten
 from cube_net.core.cutting.placement import Action, Constraint, LineKind, Placement, Problem, fold_through
@@ -116,8 +114,6 @@ class CutTool(QObject):
         # ends it, as the release would have.
         self._drag_free = False
 
-        # Where (in window pixels) Shift+press hit an inner point, until it's clear whether that's a click or a drag.
-        self._delete_press: QPointF | None = None
         self._mouse: tuple[float, float] | None = None
 
         # A button that's pressed: ("approve", 0), ("midpoint", its segment) or ("delete", the point pressed with CTRL).
@@ -225,7 +221,6 @@ class CutTool(QObject):
     def reload(self) -> None:
         """The editor got a whole new state (a project was opened): forget everything that was going on."""
         self._drag_index, self._drag_target, self._drag_over_perimeter = None, None, False
-        self._delete_press = None
         self._disarm()
         self._flash_timer.stop()
         self.item.set_flash(None)
@@ -243,7 +238,6 @@ class CutTool(QObject):
             return
         self._drag_index, self._drag_target, self._drag_over_perimeter = None, None, False
         self._drag_free = False
-        self._delete_press = None
         self._end_slope()
         self._highlight_fold(None)
         self._highlight_vertex(None)
@@ -467,7 +461,6 @@ class CutTool(QObject):
                 return Problem.BREAKS_LINE
             self._drag_index, self._drag_target, self._drag_over_perimeter = None, None, False
             self._drag_free = False
-            self._delete_press = None
             self._end_slope()
             self._highlight_fold(None)
             self._highlight_vertex(None)
@@ -563,9 +556,6 @@ class CutTool(QObject):
             return
         if i is not None:
             self._drag_index, self._drag_target, self._drag_over_perimeter = i, None, False
-            inner = 0 < i < len(line.points) - 1
-            shift = self._view.press_modifiers() & Qt.KeyboardModifier.ShiftModifier
-            self._delete_press = self._view.from_sheet(QPointF(x, y)) if inner and shift else None
             self.line_changed.emit()
             return
         segment = self._midpoint_at(x, y)
@@ -660,10 +650,6 @@ class CutTool(QObject):
         if i is None:
             return
         self._end_slope()  # the lock was for this drag
-        if self._delete_press is not None:
-            self._delete_press = None
-            self._delete_point(i)
-            return
         if target is None:  # pressed and released without moving
             self.line_changed.emit()
             return
@@ -773,11 +759,6 @@ class CutTool(QObject):
         i = self._drag_index
         line = self._editor.cut_line
         assert i is not None and line is not None
-        if self._delete_press is not None:
-            moved = self._view.from_sheet(QPointF(x, y)) - self._delete_press
-            if moved.manhattanLength() < QApplication.startDragDistance():
-                return  # still a click
-            self._delete_press = None
         net = self._editor.net
         original = line.points[i]
         straight = self._straight() and i > 0

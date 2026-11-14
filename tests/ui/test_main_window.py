@@ -1451,7 +1451,7 @@ class TestShiftInTheWindow:
         view.mouse_moved.emit(*in_a_cut)
         assert window.cut_hover.hovered() is not None
 
-    def test_undo_is_back_after_a_shift_click(self, qtbot: QtBot, tmp_path: Path) -> None:
+    def test_undo_is_back_after_a_ctrl_click(self, qtbot: QtBot, tmp_path: Path) -> None:
         from PyQt6.QtCore import QPointF
 
         window = self.make(qtbot, tmp_path)
@@ -1461,9 +1461,9 @@ class TestShiftInTheWindow:
         view.left_pressed.emit(11.5, 13.5)
         view.left_pressed.emit(12 - h, 13.5)
         pos = view.from_sheet(QPointF(11.5, 13.5)).toPoint()
-        modifier = Qt.KeyboardModifier.ShiftModifier
+        modifier = Qt.KeyboardModifier.ControlModifier
         qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, modifier, pos)
-        assert not window.undo_action.isEnabled()  # it may still become a drag
+        assert not window.undo_action.isEnabled()  # not deleted until it's released
         qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, modifier, pos)
         assert window.undo_action.isEnabled()
         window.undo_action.trigger()

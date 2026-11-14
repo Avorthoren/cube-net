@@ -339,10 +339,10 @@ highlighted (that's never a counterpart image: the point can't go to those).
    themselves are at least 140% of the edges' thickness across too: the vertex radius can't be set below 0.7 times the
    edge thickness, and if the edges are made thicker, the vertex radius grows with them, just as much as needed (and
    stays when they're made thinner again).
-2. SHIFT+click on any point of the new cut line (except for first and last one) should delete that point (when the mouse
-   is released, if it has hardly moved: SHIFT+drag is a move, see below). CTRL+click does the same: while CTRL is held
-   over such a point the mouse pointer is a red x; the point is deleted when the mouse button is released on it (CTRL
-   never drags; released elsewhere, nothing happens). But there is
+2. CTRL+click on any point of the new cut line (except for first and last one) should delete that point: while CTRL is
+   held over such a point the mouse pointer is a red x; the point is deleted when the mouse button is released on it
+   (CTRL never drags; released elsewhere, nothing happens). SHIFT+click doesn't delete: SHIFT+drag is a move, see
+   below. But there is
    a catch: consider 2 consecutive segments P1 - P2 and P2 - P3 of the new cut line, and user tries to delete P2.
    If segment P1-P3 intersects any other segment of the new cut line or the outer perimeter (i.e. violates the rule
    "new cut line should be strictly inside the cube net"), then for 200 ms we hide segments P1 - P2, P2 - P3 and show
@@ -624,8 +624,12 @@ Help menu (to the right of Settings): About, Help, Check for updates.
    G_1; a new point in the middle of a segment is dragged aside so that the line zigzags; one more point is added,
    dragged down and left almost to E_1, and deleted with CTRL); 3. glue the halves (two animations side by side, from
    where the second ends: one glue that is approved, one that overlaps, shown for 5 s from the click on the cut to the
-   click that cancels it); then good to know: undo and redo of up to 1000 actions, the Bounds button, SHIFT, zoom
-   and moving the sheet. An animation shows its first picture with a play button (a triangle) in the middle; played,
+   click that cancels it); then good to know: right click (exact coordinates of points, slopes of segments, even
+   while dragging), undo and redo of up to 1000 actions, the Bounds button, zoom and moving the sheet; then the
+   hotkeys: every key and mouse gesture of the application (not those of its windows' fields and buttons), grouped by
+   what they're for (projects, undo and redo, making a cut, adjusting it, gluing, the instruments, the view, Help), a
+   table each, keys written the system's way (on macOS, ⌘); a key that does something else in another group is in
+   both. A test checks that every shortcut of the application is listed. An animation shows its first picture with a play button (a triangle) in the middle; played,
    it stays still for 2 s after its end, then a replay button (a circular arrow) appears, which plays it from the
    beginning. The animations use the style chosen in the settings and show the vertex labels if they're switched on
    (and follow both when they change). The mouse wheel scrolls the page wherever the mouse is, over the animations

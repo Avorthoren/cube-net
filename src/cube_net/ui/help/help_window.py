@@ -10,6 +10,7 @@ switched on, and follow both when they change. Escape closes the window.
 
 from collections.abc import Callable, Sequence
 from fractions import Fraction as F
+from html import escape
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QKeyEvent
@@ -21,7 +22,8 @@ from cube_net.ui.help.demo import scenes
 from cube_net.ui.help.demo.demo_sheet import AROUND_THE_NET
 from cube_net.ui.help.demo.player import DemoPlayer
 from cube_net.ui.help.demo.steps import Step
-from cube_net.ui.help.text_block import BADGE_PX, BADGE_SCHEME, TextBlock
+from cube_net.ui.help.hotkeys import HOTKEYS, HotkeyGroup
+from cube_net.ui.help.text_block import ACCENT, BADGE_PX, BADGE_SCHEME, TextBlock
 from cube_net.ui.i18n import bind, tr
 
 # The page and its text.
@@ -74,13 +76,22 @@ GLUE_TEXT = (
 GOOD_CAPTION = "No overlaps: approved"
 BAD_CAPTION = "Overlaps: cancelled"
 MORE_TITLE = "Good to know"
+EXACT_TEXT = (
+    "You can set specific coordinates for points or slopes for lines: try right-click (even when dragging a point)."
+)
 UNDO_TEXT = "Undo and redo work for up to 1000 actions: use Ctrl+Z and Ctrl+Y."
 BOUNDS_TEXT = (
     "The application keeps track of the minimum-area bounding rectangle of the net. To see the rectangle itself, "
     "press the {bounds} button on the instrument panel."
 )
-SHIFT_TEXT = "Hold Shift while cutting or dragging a vertex to make the segment horizontal or vertical."
 VIEW_TEXT = "Zoom with the mouse wheel; drag the sheet to move it."
+HOTKEYS_TITLE = "Hotkeys"
+
+# The size of a group's title in the hotkeys, against the usual text's.
+GROUP_SIZE = 1.15
+
+# The width of the column of keys in the hotkeys (px).
+KEYS_COLUMN_PX = 260
 
 
 class HelpWindow(QWidget):
@@ -115,10 +126,13 @@ class HelpWindow(QWidget):
         bad = self._player(scenes.GLUE_BAD, before, HALF, AROUND_BOTH_RESULTS)
         self._players([good, bad], [self._caption(GOOD_CAPTION), self._caption(BAD_CAPTION)])
         self._title(MORE_TITLE)
+        self._paragraph(EXACT_TEXT, bullet=True)
         self._paragraph(UNDO_TEXT, bullet=True)
         self._paragraph(BOUNDS_TEXT, lambda: {"bounds": f"<b>{tr('Bounds')}</b>"}, bullet=True)
-        self._paragraph(SHIFT_TEXT, bullet=True)
         self._paragraph(VIEW_TEXT, bullet=True)
+        self._title(HOTKEYS_TITLE)
+        for group in HOTKEYS:
+            self._hotkeys(group)
 
         page = QWidget()
         page.setObjectName("page")
@@ -196,6 +210,26 @@ class HelpWindow(QWidget):
                 f'<td valign="middle">{picture}</td>'
                 f'<td valign="middle" style="padding-left: 12px;">{title}</td>'
                 "</tr></table>"
+            )
+
+        self._text().add(html)
+
+    def _hotkeys(self, group: HotkeyGroup) -> None:
+        """A group of hotkeys: its title, and a table of what to press and what it does."""
+
+        def html() -> str:
+            title = _span(tr(group.title), GROUP_SIZE, bold=True, colour=ACCENT)
+            size = _points(PARAGRAPH_SIZE)
+            keys_cell = f'width="{KEYS_COLUMN_PX}" style="padding: 3px 12px 3px 0; {size}"'
+            action_cell = f'style="padding: 3px 0; {size}"'
+            rows = "".join(
+                f"<tr><td {keys_cell}><b>{escape(hotkey.shown())}</b></td>"
+                f"<td {action_cell}>{escape(tr(hotkey.action))}</td></tr>"
+                for hotkey in group.hotkeys
+            )
+            return (
+                f'<p style="margin: 14px 0 4px 0;">{title}</p>'
+                f'<table cellspacing="0" cellpadding="0" style="margin: 0 0 6px 0; color: {TEXT};">{rows}</table>'
             )
 
         self._text().add(html)

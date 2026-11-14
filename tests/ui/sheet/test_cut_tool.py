@@ -149,13 +149,14 @@ def test_click_on_a_midpoint_inserts_a_point(setup: tuple[SheetView, CutTool, Ru
     assert blocker.args == ["insert", 1, (X + Y) / 2]
 
 
-def test_shift_click_deletes_an_inner_point(setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+def test_shift_click_on_an_inner_point_doesnt_delete_it(
+    setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
+) -> None:
     view, tool, _ = setup
     corner_cut(view)
-    with qtbot.waitSignal(tool.edited) as blocker:
-        click_at(view, qtbot, 11.5, 13.5, shift=True)
-    assert positions(tool) == [X, Z]
-    assert blocker.args == ["delete", 1, Y]
+    click_at(view, qtbot, 11.5, 13.5, shift=True)
+    assert positions(tool) == [X, Y, Z]
+    assert not tool.dragging
 
 
 def test_shift_click_on_an_end_does_nothing(setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
@@ -175,8 +176,9 @@ def test_rejected_delete_flashes_the_shortcut_then_restores(
     view.left_pressed.emit(11.5, 13.5)
     view.left_pressed.emit(11.5, 14 - inside)
     before = positions(tool)
+    ctrl_press(view, qtbot, 11.2, 12.8)
     with qtbot.waitSignal(tool.rejected):
-        click_at(view, qtbot, 11.2, 12.8, shift=True)
+        ctrl_release(view, qtbot, 11.2, 12.8)
     assert positions(tool) == [before[0], before[2], before[3]]  # P2 and its segments hidden...
     assert tool.item.flash() == ((before[0], before[2]),)  # ...and the shortcut black
     assert tool.item.midpoints() == []
@@ -716,32 +718,19 @@ class TestShift:
             view.left_released.emit(11.2, 13.95)
         assert positions(tool)[1] == self.Y
 
-    def test_shift_click_on_an_inner_point_deletes_on_release(
+    def test_a_shift_press_on_an_inner_point_drags_it(
         self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
     ) -> None:
         view, tool, _ = setup
         corner_cut(view)
         pos = view.from_sheet(QPointF(11.5, 13.5)).toPoint()
         qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, pos)
-        assert len(positions(tool)) == 3
         assert tool.dragging
         qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, pos)
-        assert len(positions(tool)) == 2
+        assert positions(tool) == [X, Y, Z]
         assert not tool.dragging
 
-    def test_a_tiny_slip_is_still_a_click(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
-        view, tool, _ = setup
-        corner_cut(view)
-        pos = view.from_sheet(QPointF(11.5, 13.5)).toPoint()
-        slip = (QApplication.startDragDistance() - 1) / view.scale_factor()
-        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, pos)
-        send_drag(view, 11.5, 13.5 - slip, True)
-        qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, pos)
-        assert len(positions(tool)) == 2
-
-    def test_shift_drag_moves_instead_of_deleting(
-        self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot
-    ) -> None:
+    def test_shift_drag_moves_it(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
         view, tool, _ = setup
         corner_cut(view)
         modifier = Qt.KeyboardModifier.ShiftModifier

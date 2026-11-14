@@ -12,17 +12,19 @@ from cube_net.ui.i18n.russian import RUSSIAN
 
 SOURCE = pathlib.Path(cube_net.__file__).parent
 
-# Calls whose argument at this position is a text to translate.
+# Calls whose arguments at these positions are texts to translate.
 TEXT_ARGUMENTS = {
-    "tr": 0,
-    "bind": 2,
-    "_section": 0,
-    "Section": 0,
-    "add_labelled_row": 0,
-    "ProjectFileError": 0,
-    "_paragraph": 0,
-    "_title": 0,
-    "_caption": 0,
+    "tr": (0,),
+    "bind": (2,),
+    "_section": (0,),
+    "Section": (0,),
+    "add_labelled_row": (0,),
+    "ProjectFileError": (0,),
+    "_paragraph": (0,),
+    "_title": (0,),
+    "_caption": (0,),
+    "Hotkey": (1, 2),  # what the mouse does, what it does (Help's hotkeys)
+    "HotkeyGroup": (0,),
 }
 
 
@@ -47,14 +49,15 @@ def texts_in_the_source() -> dict[str, str]:
             if not isinstance(node, ast.Call):
                 continue
             name = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", None)
-            position = TEXT_ARGUMENTS.get(name or "")
-            if position is None or len(node.args) <= position:
-                continue
-            argument = node.args[position]
-            if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
-                found[argument.value] = f"{path.relative_to(SOURCE)}:{node.lineno}"
-            elif isinstance(argument, ast.Name) and argument.id in constants:
-                found[constants[argument.id]] = f"{path.relative_to(SOURCE)}:{node.lineno}"
+            for position in TEXT_ARGUMENTS.get(name or "", ()):
+                if len(node.args) <= position:
+                    continue
+                argument = node.args[position]
+                where = f"{path.relative_to(SOURCE)}:{node.lineno}"
+                if isinstance(argument, ast.Constant) and isinstance(argument.value, str) and argument.value:
+                    found[argument.value] = where
+                elif isinstance(argument, ast.Name) and argument.id in constants:
+                    found[constants[argument.id]] = where
     return found
 
 

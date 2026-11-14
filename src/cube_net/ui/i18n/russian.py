@@ -259,10 +259,64 @@ RUSSIAN: dict[str, str] = {
         "Приложение следит за прямоугольником наименьшей площади, описанным вокруг развёртки. Чтобы увидеть сам "
         "прямоугольник, нажмите кнопку {bounds} на панели инструментов."
     ),
-    "Hold Shift while cutting or dragging a vertex to make the segment horizontal or vertical.": (
-        "Удерживайте Shift, когда делаете разрез или перетаскиваете вершину, чтобы отрезок был горизонтальным или "
-        "вертикальным."
+    "You can set specific coordinates for points or slopes for lines: try right-click (even when dragging a point).": (
+        "Можно задать точные координаты точек или наклон отрезков: попробуйте правый щелчок (даже при перетаскивании "
+        "точки)."
     ),
+    "Hotkeys": "Горячие клавиши",
+    "Projects": "Проекты",
+    "Open a project": "Открыть проект",
+    "Save the project": "Сохранить проект",
+    "Save it under another name": "Сохранить под другим именем",
+    "Quit": "Выйти",
+    "Undo and redo": "Отмена и повтор",
+    "Undo the last action": "Отменить последнее действие",
+    "Redo it": "Повторить его",
+    "Making a cut": "Разрез",
+    "hold {key}": "удерживать {key}",
+    "The new segment is horizontal or vertical": "Новый отрезок горизонтален или вертикален",
+    "right-click": "правый щелчок",
+    "Place the next vertex at exact coordinates, or set the segment's slope": (
+        "Поставить следующую вершину по точным координатам или задать наклон отрезка"
+    ),
+    "Unlock the slope set with Set slope": "Снять наклон, заданный через «Задать наклон»",
+    "Adjusting the cut": "Правка разреза",
+    "drag a vertex": "перетаскивать вершину",
+    "The segment from the vertex before it is horizontal or vertical": (
+        "Отрезок от предыдущей вершины горизонтален или вертикален"
+    ),
+    "click a vertex": "щелчок по вершине",
+    "Delete it (any but the first and the last)": "Удалить её (кроме первой и последней)",
+    "right-click while dragging": "правый щелчок при перетаскивании",
+    "Place the vertex at exact coordinates, or set its segment's slope": (
+        "Поставить вершину по точным координатам или задать наклон её отрезка"
+    ),
+    "Gluing": "Склейка",
+    "Approve the rearranged net (when its halves don't overlap)": (
+        "Утвердить новую развёртку (когда её половины не перекрываются)"
+    ),
+    "Switch the ruler on or off (off, it forgets its points)": (
+        "Включить или выключить линейку (выключенная, она забывает свои точки)"
+    ),
+    (
+        "While measuring: the ruler's segment is horizontal or vertical; the next ones, parallel or perpendicular to "
+        "the one before"
+    ): (
+        "При измерении: отрезок линейки горизонтален или вертикален; следующие параллельны или перпендикулярны "
+        "предыдущему"
+    ),
+    "Show or hide the smallest bounding rectangle": "Показать или скрыть наименьший описанный прямоугольник",
+    "The view": "Вид",
+    "mouse wheel": "колёсико мыши",
+    "Zoom in or out": "Увеличить или уменьшить",
+    "drag the sheet": "перетаскивать лист",
+    "Move the sheet": "Двигать лист",
+    "Show or hide the vertex labels": "Показать или скрыть метки вершин",
+    "Show or hide the vertex coordinates": "Показать или скрыть координаты вершин",
+    "Copy the coordinates shown next to the mouse": "Скопировать координаты, показанные возле мыши",
+    "Help": "Справка",
+    "This help": "Эта справка",
+    "Close it": "Закрыть её",
     "Zoom with the mouse wheel; drag the sheet to move it.": (
         "Масштаб меняется колёсиком мыши, а лист можно двигать, перетаскивая его."
     ),
