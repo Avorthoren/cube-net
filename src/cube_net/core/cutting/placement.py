@@ -125,6 +125,19 @@ class Constraint:
             return Vec(x, a.y + (x - a.x) * (b.y - a.y) / (b.x - a.x))
         return Vec(a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y), y)
 
+    def nearest(self, p: Vec) -> Vec:
+        """The point of the line closest to `p`: of an edge or a fold, between its ends (never beyond them, even where
+        the next edge goes on in line with it: that's another edge); of SHIFT's line, anywhere; free: `p` itself."""
+        if self.kind is LineKind.FREE:
+            return p
+        a, b = self.a, self.b
+        assert a is not None and b is not None
+        d = b - a
+        t = (p - a).dot(d) / d.length_squared()
+        if self.kind is not LineKind.STRAIGHT:
+            t = min(max(t, Fraction(0)), Fraction(1))
+        return a + d * t
+
     def problem(self, net: Net, p: Vec) -> Problem | None:
         """Why `p` can't be placed here as far as its own position goes (the segments are the editor's to judge)."""
         if self.kind in (LineKind.EDGE, LineKind.FOLD):

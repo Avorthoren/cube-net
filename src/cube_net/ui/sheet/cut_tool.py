@@ -101,6 +101,10 @@ class CutTool(QObject):
         # A window (Place a vertex) is open: a point being dragged stays where it is, whatever the mouse does.
         self._drag_frozen = False
 
+        # The line's next point being placed in that window, if it's bound to a line: the dashed line from the last
+        # point follows the mouse only along that line.
+        self._placing: Placement | None = None
+
         # Where (in window pixels) Shift+press hit an inner point, until it's clear whether that's a click or a drag.
         self._delete_press: QPointF | None = None
         self._mouse: tuple[float, float] | None = None
@@ -126,6 +130,12 @@ class CutTool(QObject):
     @property
     def dragging(self) -> bool:
         return self._drag_index is not None
+
+    def set_placing(self, placement: Placement | None) -> None:
+        """While the window for `placement` is open (None: closed). A point the line would add that's bound to a line
+        (an edge, a fold, SHIFT's): the dashed line to the mouse ends at the point of that line closest to the mouse,
+        and never beyond an edge's or a fold's ends."""
+        self._placing = placement
 
     def freeze_drag(self, frozen: bool) -> None:
         """While a window is open over a drag (Place a vertex), the dragged point doesn't follow the mouse, and the
@@ -618,6 +628,12 @@ class CutTool(QObject):
         if self._editor.state is not EditorState.CUTTING or self._ruler.active or line is None:
             self.item.set_rubber_band(None)
             self._highlight_fold(None)
+            return
+        placing = self._placing
+        if placing is not None and placing.action is Action.ADD and placing.constraint.bound:
+            constraint = placing.constraint
+            self.item.set_rubber_band((line.last.position, constraint.nearest(quantize(x, y))))
+            self._highlight_fold(constraint.edge if constraint.kind is LineKind.FOLD else None)
             return
         p, cut, vertex, fold = self._hit(x, y)
         target = self._editor.candidate(p, cut, vertex, fold, self._view.shift_held())

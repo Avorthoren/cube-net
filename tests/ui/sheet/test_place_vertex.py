@@ -221,3 +221,27 @@ def test_releasing_the_drags_button_with_the_menu_open(qtbot: QtBot, tmp_path: P
     assert seen == [True, True]
     line = window.editor.cut_line
     assert line is not None and line.points[1].position == Vec(F(23, 2), F(27, 2))  # cancelled: back where it was
+
+
+def test_with_the_window_open_the_dashed_line_stays_on_its_edge(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from PyQt6.QtCore import QPointF
+
+    window = make(qtbot, tmp_path)
+    view = window.sheet_view
+    view.left_pressed.emit(11.5, 14 - inside(window))  # the line starts at (11.5, 14)
+    seen: list[object] = []
+
+    def look(dialog: PlaceVertexWindow) -> None:
+        viewport = view.viewport()
+        assert viewport is not None
+        beyond = viewport.mapToGlobal(view.from_sheet(QPointF(11.7, 12.5)).toPoint())  # below the edge's end
+        monkeypatch.setattr(view, "cursor_position", lambda: beyond)
+        view.follow_tick()
+        seen.append(window.cut_tool.item.rubber_band())
+        dialog.reject()
+
+    answer_menu(lambda menu: (answer_window(look), choose(menu)))
+    view.right_pressed.emit(12 - inside(window), 13.6)  # the edge x = 12, from y = 13 to 14
+    assert seen == [(Vec(F(23, 2), 14), Vec(12, 13))]

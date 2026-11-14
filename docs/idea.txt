@@ -509,7 +509,9 @@ line; too many points; or the line would leave the net, or touch or cross itself
 change nothing; for a drag, they (and closing the menu without choosing) end it with the point back where it was.
 While the window is open, the rest of the application takes no input, but the mouse over the sheet still shows what
 it always shows: the footer's coordinates and the coordinates hint follow it (over the window itself, it's off the
-sheet). A point being dragged stays where the drag brought it meanwhile.
+sheet). A point being dragged stays where the drag brought it meanwhile. While cutting, if the line's next point is
+bound to a line, the dashed line to the mouse ends at the point of that line closest to the mouse: along an edge or a
+fold line, never beyond its ends (even where the next edge goes on in line with it), along SHIFT's line anywhere.
 Not in Help's animations.
 
 Settings

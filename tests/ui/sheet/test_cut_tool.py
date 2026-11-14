@@ -1163,3 +1163,45 @@ class TestPlacement:
         end = tool.placement_at(12.0, 13.4)
         assert end is not None and end.constraint.kind is LineKind.EDGE and end.constraint.axis is Axis.Y
         tool.cancel_drag()
+
+
+class TestDashedLineWhilePlacing:
+    """While the window is open for the line's next point bound to a line, the dashed line ends on that line."""
+
+    def test_along_an_edge_within_its_ends(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))  # X (11.5, 14)
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        placement = tool.placement_at(12 - h, 13.6)  # on the edge x = 12, from y = 13 to 14
+        assert placement is not None
+        tool.set_placing(placement)
+        view.mouse_moved.emit(11.7, 13.4)
+        assert tool.item.rubber_band() == (X, Vec(12, F(67, 5)))  # straight across onto it
+        view.mouse_moved.emit(11.7, 12.5)
+        assert tool.item.rubber_band() == (X, Vec(12, 13))  # never past its end
+        tool.set_placing(None)
+        view.mouse_moved.emit(11.7, 13.4)
+        band = tool.item.rubber_band()
+        assert band is not None and band[1] == Vec(F(117, 10), F(67, 5))  # closed: the mouse's again
+
+    def test_along_a_fold_highlighted(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        placement = tool.placement_at(11.6, 13 + half_fold_hitbox(view))
+        assert placement is not None
+        tool.set_placing(placement)
+        view.mouse_moved.emit(11.75, 13.5)
+        assert tool.item.rubber_band() == (X, Vec(F(47, 4), 13))
+        assert highlighted_fold_ends(view) == {Vec(11, 13), Vec(12, 13)}
+        tool.set_placing(None)
+
+    def test_a_free_point_follows_the_mouse(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        placement = tool.placement_at(11.6, 13.6)
+        assert placement is not None
+        tool.set_placing(placement)
+        view.mouse_moved.emit(11.7, 13.4)
+        band = tool.item.rubber_band()
+        assert band is not None and band[1] == Vec(F(117, 10), F(67, 5))
+        tool.set_placing(None)

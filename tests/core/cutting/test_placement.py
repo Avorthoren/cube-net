@@ -87,3 +87,30 @@ def test_the_fold_a_point_is_on(net: Net) -> None:
     fold = fold_through(net, Vec(F(23, 2), 13))
     assert fold is not None and {fold.origin.position, fold.destination.position} == {Vec(11, 13), Vec(12, 13)}
     assert fold_through(net, Vec(F(23, 2), F(27, 2))) is None
+
+
+class TestNearest:
+    """The point of the line closest to a point (where the dashed line ends while a point is placed by typing)."""
+
+    def test_an_edge_between_its_ends(self, net: Net) -> None:
+        edge = Constraint.on_edge(edge_between(net, Vec(10, 12), Vec(10, 13)))
+        assert edge.nearest(Vec(F(21, 2), F(25, 2))) == Vec(10, F(25, 2))  # straight across
+        assert edge.nearest(Vec(F(21, 2), 20)) == Vec(10, 13)  # beyond its end: its end
+        assert edge.nearest(Vec(10, 11)) == Vec(10, 12)  # even along its own line (another edge goes on there)
+
+    def test_a_slanted_edge(self) -> None:
+        slanted = Constraint(LineKind.EDGE, Vec(10, 10), Vec(13, 14))
+        assert slanted.nearest(Vec(14, 10)) == Vec(F(286, 25), F(298, 25))  # t = 12/25 along it
+        assert slanted.nearest(Vec(20, 20)) == Vec(13, 14)
+
+    def test_a_fold_between_its_ends(self, net: Net) -> None:
+        fold = Constraint.on_fold(fold_between(net, Vec(11, 13), Vec(12, 13)))
+        assert fold.nearest(Vec(F(23, 2), F(27, 2))) == Vec(F(23, 2), 13)
+        assert fold.nearest(Vec(15, 13)) == Vec(12, 13)
+
+    def test_shifts_line_has_no_ends(self) -> None:
+        straight = Constraint.straight(Vec(F(23, 2), 14), horizontal=False)
+        assert straight.nearest(Vec(12, 5)) == Vec(F(23, 2), 5)
+
+    def test_free_is_where_it_is(self) -> None:
+        assert Constraint.free().nearest(Vec(1, 2)) == Vec(1, 2)

@@ -13,7 +13,9 @@ window has this: the animations of Help -> Help don't.
 
 While the window is open, the mouse over the sheet shows what it always shows (the footer's coordinates, the
 coordinates hint): the view follows it (`SheetView.follow_cursor`), as the window keeps the
-mouse's real moves from it. A point being dragged stays put meanwhile (`CutTool.freeze_drag`).
+mouse's real moves from it. A point being dragged stays put meanwhile (`CutTool.freeze_drag`); for the line's next
+point bound to a line, the dashed line to the mouse ends on that line, within an edge's or a fold's ends
+(`CutTool.set_placing`).
 """
 
 from PyQt6.QtCore import QObject, QPointF
@@ -70,11 +72,13 @@ class PlaceVertex(QObject):
         """The window for `placement`; whether the point was placed (if not, a drag ends with the point back)."""
         window = PlaceVertexWindow(placement, lambda p: self._cut_tool.place(placement, p), self._view.window())
         self._cut_tool.freeze_drag(True)
+        self._cut_tool.set_placing(placement)
         self._view.follow_cursor(window)
         try:
             placed = window.exec() == PlaceVertexWindow.DialogCode.Accepted
         finally:
             self._view.follow_cursor(None)
+            self._cut_tool.set_placing(None)
             self._cut_tool.freeze_drag(False)
         window.deleteLater()
         if not placed and self._cut_tool.dragging:
