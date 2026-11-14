@@ -1,8 +1,8 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""`SheetContextMenu`: a right click on the sheet opens a menu (docs/idea.txt), in DEFAULT and CUTTING, and while a
-point is being dragged in CUT_EDITING:
+"""`SheetContextMenu`: a right click on the sheet opens a menu (docs/idea.txt), in DEFAULT and CUTTING, while a point
+is being dragged in CUT_EDITING, and in any state over a drawn point (a vertex, a point of the cut line, an image):
 - "Place a vertex" opens `PlaceVertexWindow` for the point a click there would make (where the dragged point is).
   Disabled where there's nothing to place (no point would be made, or it would be a vertex, whose coordinates are
   fixed). Cancel there also unlocks a locked slope;
@@ -10,6 +10,9 @@ point is being dragged in CUT_EDITING:
   the point before it): set, the slope is locked until the point is placed or the drag ends. Disabled where there's
   no such segment (DEFAULT, the first point dragged, the mouse right on the previous point). Set during a drag, the
   drag goes on without its button (released meanwhile): the next click puts the point.
+- "Move the origin" opens `MoveOriginWindow` for the drawn point under the mouse (the one the coordinates hint is
+  about): the origin moves so that the point has the typed coordinates (`Origin`). Disabled where there's no such
+  point, and while a point is dragged.
 
 The menu is the application's own (`ContextMenu`), drawn in the window: on Wayland, a system popup can't open while the
 drag's button is held. The menu and the window take the mouse, so a drag can't go on after them: placing the point ends
@@ -23,6 +26,8 @@ point bound to a line, the dashed line to the mouse ends on that line, within an
 (`CutTool.set_placing`).
 """
 
+from collections.abc import Callable
+
 from PyQt6.QtCore import QObject, QPointF
 
 from cube_net.core.cutting import slope_of
@@ -32,6 +37,7 @@ from cube_net.core.geometry import Vec
 from cube_net.ui.context_menu import ContextMenu, MenuItem
 from cube_net.ui.i18n import tr
 from cube_net.ui.sheet.cut_tool import CutTool
+from cube_net.ui.sheet.move_origin_window import MoveOriginWindow
 from cube_net.ui.sheet.place_vertex_window import PlaceVertexWindow
 from cube_net.ui.sheet.set_slope_window import SetSlopeWindow
 from cube_net.ui.sheet.sheet_view import SheetView
@@ -39,6 +45,7 @@ from cube_net.ui.sheet.sheet_view import SheetView
 # The menu's items, in their order.
 PLACE_VERTEX = 0
 SET_SLOPE = 1
+MOVE_ORIGIN = 2
 
 
 class SheetContextMenu(QObject):
@@ -46,28 +53,38 @@ class SheetContextMenu(QObject):
         super().__init__(view)
         self._view = view
         self._cut_tool = cut_tool
+
+        # The name of a drawn point (sheet coordinates), if it has one: what undoing a move of the origin tells.
+        self.point_name: Callable[[Vec], str | None] = lambda _point: None
+
         view.right_pressed.connect(self._on_right_pressed)
 
-    def offered(self) -> bool:
-        """Is there a menu now (DEFAULT, CUTTING, or dragging a point in CUT_EDITING)?"""
+    def offered(self, vertex: Vec | None = None) -> bool:
+        """Is there a menu now (DEFAULT, CUTTING, dragging a point in CUT_EDITING, or the mouse over `vertex`, a drawn
+        point)?"""
         state = self._cut_tool.editor.state
-        return state in (EditorState.DEFAULT, EditorState.CUTTING) or self._cut_tool.dragging
+        return state in (EditorState.DEFAULT, EditorState.CUTTING) or self._cut_tool.dragging or vertex is not None
 
-    def menu(self, placement: Placement | None, slope: Vec | None) -> ContextMenu:
-        """The menu: "Place a vertex" (disabled without a placement), "Set slope" (disabled without a segment). The
-        application's own (`ContextMenu`), not a system popup: on Wayland, one can't open while the drag's button is
-        held."""
+    def menu(self, placement: Placement | None, slope: Vec | None, vertex: Vec | None = None) -> ContextMenu:
+        """The menu: "Place a vertex" (disabled without a placement), "Set slope" (disabled without a segment), "Move
+        the origin" (disabled without a drawn point). The application's own (`ContextMenu`), not a system popup: on
+        Wayland, one can't open while the drag's button is held."""
         window = self._view.window()
         assert window is not None
-        items = [MenuItem(tr("Place a vertex"), placement is not None), MenuItem(tr("Set slope"), slope is not None)]
+        items = [
+            MenuItem(tr("Place a vertex"), placement is not None),
+            MenuItem(tr("Set slope"), slope is not None),
+            MenuItem(tr("Move the origin"), vertex is not None),
+        ]
         return ContextMenu(window, items)
 
     def _on_right_pressed(self, x: float, y: float) -> None:
-        if not self.offered():
+        vertex = self._cut_tool.vertex_at(x, y)
+        if not self.offered(vertex):
             return
         placement = self._cut_tool.placement_at(x, y)
         slope = self._cut_tool.slope_at(x, y)
-        menu = self.menu(placement, slope)
+        menu = self.menu(placement, slope, vertex)
         viewport = self._view.viewport()
         window = self._view.window()
         assert viewport is not None and window is not None
@@ -82,12 +99,17 @@ class SheetContextMenu(QObject):
             self.open_window(placement)
         elif chosen == SET_SLOPE and slope is not None:
             self.open_slope_window(slope)
+        elif chosen == MOVE_ORIGIN and vertex is not None:
+            self.open_origin_window(vertex)
         elif self._cut_tool.dragging:
             self._cut_tool.cancel_drag()
 
     def open_window(self, placement: Placement) -> bool:
         """The window for `placement`; whether the point was placed (if not, a drag ends with the point back)."""
-        window = PlaceVertexWindow(placement, lambda p: self._cut_tool.place(placement, p), self._view.window())
+        origin = self._cut_tool.editor.origin
+        window = PlaceVertexWindow(
+            placement, lambda p: self._cut_tool.place(placement, p), self._view.window(), origin=origin
+        )
         self._cut_tool.freeze_drag(True)
         self._cut_tool.set_placing(placement)
         self._view.follow_cursor(window)
@@ -124,4 +146,20 @@ class SheetContextMenu(QObject):
             self._cut_tool.lock_slope(direction)
         elif self._cut_tool.dragging:
             self._cut_tool.cancel_drag()
+        return accepted
+
+    def open_origin_window(self, vertex: Vec) -> bool:
+        """The window for the drawn point `vertex` (sheet coordinates); whether the coordinates were given (the origin
+        moves only if they differ from the point's coordinates now)."""
+        origin = self._cut_tool.editor.origin
+        window = MoveOriginWindow(origin.shown(vertex), self._view.window())
+        self._view.follow_cursor(window)
+        try:
+            accepted = window.exec() == MoveOriginWindow.DialogCode.Accepted
+        finally:
+            self._view.follow_cursor(None)
+        coordinates = window.coordinates()
+        window.deleteLater()
+        if accepted and coordinates is not None:
+            self._cut_tool.move_origin(origin.moved(vertex, coordinates, self.point_name(vertex)))
         return accepted

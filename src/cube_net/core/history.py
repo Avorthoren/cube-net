@@ -29,6 +29,7 @@ class ActionKind(Enum):
     MOVE_POINT = "move point"
     REARRANGE = "rearrange"
     APPROVE = "approve"
+    MOVE_ORIGIN = "move origin"
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +84,14 @@ class History[State]:
     @property
     def undone_count(self) -> int:
         return len(self._undone)
+
+    def next_undo(self) -> HistoryEntry[State] | None:
+        """The action `undo` would undo (if it's an approval, its rearrangement goes too), if any."""
+        return self._done[-1] if self._done else None
+
+    def next_redo(self) -> HistoryEntry[State] | None:
+        """The action `redo` would redo, if any."""
+        return self._undone[-1] if self._undone else None
 
     def record(self, kind: ActionKind, before: State, after: State, forget_on_undo: bool = False) -> None:
         self._done.append(HistoryEntry(kind, before, after, forget_on_undo))

@@ -85,6 +85,10 @@ RUSSIAN: dict[str, str] = {
         "Наклон закреплён: y {y}, x {x} (пока точка не поставлена; Escape снимает)"
     ),
     "Place": "Поставить",
+    "Move the origin": "Сдвинуть начало координат",
+    "Move": "Сдвинуть",
+    "Coordinates of the point were set to:": "Координаты точки были изменены на:",
+    "Coordinates of {name} were set to:": "Координаты {name} были изменены на:",
     "Enter whole numbers, with denominators above 0.": "Введите целые числа; знаменатели больше 0.",
     "The point is outside the net.": "Точка вне развёртки.",
     "The point is on the perimeter: only the line's ends can be there.": (
@@ -263,6 +267,9 @@ RUSSIAN: dict[str, str] = {
         "Можно задать точные координаты точек или наклон отрезков: попробуйте правый щелчок (даже при перетаскивании "
         "точки)."
     ),
+    "You can move the working sheet origin: right-click on any vertex.": (
+        "Начало координат рабочего листа можно сдвинуть: щёлкните правой кнопкой по любой вершине."
+    ),
     "Hotkeys": "Горячие клавиши",
     "Projects": "Проекты",
     "Open a project": "Открыть проект",
@@ -275,10 +282,6 @@ RUSSIAN: dict[str, str] = {
     "Making a cut": "Разрез",
     "hold {key}": "удерживать {key}",
     "The new segment is horizontal or vertical": "Новый отрезок горизонтален или вертикален",
-    "right-click": "правый щелчок",
-    "Place the next vertex at exact coordinates, or set the segment's slope": (
-        "Поставить следующую вершину по точным координатам или задать наклон отрезка"
-    ),
     "Unlock the slope set with Set slope": "Снять наклон, заданный через «Задать наклон»",
     "Adjusting the cut": "Правка разреза",
     "drag a vertex": "перетаскивать вершину",
@@ -287,10 +290,6 @@ RUSSIAN: dict[str, str] = {
     ),
     "click a vertex": "щелчок по вершине",
     "Delete it (any but the first and the last)": "Удалить её (кроме первой и последней)",
-    "right-click while dragging": "правый щелчок при перетаскивании",
-    "Place the vertex at exact coordinates, or set its segment's slope": (
-        "Поставить вершину по точным координатам или задать наклон её отрезка"
-    ),
     "Gluing": "Склейка",
     "Approve the rearranged net (when its halves don't overlap)": (
         "Утвердить новую развёртку (когда её половины не перекрываются)"

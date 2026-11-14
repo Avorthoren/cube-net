@@ -169,3 +169,14 @@ class TestRevision:
         history.undo()
         history.redo()
         assert history.revision == 0
+
+
+def test_the_next_undo_and_redo() -> None:
+    history: History[int] = History()
+    assert history.next_undo() is None and history.next_redo() is None
+    history.record(ActionKind.MOVE_ORIGIN, 0, 1)
+    entry = history.next_undo()
+    assert entry is not None and (entry.kind, entry.before, entry.after) == (ActionKind.MOVE_ORIGIN, 0, 1)
+    assert history.next_redo() is None
+    history.undo()
+    assert history.next_undo() is None and history.next_redo() == entry

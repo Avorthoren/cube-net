@@ -1295,3 +1295,32 @@ class TestLockedSlope:
         assert snapped.position == Vec(12, 13)  # from X going (1, -2): x = 12 at y = 13 (D_1)
         assert tool.place(free, free.constraint.point_from(Axis.Y, F(0), F(27, 2))) is None
         assert tool.slope() is None  # placed: the lock is over
+
+
+class TestVertexAt:
+    """The drawn point a right click can move the origin by (`CutTool.vertex_at`)."""
+
+    def test_the_hints_points_but_not_while_dragging(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
+        assert tool.vertex_at(10 + near, 13) == Vec(10, 13)  # a vertex of the net
+        assert tool.vertex_at(11.5, 13.5) is None
+        corner_cut(view)
+        assert tool.vertex_at(11.5, 13.5 + near) == Y  # a point of the line
+        view.left_pressed.emit(11.5, 13.5)
+        view.mouse_moved.emit(11.6, 13.6)
+        assert tool.dragging and tool.vertex_at(10 + near, 13) is None
+
+    def test_moving_the_origin_rounds_clicks_from_it(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.core.origin import Origin
+
+        view, tool, _ = setup
+        origin = Origin(Vec(F(1, 3), 0))
+        with_signal: list[bool] = []
+        tool.origin_changed.connect(lambda: with_signal.append(True))
+        tool.move_origin(origin)
+        assert with_signal == [True]
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        view.left_pressed.emit(11.4, 13.5)
+        shown = origin.shown(positions(tool)[1])
+        assert (shown.x * 1000).denominator == 1 and (shown.y * 1000).denominator == 1

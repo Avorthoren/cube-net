@@ -8,6 +8,7 @@ from PyQt6.QtCore import QPoint, QPointF, Qt
 from pytestqt.qtbot import QtBot
 
 from cube_net.core.geometry import Box, Vec
+from cube_net.core.origin import Origin
 from cube_net.ui.sheet.ruler_tool import RulerTool
 from cube_net.ui.sheet.sheet_view import SheetView
 
@@ -164,3 +165,14 @@ class TestShift:
         assert len(tool.ruler.points) in (2, 3)
         for p in tool.ruler.points:
             assert view.sheet_rect().contains(QPointF(float(p.x), float(p.y)))
+
+
+def test_rounded_to_thousandths_of_the_shown_coordinates(view: SheetView, qtbot: QtBot) -> None:
+    tool = RulerTool(view)
+    origin = Origin(Vec(F(1, 3), 0))
+    tool.set_origin(origin)
+    tool.set_active(True)
+    qtbot.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=at(view, 11.5, 12.5))
+    shown = origin.shown(tool.ruler.points[0])
+    assert (shown.x * 1000).denominator == 1 and (shown.y * 1000).denominator == 1
+    assert tool.item.point_text(tool.ruler.points[0]).startswith(f"({float(shown.x):.3f}")

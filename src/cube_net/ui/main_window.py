@@ -25,7 +25,9 @@ from PyQt6.QtWidgets import (
 from cube_net import __version__
 from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.cutting import slope_of
+from cube_net.core.editor import EditorSnapshot
 from cube_net.core.geometry import Vec
+from cube_net.core.history import ActionKind, HistoryEntry
 from cube_net.core.labels import PointLabels
 from cube_net.core.net import Net, default_net
 from cube_net.core.project import (
@@ -54,6 +56,7 @@ from cube_net.ui.key_release_shortcut import KeyReleaseShortcut
 from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_failed
 from cube_net.ui.menu_entry_dialog import ask_menu_entry, confirm_menu_entry_removal
 from cube_net.ui.no_wheel import ignore_wheel
+from cube_net.ui.origin_moved_message import tell_origin_moved
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.save_state_label import SaveStateLabel
 from cube_net.ui.session.session_recorder import SessionRecorder
@@ -212,8 +215,13 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.coords_label)
         self.save_state = SaveStateLabel(self)
         self.statusBar().addPermanentWidget(self.save_state)
-        self.sheet_view.mouse_moved.connect(lambda x, y: self.coords_label.setText(format_coordinates(x, y)))
-        self.sheet_view.mouse_left.connect(lambda: self.coords_label.setText(NO_COORDINATES))
+        # Where the mouse is over the sheet (sheet coordinates; None: it's elsewhere), for the footer.
+        self._mouse: tuple[float, float] | None = None
+        self.sheet_view.mouse_moved.connect(self._on_mouse_moved)
+        self.sheet_view.mouse_left.connect(self._on_mouse_left)
+        self.cut_tool.origin_changed.connect(self._on_origin_changed)
+        assert self.workspace.context_menu is not None
+        self.workspace.context_menu.point_name = lambda p: self.workspace.point_name(p, self.point_labels)
         # A locked slope (right click -> Set slope): said in the status bar (a widget of it, so that its passing
         # messages don't wipe it out), and Escape unlocks it.
         self.slope_label = QLabel(self)
@@ -366,14 +374,50 @@ class MainWindow(QMainWindow):
             self.recorder.note("cut", "approve")
 
     def _on_undo(self) -> None:
+        entry = self.editor.history.next_undo()
+        revision = self.editor.history.revision
         self.cut_tool.undo()
         if self.recorder is not None:
             self.recorder.note("cut", "undo", self.editor.state.value)
+        if entry is not None and self.editor.history.revision != revision:
+            self._tell_if_origin_moved(entry)
 
     def _on_redo(self) -> None:
+        entry = self.editor.history.next_redo()
+        revision = self.editor.history.revision
         self.cut_tool.redo()
         if self.recorder is not None:
             self.recorder.note("cut", "redo", self.editor.state.value)
+        if entry is not None and self.editor.history.revision != revision:
+            self._tell_if_origin_moved(entry)
+
+    def _tell_if_origin_moved(self, entry: HistoryEntry[EditorSnapshot]) -> None:
+        """`entry` was just undone or redone: if it moved the origin, say what coordinates its point has now."""
+        moved = entry.after.origin
+        if entry.kind is ActionKind.MOVE_ORIGIN and moved.point is not None:
+            tell_origin_moved(self, moved.name, self.editor.origin.shown(moved.point))
+
+    def _on_mouse_moved(self, x: float, y: float) -> None:
+        self._mouse = x, y
+        self._show_mouse_coordinates()
+
+    def _on_mouse_left(self) -> None:
+        self._mouse = None
+        self._show_mouse_coordinates()
+
+    def _show_mouse_coordinates(self) -> None:
+        """The footer: the mouse's coordinates, from the moved origin if it was moved."""
+        if self._mouse is None:
+            self.coords_label.setText(NO_COORDINATES)
+            return
+        at = self.editor.origin.position
+        self.coords_label.setText(format_coordinates(self._mouse[0] - float(at.x), self._mouse[1] - float(at.y)))
+
+    def _on_origin_changed(self) -> None:
+        self._show_mouse_coordinates()
+        self._update_edit_actions()  # an action: undo, and the project has changes
+        if self.recorder is not None:
+            self.recorder.note("origin", format_point(self.editor.origin.position))
 
     def _update_edit_actions(self) -> None:
         """Undo and redo need something to undo or redo and no point being dragged; approving needs a valid

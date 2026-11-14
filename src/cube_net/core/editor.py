@@ -13,6 +13,7 @@ CUT_EDITING   click a segment's middle      -> a new point there
               click a cut                   -> the half with its counterpart moves onto it -> CUT_APPROVING
                                                (rejected if the counterpart is in the same half)
 CUT_APPROVING approve (if the halves don't overlap) -> they are glued for good: the new net -> DEFAULT
+any state     move the origin               -> the coordinates shown and typed are shifted (`Origin`)
 
 Every one of these changes is an action that can be undone and redone (see `History`).
 
@@ -47,6 +48,7 @@ from cube_net.core.cutting import (
 from cube_net.core.geometry import Vec
 from cube_net.core.history import ActionKind, History
 from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_edge_from
+from cube_net.core.origin import DEFAULT_ORIGIN, Origin
 
 
 class EditorState(Enum):
@@ -65,6 +67,9 @@ class EditorSnapshot:
     points: tuple[CutPoint, ...] | None
     rearranged: Rearranged | None
     approved_cuts: int
+
+    # The origin of the coordinates shown and typed.
+    origin: Origin = DEFAULT_ORIGIN
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,6 +94,9 @@ class Editor:
 
         # How many cuts have been approved so far (0: this is still the net the editor started with).
         self.approved_cuts = 0
+
+        # The origin of the coordinates shown and typed.
+        self.origin = Origin()
 
         self.history: History[EditorSnapshot] = History()
 
@@ -378,6 +386,14 @@ class Editor:
         self.approved_cuts += 1
         self._record(ActionKind.APPROVE, before)
 
+    def move_origin(self, origin: Origin) -> None:
+        """The coordinates are shown and typed from `origin` from now on (an action, unless it's where it is)."""
+        if origin.position == self.origin.position:
+            return
+        before = self.snapshot()
+        self.origin = origin
+        self._record(ActionKind.MOVE_ORIGIN, before)
+
     # --- undo and redo ----------------------------------------------------------------------------------------------
 
     def undo(self) -> bool:
@@ -399,7 +415,7 @@ class Editor:
     def snapshot(self) -> EditorSnapshot:
         """The editor's state as it is now."""
         points = tuple(self.cut_line.points) if self.cut_line is not None else None
-        return EditorSnapshot(self.net, points, self.rearranged, self.approved_cuts)
+        return EditorSnapshot(self.net, points, self.rearranged, self.approved_cuts, self.origin)
 
     def load(self, state: EditorSnapshot, history: History[EditorSnapshot]) -> None:
         """Continue from a state and a history saved earlier."""
@@ -411,6 +427,7 @@ class Editor:
         self.cut_line = CutLine(list(state.points)) if state.points is not None else None
         self.rearranged = state.rearranged
         self.approved_cuts = state.approved_cuts
+        self.origin = state.origin
         self._split = None
 
     def _record(self, kind: ActionKind, before: EditorSnapshot, forget_on_undo: bool = False) -> None:

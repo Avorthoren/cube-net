@@ -190,6 +190,17 @@ class TestCoordinatesHint:
         view.mouse_left.emit()
         assert not cursor.coordinates_hint.isVisible()
 
+    def test_from_the_moved_origin(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.core.geometry import Vec
+        from cube_net.core.origin import Origin
+
+        window = make(qtbot, tmp_path)
+        cursor = window.sheet_cursor
+        window.sheet_view.mouse_moved.emit(10.0, 13.0)
+        window.cut_tool.move_origin(Origin(Vec(11, 13), Vec(11, 13), "C_1"))
+        assert cursor.coordinates_hint.lines() == ["y:  0", "x: -1"]  # at once, without a move
+        assert cursor.coordinates() == Vec(-1, 0)
+
     def test_switched_off_and_on(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = make(qtbot, tmp_path)
         cursor = window.sheet_cursor

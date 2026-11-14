@@ -9,10 +9,13 @@ can be chosen (the line itself means nothing there), and the counterpart of a ch
 nothing follows the mouse but the button.
 """
 
+from contextlib import suppress
+
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from cube_net.core.cutting import CutLine
 from cube_net.core.editor import Editor, EditorState
+from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, cut_line_labels, vertex_labels
 from cube_net.core.net import Net
 from cube_net.core.sheet import sheet_box
@@ -41,11 +44,13 @@ class Workspace(QObject):
         self.cut_tool = CutTool(view, self.editor, self.ruler_tool)
         self.cut_tool.line_changed.connect(self.update_hover_net)
         self.cut_tool.net_changed.connect(self._on_net_changed)
+        self.cut_tool.origin_changed.connect(lambda: self.ruler_tool.set_origin(self.editor.origin))
         self.cut_hover.hover_changed.connect(self.update_divided_view)
         self.cut_hover.set_target(self.cut_tool.hover_target)
         view.set_press_claim(self.cut_tool.claims)
         self.sheet_cursor = SheetCursor(view, self.cut_tool, self.ruler_tool) if mouse_cursor else None
-        # The right click's menu (Place a vertex, Set slope): only where the user's mouse means something.
+        # The right click's menu (Place a vertex, Set slope, Move the origin): only where the user's mouse means
+        # something.
         self.context_menu = SheetContextMenu(view, self.cut_tool) if mouse_cursor else None
 
     @property
@@ -63,6 +68,16 @@ class Workspace(QObject):
         except ValueError:  # a point is being dragged off the net: it has no cube point to name for now
             cut_labels = []
         self.cut_tool.item.set_labels(cut_labels)
+
+    def point_name(self, position: Vec, names: PointLabels) -> str | None:
+        """The label (with `names`) of the drawn point at `position`: a vertex of the shown net, a new point of the
+        cut line, one of its crossings or images; None if none is there."""
+        labels = {vertex.position: label for vertex, label in vertex_labels(self.net, names).items()}
+        points = self.cut_tool.item.points()
+        with suppress(ValueError):  # a point is being dragged off the net: it has no cube point to name for now
+            labels.update(cut_line_labels(self.editor.net, CutLine(list(points)), names) if points else [])
+        label = labels.get(position)
+        return None if label is None else str(label)
 
     def _on_net_changed(self) -> None:
         """Show the net the editor has now: the sheet follows it, and what's on screen stays where it was."""

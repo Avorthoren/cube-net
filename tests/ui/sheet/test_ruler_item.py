@@ -8,6 +8,7 @@ from PyQt6.QtGui import QColor, QImage, QPainter, QTransform
 from PyQt6.QtWidgets import QApplication
 
 from cube_net.core.geometry import Vec
+from cube_net.core.origin import Origin
 from cube_net.ui import palette
 from cube_net.ui.sheet.ruler_item import RulerItem, _shift_into, format_distance, format_point
 
@@ -70,3 +71,10 @@ def test_cursor_label_near_view_edge_is_drawn_inside(qapp: QApplication) -> None
     text = QColor(palette.RULER_TEXT)
     bottom_right = [image.pixelColor(x, y) for x in range(380, 500) for y in range(450, 500)]
     assert text in bottom_right  # the label was moved into the image instead of being cut off
+
+
+def test_point_texts_from_the_origin() -> None:
+    item = RulerItem()
+    assert item.point_text(Vec(F(23, 2), 12)) == "(11.500, 12.000)"
+    item.set_origin(Origin(Vec(11, 13)))
+    assert item.point_text(Vec(F(23, 2), 12)) == "(0.500, -1.000)"

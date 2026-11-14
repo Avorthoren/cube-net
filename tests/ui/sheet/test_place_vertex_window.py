@@ -10,6 +10,7 @@ from pytestqt.qtbot import QtBot
 
 from cube_net.core.cutting.placement import Action, Constraint, LineKind, Placement, Problem
 from cube_net.core.geometry import Vec
+from cube_net.core.origin import Origin
 from cube_net.ui.sheet.coordinates_text import MAX_DIGITS
 from cube_net.ui.sheet.place_vertex_window import PlaceVertexWindow, problem_text
 
@@ -180,3 +181,34 @@ class TestPlace:
 def test_every_problem_has_its_words() -> None:
     texts_ = {problem_text(problem) for problem in Problem}
     assert len(texts_) == len(Problem) and all(texts_)
+
+
+class TestFromAMovedOrigin:
+    """The coordinates are shown and typed from the origin; the point placed is the sheet's."""
+
+    ORIGIN = Origin(Vec(11, 10))
+
+    def make(self, qtbot: QtBot, placement: Placement, placed: Placed) -> PlaceVertexWindow:
+        window = PlaceVertexWindow(placement, placed, origin=self.ORIGIN)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def test_free(self, qtbot: QtBot) -> None:
+        placed = Placed()
+        window = self.make(qtbot, FREE, placed)
+        assert texts(window) == ["18/5 = 3.600", "3/5 = 0.600"]
+        window.x.numerator.setText("1")
+        window.x.denominator.setText("1")
+        window.place_button.click()
+        assert placed.asked == [Vec(12, F(68, 5))]
+
+    def test_on_a_slanted_line_the_other_follows(self, qtbot: QtBot) -> None:
+        placed = Placed()
+        window = self.make(qtbot, SLANTED, placed)  # the edge (10, 10)-(13, 12): shown (-1, 0)-(2, 2)
+        type_into(qtbot, window.x.numerator, "2")
+        type_into(qtbot, window.x.denominator, "1")
+        assert (window.y.numerator.text(), window.y.denominator.text()) == ("2", "1")
+        window.place_button.click()
+        assert placed.asked == [Vec(13, 12)]

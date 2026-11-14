@@ -484,7 +484,7 @@ Few more notes:
 
 Place a vertex (right click)
 In DEFAULT, in CUTTING, and while a point is being dragged in CUT_EDITING, a right click on the sheet opens a menu with
-"Place a vertex". The menu is the application's own, drawn inside the window like a system one (on Wayland a system
+"Place a vertex" (and over a drawn point, in any state: see Move the origin). The menu is the application's own, drawn inside the window like a system one (on Wayland a system
 menu can't open while a mouse button is held, as during a drag): an item is chosen by a click on it, or with Up, Down
 and Enter; Escape, a click elsewhere (used up) or leaving the window closes it. Meanwhile the rest of the window takes
 no clicks, no wheel and no keys, a dragged point stays where it is, and releasing the drag's button changes nothing. It's disabled where there's nothing to place: where a left click (the release) would make no point
@@ -533,6 +533,21 @@ the mouse. A dragged last point stays on the perimeter, at the crossing nearest 
 goes on without the button (it was released meanwhile): the next click puts the point.
 With a locked slope, Place a vertex binds the coordinates to the slope's line (no ends), or, where the point would snap
 to something, shows them all fixed (where the line crosses it); its Cancel also unlocks the slope.
+
+Move the origin (right click)
+The menu's third item, "Move the origin", is enabled while the mouse is over a drawn point that has a coordinates
+hint: a vertex of the net, a point of the cut line, one of its small dots (crossings with fold lines, the endpoints'
+counterpart images); never while a point is being dragged. Over such a point the menu opens in every state (in
+CUT_EDITING without a drag and in CUT_APPROVING, with only this item enabled). It opens a small window, "Move the
+origin", with the same two lines as Place a vertex (y first, numerator and denominator, "=" or "≈" and the value),
+both typed, starting with the point's coordinates now (the hint's). Move (the default) moves the origin of the
+coordinate system so that the point has the typed coordinates: just a parallel shift, the axes keep their directions.
+Nothing on the sheet moves, the grid included: only the coordinates shown and typed change (the footer, the hint,
+Ctrl+C, the ruler's labels, Place a vertex), and the mouse is rounded to thousandths of the shown coordinates. Cancel,
+ESCAPE and the close button change nothing; so does Move with the coordinates the point already has.
+Moving the origin is an action: it can be undone and redone, and it's saved with the project (and its history). When
+it's undone or redone, a message says "Coordinates of <its name> were set to:" (regular letters, not bold; the name as on the sheet, its index a subscript: C₁) and the two lines of the
+hint, y then x, with the coordinates that point (the one right-clicked when the origin was moved) has now.
 
 Settings
 In the menu bar, to the right of Edit, there's "Settings": it opens a panel on the right side of the window, over the
@@ -625,8 +640,9 @@ Help menu (to the right of Settings): About, Help, Check for updates.
    dragged down and left almost to E_1, and deleted with CTRL); 3. glue the halves (two animations side by side, from
    where the second ends: one glue that is approved, one that overlaps, shown for 5 s from the click on the cut to the
    click that cancels it); then good to know: right click (exact coordinates of points, slopes of segments, even
-   while dragging), undo and redo of up to 1000 actions, the Bounds button, zoom and moving the sheet; then the
-   hotkeys: every key and mouse gesture of the application (not those of its windows' fields and buttons), grouped by
+   while dragging), moving the origin (right click on a vertex), undo and redo of up to 1000 actions, the Bounds button, zoom and moving the sheet; then the
+   hotkeys: every key and mouse gesture of the application (not those of its windows' fields and buttons, nor the
+   right click, which good to know tells about), grouped by
    what they're for (projects, undo and redo, making a cut, adjusting it, gluing, the instruments, the view, Help), a
    table each, keys written the system's way (on macOS, ⌘); a key that does something else in another group is in
    both. A test checks that every shortcut of the application is listed. An animation shows its first picture with a play button (a triangle) in the middle; played,

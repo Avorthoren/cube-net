@@ -172,7 +172,7 @@ def rearranged_contents(rearranged: Rearranged | None) -> tuple[object, ...] | N
 
 def state_contents(state: EditorSnapshot) -> tuple[object, ...]:
     points = None if state.points is None else tuple(point_contents(p) for p in state.points)
-    return net_contents(state.net), points, rearranged_contents(state.rearranged), state.approved_cuts
+    return net_contents(state.net), points, rearranged_contents(state.rearranged), state.approved_cuts, state.origin
 
 
 def entry_contents(entry: HistoryEntry[EditorSnapshot]) -> tuple[object, ...]:

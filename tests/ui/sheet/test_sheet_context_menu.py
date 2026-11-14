@@ -20,6 +20,7 @@ from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.context_menu import ContextMenu
 from cube_net.ui.main_window import MainWindow, format_coordinates
 from cube_net.ui.sheet import net_style
+from cube_net.ui.sheet.move_origin_window import MoveOriginWindow
 from cube_net.ui.sheet.place_vertex_window import PlaceVertexWindow
 
 
@@ -101,14 +102,14 @@ def test_disabled_where_nothing_would_be_placed(qtbot: QtBot, tmp_path: Path) ->
     assert window.editor.cut_line is None
 
 
-def test_no_menu_while_editing_without_a_drag(qtbot: QtBot, tmp_path: Path) -> None:
+def test_no_menu_while_editing_without_a_drag_off_the_points(qtbot: QtBot, tmp_path: Path) -> None:
     window = make(qtbot, tmp_path)
     view = window.sheet_view
     view.left_pressed.emit(11.5, 14 - inside(window))
     view.left_pressed.emit(11.5, 13.5)
     view.left_pressed.emit(12 - inside(window), 13.5)
     assert window.editor.state is EditorState.CUT_EDITING
-    view.right_pressed.emit(11.5, 13.5)  # returns at once: no menu to wait for
+    view.right_pressed.emit(11.7, 13.8)  # no point there: returns at once, no menu to wait for
     assert window.findChildren(ContextMenu) == []
 
 
@@ -278,7 +279,7 @@ class TestSetSlope:
 
         answer_menu(look)
         window.sheet_view.right_pressed.emit(11.5, 14 - inside(window))  # DEFAULT
-        assert items == [[True, False]]
+        assert items == [[True, False, False]]  # no point there to move the origin by
 
     def test_set_while_cutting_said_and_escape_unlocks(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = make(qtbot, tmp_path)
@@ -347,3 +348,120 @@ def test_the_drag_after_set_slope_ends_with_a_real_click_anywhere(qtbot: QtBot, 
         assert not window.cut_tool.dragging and not view.is_panning()
         line = window.editor.cut_line
         assert line is not None and line.points[1].position != Vec(F(23, 2), F(27, 2))  # it moved, and stays
+
+
+class TestMoveTheOrigin:
+    """Right click on a drawn point -> Move the origin: the point gets the typed coordinates, nothing else moves."""
+
+    @staticmethod
+    def answer(act: Callable[[ContextMenu], None]) -> list[list[bool]]:
+        """Once the menu is up, do this to it; tells which of its items were enabled."""
+        enabled: list[list[bool]] = []
+
+        def answer() -> None:
+            menu = open_menu()
+            enabled.append([item.enabled for item in menu.items])
+            act(menu)
+
+        QTimer.singleShot(0, answer)
+        return enabled
+
+    @staticmethod
+    def type_coordinates(y: tuple[str, str], x: tuple[str, str], accept: bool = True) -> list[Vec]:
+        """Once the window is up, type y and x (numerator, denominator); it tells what it started with."""
+        started: list[Vec] = []
+
+        def answer() -> None:
+            dialog = QApplication.activeModalWidget()
+            assert isinstance(dialog, MoveOriginWindow)
+            started.append(dialog.coordinates() or Vec(0, 0))
+            dialog.y.numerator.setText(y[0])
+            dialog.y.denominator.setText(y[1])
+            dialog.x.numerator.setText(x[0])
+            dialog.x.denominator.setText(x[1])
+            (dialog.move_button if accept else dialog.cancel_button).click()
+
+        QTimer.singleShot(50, answer)
+        return started
+
+    def move(self, window: MainWindow, at: tuple[float, float], y: tuple[str, str], x: tuple[str, str]) -> list[Vec]:
+        started = self.type_coordinates(y, x)
+        self.answer(choose_item(2))
+        window.sheet_view.right_pressed.emit(*at)
+        return started
+
+    def test_a_vertex_gets_the_typed_coordinates(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = make(qtbot, tmp_path)
+        c1 = Vec(11, 13)
+        started = self.move(window, (11.0, 13.0), ("-1", "2"), ("5", "1"))
+        assert started == [c1]  # the hint's coordinates
+        origin = window.editor.origin
+        assert origin.shown(c1) == Vec(5, F(-1, 2))
+        assert origin.shown(Vec(12, 13)) == Vec(6, F(-1, 2))  # a parallel shift
+        assert origin.name == "C_1"
+        assert window.is_dirty
+        window.sheet_view.mouse_moved.emit(11.0, 13.0)
+        assert window.coords_label.text() == format_coordinates(5, -0.5)
+        assert window.sheet_cursor.coordinates() == Vec(5, F(-1, 2))
+
+    def test_the_items_over_a_point_and_elsewhere(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = make(qtbot, tmp_path)
+        view = window.sheet_view
+        on_vertex = self.answer(close)
+        view.right_pressed.emit(11.0, 13.0)
+        in_a_face = self.answer(close)
+        view.right_pressed.emit(11.5, 13.5)
+        assert on_vertex == [[False, False, True]] and in_a_face == [[False, False, False]]
+        view.left_pressed.emit(11.5, 14 - inside(window))
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - inside(window), 13.5)
+        on_a_line_point = self.answer(close)
+        view.right_pressed.emit(11.5, 13.5)  # CUT_EDITING, no drag: only this item
+        assert on_a_line_point == [[False, False, True]]
+        view.left_pressed.emit(11.5, 13.5)
+        view.mouse_moved.emit(11.6, 13.6)
+        dragging = self.answer(close)
+        view.right_pressed.emit(11.6, 13.6)
+        assert dragging[0][2] is False  # never while dragging
+
+    def test_cancel_and_the_same_coordinates_change_nothing(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = make(qtbot, tmp_path)
+        self.type_coordinates(("7", "1"), ("7", "1"), accept=False)
+        self.answer(choose_item(2))
+        window.sheet_view.right_pressed.emit(11.0, 13.0)
+        self.move(window, (11.0, 13.0), ("13", "1"), ("11", "1"))
+        assert window.editor.origin.position == Vec(0, 0)
+        assert not window.editor.history.can_undo
+
+    def test_undo_and_redo_tell_the_points_coordinates(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        told: list[tuple[str | None, Vec]] = []
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.tell_origin_moved", lambda _parent, name, at: told.append((name, at))
+        )
+        window = make(qtbot, tmp_path)
+        self.move(window, (11.0, 13.0), ("0", "1"), ("0", "1"))
+        assert told == []  # not when it's moved
+        window.undo_action.trigger()
+        assert window.editor.origin.position == Vec(0, 0)
+        window.redo_action.trigger()
+        assert window.editor.origin.position == Vec(11, 13)
+        assert told == [("C_1", Vec(11, 13)), ("C_1", Vec(0, 0))]
+
+    def test_place_a_vertex_types_from_the_origin(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = make(qtbot, tmp_path)
+        self.move(window, (11.0, 13.0), ("0", "1"), ("0", "1"))  # C_1 is (0, 0)
+        started: list[Vec] = []
+
+        def typed(dialog: PlaceVertexWindow) -> None:
+            started.append(Vec(dialog.x.value() or 0, dialog.y.value() or 0))
+            dialog.x.numerator.setText("1")
+            dialog.x.denominator.setText("2")
+            dialog.place_button.click()
+
+        answer_menu(lambda menu: (answer_window(typed), choose(menu)))
+        window.sheet_view.right_pressed.emit(11.25, 14 - inside(window))  # the top edge of face 1, y = 14
+        assert started == [Vec(F(1, 4), 1)]
+        line = window.editor.cut_line
+        assert line is not None and [p.position for p in line.points] == [Vec(F(23, 2), 14)]

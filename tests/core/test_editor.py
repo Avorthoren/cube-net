@@ -869,3 +869,36 @@ class TestLockedSlope:
         assert inner.position == Vec(F(52, 5), F(121, 10))  # from (10, 12.5) going (1, -1): 0.4 along, nearest it
         end = editor.drag_target(2, v("10.4", "13"), slope=Vec(1, 1))
         assert end.on_perimeter and end.position == v("11", "13")  # from (10.5, 12.5) up-right: C_1
+
+
+class TestMoveOrigin:
+    def test_an_action_undone_and_redone(self, net: Net) -> None:
+        from cube_net.core.history import ActionKind
+        from cube_net.core.origin import DEFAULT_ORIGIN
+
+        editor = Editor(net)
+        moved = DEFAULT_ORIGIN.moved(Vec(11, 13), Vec(0, 0), "C_1")
+        editor.move_origin(moved)
+        assert editor.origin == moved and editor.snapshot().origin == moved
+        entry = editor.history.next_undo()
+        assert entry is not None and entry.kind is ActionKind.MOVE_ORIGIN
+        assert editor.undo() and editor.origin == DEFAULT_ORIGIN
+        assert editor.redo() and editor.origin == moved
+
+    def test_where_it_is_already_is_no_action(self, net: Net) -> None:
+        from cube_net.core.origin import DEFAULT_ORIGIN
+
+        editor = Editor(net)
+        editor.move_origin(DEFAULT_ORIGIN.moved(Vec(11, 13), Vec(11, 13), "C_1"))
+        assert not editor.history.can_undo and editor.origin == DEFAULT_ORIGIN
+
+    def test_it_stays_through_the_other_actions(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        from cube_net.core.origin import DEFAULT_ORIGIN
+
+        editor = Editor(net)
+        moved = DEFAULT_ORIGIN.moved(Vec(11, 13), Vec(0, 0), "C_1")
+        editor.move_origin(moved)
+        assert editor.click(v("11.5", "13.99"), cut("B_1-A_1")) is None
+        assert editor.origin == moved
+        assert editor.undo() and editor.origin == moved  # undoing the point leaves the origin
+        assert editor.undo() and editor.origin == DEFAULT_ORIGIN

@@ -1,10 +1,15 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from fractions import Fraction as F
+
 from pytestqt.qtbot import QtBot
 
 from cube_net.core.editor import EditorState
+from cube_net.core.geometry import Vec
+from cube_net.core.labels import PointLabels
 from cube_net.core.net import default_net
+from cube_net.core.origin import Origin
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.sheet_view import SheetView
@@ -69,3 +74,20 @@ def test_labels_with_the_given_names_or_none(qtbot: QtBot) -> None:
     assert item is not None and item.labels() is not None
     workspace.show_labels(None)
     assert item.labels() is None
+
+
+def test_point_names(qtbot: QtBot) -> None:
+    view, workspace = make(qtbot)
+    names = PointLabels()
+    assert workspace.point_name(Vec(11, 13), names) == "C_1"
+    corner_cut(view)
+    assert workspace.point_name(Vec(F(23, 2), F(27, 2)), names) is not None  # a new point of the line: its preview name
+    assert workspace.point_name(Vec(F(117, 10), F(69, 5)), names) is None  # nothing there
+
+
+def test_the_ruler_follows_the_origin(qtbot: QtBot) -> None:
+    _, workspace = make(qtbot)
+    workspace.cut_tool.move_origin(Origin(Vec(11, 13), Vec(11, 13), "C_1"))
+    assert workspace.ruler_tool.item.point_text(Vec(11, 13)) == "(0.000, 0.000)"
+    workspace.cut_tool.undo()
+    assert workspace.ruler_tool.item.point_text(Vec(11, 13)) == "(11.000, 13.000)"

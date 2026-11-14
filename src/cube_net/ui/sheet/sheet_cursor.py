@@ -55,6 +55,7 @@ class SheetCursor(QObject):
         view.ctrl_changed.connect(self.update)
         cut_tool.line_changed.connect(self.update)
         cut_tool.net_changed.connect(self.update)
+        cut_tool.origin_changed.connect(self.update)
         ruler.points_changed.connect(self.update)
         view.zoom_changed.connect(lambda *_: self.update())
 
@@ -80,11 +81,13 @@ class SheetCursor(QObject):
             self._show_coordinates(None)
 
     def coordinates(self) -> Vec | None:
-        """The point whose coordinates the hint shows now (None: it's hidden)."""
+        """The coordinates the hint shows now, from the moved origin if it was moved (None: it's hidden)."""
         return self._coordinates
 
     def _show_coordinates(self, point: Vec | None) -> None:
-        self._coordinates = point
+        """Show the coordinates of the sheet point `point` (None: hide the hint)."""
+        self._coordinates = None if point is None else self._cut_tool.editor.origin.shown(point)
+        point = self._coordinates
         if point is None or self._mouse is None:
             self.coordinates_hint.hide()
             return

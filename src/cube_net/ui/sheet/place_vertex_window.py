@@ -15,12 +15,14 @@ is a number). On a slanted line either can be typed; on a vertical or a horizont
 are disabled. A point fixed by a locked slope (where its line meets what the point snaps to) has all fields disabled,
 and Place has the focus. The y numerator has the focus at first (x's, if y is fixed), with its text selected.
 
+The coordinates are shown and typed from the origin (right click -> Move the origin: `Origin`), the point is placed at
+the sheet point they stand for.
+
 Place (the default button: Enter) places the point; if it can't go there, the window stays and says why. Cancel, Escape
 and the close button change nothing.
 """
 
 from collections.abc import Callable
-from fractions import Fraction
 
 from PyQt6.QtWidgets import (
     QDialogButtonBox,
@@ -33,11 +35,11 @@ from PyQt6.QtWidgets import (
 
 from cube_net.core.cutting.placement import Axis, Placement, Problem
 from cube_net.core.geometry import Vec
+from cube_net.core.origin import DEFAULT_ORIGIN, Origin
 from cube_net.ui import palette
 from cube_net.ui.dialogs.small_window import SmallWindow
 from cube_net.ui.i18n import tr
-from cube_net.ui.sheet.coordinates_text import decimal_text, is_exact
-from cube_net.ui.sheet.number_field import Numbers, number_field, set_number
+from cube_net.ui.sheet.coordinate_row import CoordinateRow
 
 
 def problem_text(problem: Problem) -> str:
@@ -57,55 +59,24 @@ def problem_text(problem: Problem) -> str:
             return tr("From there, the line would leave the net, or touch or cross itself.")
 
 
-class CoordinateRow:
-    """One coordinate's fields and what it's worth, in a row of the window's grid."""
-
-    def __init__(self, name: str, value: Fraction, grid: QGridLayout, row: int, parent: QWidget) -> None:
-        self.numerator = number_field(parent, Numbers.INTEGERS)
-        self.denominator = number_field(parent, Numbers.POSITIVE)
-        self.worth = QLabel(parent)
-        grid.addWidget(QLabel(f"{name}:", parent), row, 0)
-        grid.addWidget(self.numerator, row, 1)
-        grid.addWidget(QLabel("/", parent), row, 2)
-        grid.addWidget(self.denominator, row, 3)
-        grid.addWidget(self.worth, row, 4)
-        self.numerator.textChanged.connect(self.show_worth)
-        self.denominator.textChanged.connect(self.show_worth)
-        self.set_value(value)
-
-    def value(self) -> Fraction | None:
-        """The typed fraction, or None if it isn't one yet."""
-        try:
-            numerator, denominator = int(self.numerator.text()), int(self.denominator.text())
-        except ValueError:
-            return None
-        return Fraction(numerator, denominator) if denominator > 0 else None
-
-    def set_value(self, value: Fraction) -> None:
-        set_number(self.numerator, value.numerator)
-        set_number(self.denominator, value.denominator)
-
-    def set_typed(self, typed: bool) -> None:
-        for field in (self.numerator, self.denominator):
-            field.setEnabled(typed)
-
-    def show_worth(self) -> None:
-        value = self.value()
-        self.worth.setText("" if value is None else f"{'=' if is_exact(value) else '≈'} {decimal_text(value)}")
-
-
 class PlaceVertexWindow(SmallWindow):
     def __init__(
-        self, placement: Placement, place: Callable[[Vec], Problem | None], parent: QWidget | None = None
+        self,
+        placement: Placement,
+        place: Callable[[Vec], Problem | None],
+        parent: QWidget | None = None,
+        origin: Origin = DEFAULT_ORIGIN,
     ) -> None:
-        """`place`: puts the point there, or tells why it can't."""
+        """`place`: puts the point at a sheet point, or tells why it can't."""
         super().__init__(tr("Place a vertex"), parent)
         self._placement = placement
         self._place = place
+        self._origin = origin
         grid = QGridLayout()
         grid.setHorizontalSpacing(6)
-        self.y = CoordinateRow("y", placement.position.y, grid, 0, self)
-        self.x = CoordinateRow("x", placement.position.x, grid, 1, self)
+        shown = origin.shown(placement.position)
+        self.y = CoordinateRow("y", shown.y, grid, 0, self)
+        self.x = CoordinateRow("x", shown.x, grid, 1, self)
         axis = placement.constraint.axis
         self.x.set_typed(axis in (Axis.BOTH, Axis.X))
         self.y.set_typed(axis in (Axis.BOTH, Axis.Y))
@@ -141,17 +112,19 @@ class PlaceVertexWindow(SmallWindow):
             first.selectAll()
 
     def point(self) -> Vec | None:
-        """The typed point (on a line: from the coordinate typed last), or None if a field it needs isn't a number."""
+        """The sheet point typed (on a line: from the coordinate typed last), or None if a field it needs isn't a
+        number."""
         constraint = self._placement.constraint
         x, y = self.x.value(), self.y.value()
+        at = self._origin.position
         if constraint.bound:
             source = (self.x if self._source is Axis.X else self.y).value()
             if source is None:
                 return None
-            return constraint.point_from(self._source, source, source)
+            return constraint.point_from(self._source, source + at.x, source + at.y)
         if x is None or y is None:
             return None
-        return constraint.point_from(Axis.BOTH, x, y)
+        return constraint.point_from(Axis.BOTH, x + at.x, y + at.y)
 
     def _typed(self, source: Axis) -> None:
         """A coordinate's field was edited by the user: on a line, the other coordinate follows at once."""
@@ -162,7 +135,8 @@ class PlaceVertexWindow(SmallWindow):
         if point is None:
             return  # not a number yet: the other keeps its value
         follower = self.y if source is Axis.X else self.x
-        follower.set_value(point.y if source is Axis.X else point.x)
+        shown = self._origin.shown(point)
+        follower.set_value(shown.y if source is Axis.X else shown.x)
 
     def _on_place(self) -> None:
         point = self.point()

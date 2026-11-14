@@ -10,7 +10,8 @@ when SHIFT is pressed or released. Deactivating forgets the points. Nothing of t
 
 from PyQt6.QtCore import QObject, QPointF, pyqtSignal
 
-from cube_net.core.geometry import Vec, quantize
+from cube_net.core.geometry import Vec
+from cube_net.core.origin import Origin
 from cube_net.core.ruler import Ruler, restricted_point
 from cube_net.ui.sheet import ruler_style
 from cube_net.ui.sheet.ruler_item import RulerItem
@@ -31,6 +32,7 @@ class RulerTool(QObject):
         self._cursor: Vec | None = None
         self._mouse: tuple[float, float] | None = None
         self._active = False
+        self._origin = Origin()
         self.item = RulerItem()
         scene = view.scene()
         assert scene is not None
@@ -49,6 +51,11 @@ class RulerTool(QObject):
     def ruler(self) -> Ruler:
         return self._ruler
 
+    def set_origin(self, origin: Origin) -> None:
+        """The origin of the coordinates shown, and of the thousandths the points are rounded to."""
+        self._origin = origin
+        self.item.set_origin(origin)
+
     def set_active(self, active: bool) -> None:
         if active == self._active:
             return
@@ -66,7 +73,7 @@ class RulerTool(QObject):
 
     def _target(self, x: float, y: float) -> Vec | None:
         """Where a point would go for the mouse at (x, y): None if that's off the sheet."""
-        point = quantize(x, y)
+        point = self._origin.quantize(x, y)
         if self._view.shift_held():
             point = restricted_point(self._ruler.points, point)
         return point if self._view.sheet_rect().contains(QPointF(float(point.x), float(point.y))) else None

@@ -22,6 +22,7 @@ from cube_net.core.geometry import Rigid90, Vec
 from cube_net.core.history import ActionKind, History, HistoryEntry
 from cube_net.core.labels import PointLabels
 from cube_net.core.net import EdgeKind, HalfEdge, Net, NetInvariantError, NetVertex, Region, validate_net
+from cube_net.core.origin import Origin
 from cube_net.core.project.project import Project, ProjectFileError
 from cube_net.core.project_settings import ProjectSettings, format_threshold
 
@@ -30,7 +31,10 @@ from cube_net.core.project_settings import ProjectSettings, format_threshold
 sys.set_int_max_str_digits(0)
 
 # Raise it whenever the format changes (and keep reading the older ones, if there's anything worth keeping).
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+
+# The older versions still read. 1: no origin (the states have the default one).
+READ_VERSIONS = (1, FORMAT_VERSION)
 
 
 def encode_project(project: Project) -> dict[str, Any]:
@@ -42,7 +46,7 @@ def decode_project(data: object) -> Project:
     if not isinstance(data, dict):
         raise ProjectFileError("It isn't a Cube Net project.")
     version = data.get("format_version")
-    if version != FORMAT_VERSION:
+    if version not in READ_VERSIONS:
         if isinstance(version, int) and version > FORMAT_VERSION:
             raise ProjectFileError("It was saved by a newer version of the application.")
         raise ProjectFileError("It has an unknown format version: {version}.", version=repr(version))
@@ -65,6 +69,24 @@ def _read_number(text: object) -> Fraction:
 def _read_vec(data: list[object]) -> Vec:
     x, y = data
     return Vec(_read_number(x), _read_number(y))
+
+
+def _write_origin(origin: Origin) -> dict[str, Any]:
+    return {
+        "at": _write_vec(origin.position),
+        "point": None if origin.point is None else _write_vec(origin.point),
+        "name": origin.name,
+    }
+
+
+def _read_origin(data: dict[str, Any] | None) -> Origin:
+    """The origin of a state (None: a state of format version 1, which had none)."""
+    if data is None:
+        return Origin()
+    point, name = data["point"], data["name"]
+    if name is not None and not isinstance(name, str):
+        raise TypeError(f"expected a point's name, got {name!r}")
+    return Origin(_read_vec(data["at"]), None if point is None else _read_vec(point), name)
 
 
 def _write_motion(motion: Rigid90) -> dict[str, Any]:
@@ -186,6 +208,7 @@ class _Encoder:
                     "points": None if state.points is None else [self._cut_point(p) for p in state.points],
                     "rearranged": None if state.rearranged is None else self._rearrangement(state.rearranged),
                     "approved_cuts": state.approved_cuts,
+                    "origin": _write_origin(state.origin),
                 }
             )
         return index
@@ -258,7 +281,8 @@ class _Decoder:
         loaded = self._nets[data["net"]]
         points = None if data["points"] is None else tuple(self._cut_point(loaded, p) for p in data["points"])
         rearranged = None if data["rearranged"] is None else self._rearranged[data["rearranged"]]
-        return EditorSnapshot(loaded.net, points, rearranged, data["approved_cuts"])
+        origin = _read_origin(data.get("origin"))
+        return EditorSnapshot(loaded.net, points, rearranged, data["approved_cuts"], origin)
 
     def _rearrangement(self, data: dict[str, Any]) -> Rearranged:
         loaded = self._nets[data["net"]]

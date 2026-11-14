@@ -326,3 +326,37 @@ def test_any_coordinates_can_be_saved() -> None:
     project = project_of(Editor(net))
     assert isinstance(project, Project)
     assert net_contents(round_trip(project).state.net) == net_contents(net)
+
+
+class TestOrigin:
+    @staticmethod
+    def moved() -> Editor:
+        from cube_net.core.geometry import Vec
+        from cube_net.core.origin import DEFAULT_ORIGIN
+
+        editor = editing()
+        editor.move_origin(DEFAULT_ORIGIN.moved(Vec(11, 13), Vec(F(1, 3), -2), "C_1"))
+        return editor
+
+    def test_saved_with_every_state_and_the_history(self) -> None:
+        editor = self.moved()
+        loaded = round_trip(project_of(editor))
+        assert loaded.state.origin == editor.origin
+        entries = [entry_contents(e) for e in loaded.history.done_entries()]
+        assert entries == [entry_contents(e) for e in editor.history.done_entries()]
+
+    def test_version_1_has_the_default_one(self) -> None:
+        from cube_net.core.origin import DEFAULT_ORIGIN
+
+        data = json.loads(json.dumps(encode_project(project_of(editing()))))
+        data["format_version"] = 1
+        for state in data["states"]:
+            del state["origin"]
+        loaded = decode_project(data)
+        assert loaded.state.origin == DEFAULT_ORIGIN
+
+    def test_a_name_that_isnt_text_is_damage(self) -> None:
+        data = json.loads(json.dumps(encode_project(project_of(self.moved()))))
+        data["states"][-1]["origin"]["name"] = 7
+        with pytest.raises(ProjectFileError, match="damaged"):
+            decode_project(data)

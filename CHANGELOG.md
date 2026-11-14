@@ -7,6 +7,7 @@ What's new in every version of Cube Net. While working, write the changes under 
  - "Place vertex" feature implemented
  - "Set slope" feature implemented
  - "Show vertex coordinates" setting added
+ - "Move the origin" feature implemented
  - "Help → Help" section lists all hotkeys now
  - Hotkey (L) for vertex labels added
  - Focus-off for target area input improved

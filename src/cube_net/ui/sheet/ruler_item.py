@@ -17,6 +17,7 @@ from PyQt6.QtGui import QFont, QFontMetricsF, QPainter, QPen, QTransform
 from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 
 from cube_net.core.geometry import Vec
+from cube_net.core.origin import Origin
 from cube_net.core.ruler import distance
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf
@@ -40,6 +41,9 @@ class RulerItem(QGraphicsItem):
         self._points: tuple[Vec, ...] = ()
         self._cursor: Vec | None = None
 
+        # The origin of the coordinates shown next to the points.
+        self._origin = Origin()
+
     def set_rect(self, rect: QRectF, margin: float) -> None:
         """The area the ruler can be used in (the sheet), and how far (in units) its labels may stick out of it."""
         self.prepareGeometryChange()
@@ -51,6 +55,15 @@ class RulerItem(QGraphicsItem):
         self._points = tuple(points)
         self._cursor = cursor
         self.update()
+
+    def set_origin(self, origin: Origin) -> None:
+        """The origin of the coordinates shown (right click -> Move the origin)."""
+        self._origin = origin
+        self.update()
+
+    def point_text(self, p: Vec) -> str:
+        """What's written next to the sheet point `p`: its coordinates, from the origin."""
+        return format_point(self._origin.shown(p))
 
     def cursor(self) -> Vec | None:
         return self._cursor
@@ -89,11 +102,11 @@ class RulerItem(QGraphicsItem):
             anchor = world.map(to_qpointf(p)) + QPointF(
                 ruler_style.POINT_LABEL_OFFSET_PX, -ruler_style.POINT_LABEL_OFFSET_PX
             )
-            self._label(painter, metrics, format_point(p), anchor, below=False)
+            self._label(painter, metrics, self.point_text(p), anchor, below=False)
         if self._cursor is not None:
             offset = ruler_style.CURSOR_LABEL_OFFSET_PX
             anchor = world.map(to_qpointf(self._cursor)) + QPointF(offset, offset)
-            self._label(painter, metrics, format_point(self._cursor), anchor, below=True)
+            self._label(painter, metrics, self.point_text(self._cursor), anchor, below=True)
         for a, b in pairwise(chain):
             self._distance_label(painter, metrics, world, a, b)
         painter.restore()

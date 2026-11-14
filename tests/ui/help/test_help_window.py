@@ -102,17 +102,19 @@ def test_labels_follow_the_setting(qtbot: QtBot) -> None:
     assert item.labels() is None
 
 
-def test_good_to_know_starts_with_the_right_click(qtbot: QtBot) -> None:
-    from cube_net.ui.help.help_window import EXACT_TEXT, HOTKEYS_TITLE, MORE_TITLE
+def test_good_to_know_starts_with_the_right_click_then_the_origin(qtbot: QtBot) -> None:
+    from cube_net.ui.help.help_window import EXACT_TEXT, HOTKEYS_TITLE, MORE_TITLE, ORIGIN_TEXT, UNDO_TEXT
 
     text = make(qtbot).blocks[-1].toPlainText()
     after_title = text[text.index(MORE_TITLE) + len(MORE_TITLE) :].lstrip()
     assert after_title.lstrip("•  ").startswith(EXACT_TEXT)
+    assert text.index(EXACT_TEXT) < text.index(ORIGIN_TEXT) < text.index(UNDO_TEXT)  # the origin's is the second
     assert "Hold Shift while cutting" not in text  # it's with the hotkeys now
     assert text.index(MORE_TITLE) < text.index(HOTKEYS_TITLE)  # the hotkeys come after it
 
 
 def test_the_hotkeys_by_group(qtbot: QtBot) -> None:
+    from cube_net.ui.help.help_window import HOTKEYS_TITLE
     from cube_net.ui.help.hotkeys import HOTKEYS
 
     text = make(qtbot).blocks[-1].toPlainText()
@@ -120,4 +122,6 @@ def test_the_hotkeys_by_group(qtbot: QtBot) -> None:
         assert group.title in text
         for hotkey in group.hotkeys:
             assert hotkey.shown() in text and hotkey.action in text
-    assert "Shift + drag a vertex" in text and "right-click" in text and "hold Shift" in text
+    hotkeys = text[text.index(HOTKEYS_TITLE) :]
+    assert "Shift + drag a vertex" in hotkeys and "hold Shift" in hotkeys
+    assert "right-click" not in hotkeys  # Good to know tells about it

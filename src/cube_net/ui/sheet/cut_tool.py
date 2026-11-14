@@ -36,6 +36,7 @@ from cube_net.core.cutting.placement import Action, Constraint, LineKind, Placem
 from cube_net.core.editor import Editor, EditorState, Rejection
 from cube_net.core.geometry import Vec, quantize
 from cube_net.core.net import HalfEdge, NetVertex, boundary_edge_at
+from cube_net.core.origin import Origin
 from cube_net.core.sheet import SHEET_MARGIN
 from cube_net.ui.i18n import tr
 from cube_net.ui.qt_geometry import to_qpointf
@@ -79,6 +80,9 @@ class CutTool(QObject):
 
     # The locked slope changed: the direction (a Vec), or None when it's unlocked (right click -> Set slope).
     slope_changed = pyqtSignal(object)
+
+    # The origin of the coordinates shown and typed changed (moved, undone, redone, another project).
+    origin_changed = pyqtSignal()
 
     def __init__(self, view: SheetView, editor: Editor, ruler: RulerTool) -> None:
         super().__init__(view)
@@ -228,6 +232,7 @@ class CutTool(QObject):
         self.item.set_rubber_band(None)
         self.refresh()
         self.net_changed.emit()
+        self.origin_changed.emit()
 
     def cancel_drag(self) -> None:
         """Forget the point being dragged (it stays where it was), or the button being pressed (it doesn't act)."""
@@ -255,8 +260,11 @@ class CutTool(QObject):
 
     def _after_history_step(self, step: Callable[[], bool]) -> None:
         shown = self._editor.display_net
+        origin = self._editor.origin
         if not step():
             return
+        if self._editor.origin != origin:
+            self.origin_changed.emit()
         self.item.set_net(self._editor.net)
         self.item.set_rubber_band(None)  # it may start at a point that's gone; the next mouse move draws it again
         self.refresh()
@@ -354,11 +362,9 @@ class CutTool(QObject):
             target = self._drag_target
             snapped = target.on_perimeter or (target.fold is not None and not self._drag_over_perimeter)
             return target.position if snapped else None
-        positions = [point.position for point in self.item.points()] + self.item.crossings() + self.item.images()
-        positions += [vertex.position for vertex in self._editor.display_net.vertices]
-        i = self._closest(x, y, positions, net_style.VERTEX_RADIUS_PX)
-        if i is not None:
-            return positions[i]
+        point = self._drawn_point_at(x, y)
+        if point is not None:
+            return point
         state = self._editor.state
         if self._ruler.active or state not in (EditorState.DEFAULT, EditorState.CUTTING):
             return None
@@ -368,6 +374,29 @@ class CutTool(QObject):
         if target.on_perimeter or (cutting and target.fold is not None):
             return target.position
         return None
+
+    def vertex_at(self, x: float, y: float) -> Vec | None:
+        """The drawn point under the mouse at sheet point (x, y) (in its circle), the hint's, whose coordinates can be
+        set by moving the origin (right click -> Move the origin): none while a point is dragged, nor over the approve
+        button."""
+        if self._drag_index is not None or self._on_approve_button(x, y):
+            return None
+        return self._drawn_point_at(x, y)
+
+    def _drawn_point_at(self, x: float, y: float) -> Vec | None:
+        """Any drawn point under the mouse (in its circle): the net's vertices, the cut line's points, its small dots
+        (crossings with fold lines, the endpoints' counterpart images)."""
+        positions = [point.position for point in self.item.points()] + self.item.crossings() + self.item.images()
+        positions += [vertex.position for vertex in self._editor.display_net.vertices]
+        i = self._closest(x, y, positions, net_style.VERTEX_RADIUS_PX)
+        return None if i is None else positions[i]
+
+    def move_origin(self, origin: Origin) -> None:
+        """Show and take the coordinates from `origin` (an action, if it moved)."""
+        before = self._editor.origin
+        self._editor.move_origin(origin)
+        if self._editor.origin != before:
+            self.origin_changed.emit()
 
     def placement_at(self, x: float, y: float) -> Placement | None:
         """What a right click at sheet point (x, y) offers to place at typed coordinates: the point a left click there
@@ -487,14 +516,14 @@ class CutTool(QObject):
         vertex, cut = perimeter_target(self._view, self._editor.net, x, y)
         on_perimeter = vertex is not None or cut is not None
         fold = None if on_perimeter else fold_target(self._view, self._editor.net, x, y)
-        return quantize(x, y), cut, vertex, fold
+        return self._editor.origin.quantize(x, y), cut, vertex, fold
 
     def _straight_hit(
         self, anchor: Vec, x: float, y: float, prefer: HalfEdge | None = None
     ) -> tuple[Vec, HalfEdge | None, NetVertex | None, HalfEdge | None]:
         """Like `_hit` for the end of a straight segment from `anchor`: a vertex counts only if it's on its line."""
         net = self._editor.net
-        p = straighten(anchor, quantize(x, y))
+        p = straighten(anchor, self._editor.origin.quantize(x, y))
         px, py = float(p.x), float(p.y)
         vertex, cut = perimeter_target(self._view, net, px, py)
         fold = None if vertex is not None or cut is not None else fold_target(self._view, net, px, py, prefer)
@@ -722,7 +751,7 @@ class CutTool(QObject):
         placing = self._placing
         if placing is not None and placing.action is Action.ADD and placing.constraint.bound:
             constraint = placing.constraint
-            self.item.set_rubber_band((line.last.position, constraint.nearest(quantize(x, y))))
+            self.item.set_rubber_band((line.last.position, constraint.nearest(self._editor.origin.quantize(x, y))))
             self._highlight_fold(constraint.edge if constraint.kind is LineKind.FOLD else None)
             return
         p, cut, vertex, fold = self._hit(x, y)
@@ -766,7 +795,12 @@ class CutTool(QObject):
         if original.on_perimeter:
             vertex, _ = perimeter_target(self._view, net, x, y)
             target = self._editor.drag_target(
-                i, quantize(x, y), vertex=vertex, current=self._drag_target, straight=straight, slope=slope
+                i,
+                self._editor.origin.quantize(x, y),
+                vertex=vertex,
+                current=self._drag_target,
+                straight=straight,
+                slope=slope,
             )
             self._drag_target = target
             self._highlight_vertex(vertex if target.vertex is vertex else None)
@@ -776,7 +810,7 @@ class CutTool(QObject):
                 p, _, _, fold = self._straight_hit(line.points[i - 1].position, x, y, on_fold)
                 vertex, cut = perimeter_target(self._view, net, float(p.x), float(p.y))
             else:
-                p = quantize(x, y)
+                p = self._editor.origin.quantize(x, y)
                 vertex, cut = perimeter_target(self._view, net, x, y)
                 fold = fold_target(self._view, net, x, y, prefer=on_fold)
             self._drag_over_perimeter = vertex is not None or cut is not None

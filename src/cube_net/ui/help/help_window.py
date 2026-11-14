@@ -79,6 +79,7 @@ MORE_TITLE = "Good to know"
 EXACT_TEXT = (
     "You can set specific coordinates for points or slopes for lines: try right-click (even when dragging a point)."
 )
+ORIGIN_TEXT = "You can move the working sheet origin: right-click on any vertex."
 UNDO_TEXT = "Undo and redo work for up to 1000 actions: use Ctrl+Z and Ctrl+Y."
 BOUNDS_TEXT = (
     "The application keeps track of the minimum-area bounding rectangle of the net. To see the rectangle itself, "
@@ -127,6 +128,7 @@ class HelpWindow(QWidget):
         self._players([good, bad], [self._caption(GOOD_CAPTION), self._caption(BAD_CAPTION)])
         self._title(MORE_TITLE)
         self._paragraph(EXACT_TEXT, bullet=True)
+        self._paragraph(ORIGIN_TEXT, bullet=True)
         self._paragraph(UNDO_TEXT, bullet=True)
         self._paragraph(BOUNDS_TEXT, lambda: {"bounds": f"<b>{tr('Bounds')}</b>"}, bullet=True)
         self._paragraph(VIEW_TEXT, bullet=True)

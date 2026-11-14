@@ -85,7 +85,6 @@ HOTKEYS = (
         "Making a cut",
         (
             Hotkey("Shift", "", "The new segment is horizontal or vertical", held=True),
-            Hotkey("", "right-click", "Place the next vertex at exact coordinates, or set the segment's slope"),
             _UNLOCK,
         ),
     ),
@@ -94,9 +93,6 @@ HOTKEYS = (
         (
             Hotkey("Shift", "drag a vertex", "The segment from the vertex before it is horizontal or vertical"),
             Hotkey("Ctrl", "click a vertex", "Delete it (any but the first and the last)"),
-            Hotkey(
-                "", "right-click while dragging", "Place the vertex at exact coordinates, or set its segment's slope"
-            ),
             _UNLOCK,
         ),
     ),
