@@ -79,6 +79,9 @@ class CutTool(QObject):
     # The line on display changed in any way, including while a point is being dragged.
     line_changed = pyqtSignal()
 
+    # The locked slope changed: the direction (a Vec), or None when it's unlocked (right click -> Set slope).
+    slope_changed = pyqtSignal(object)
+
     def __init__(self, view: SheetView, editor: Editor, ruler: RulerTool) -> None:
         super().__init__(view)
         self._view = view
@@ -105,6 +108,14 @@ class CutTool(QObject):
         # point follows the mouse only along that line.
         self._placing: Placement | None = None
 
+        # The locked slope (a direction, not zero), until the point is placed or the drag ends (right click -> Set
+        # slope): the current segment goes that way, whatever the mouse, SHIFT or snapping would do.
+        self._slope: Vec | None = None
+
+        # The drag goes on without a button (it was released while a window was open): the next press or release
+        # ends it, as the release would have.
+        self._drag_free = False
+
         # Where (in window pixels) Shift+press hit an inner point, until it's clear whether that's a click or a drag.
         self._delete_press: QPointF | None = None
         self._mouse: tuple[float, float] | None = None
@@ -130,6 +141,63 @@ class CutTool(QObject):
     @property
     def dragging(self) -> bool:
         return self._drag_index is not None
+
+    def slope(self) -> Vec | None:
+        """The locked slope's direction, if a slope is locked."""
+        return self._slope
+
+    def lock_slope(self, direction: Vec) -> None:
+        """Lock the current segment's slope (`direction`, not zero): until the point is placed (CUTTING) or the drag
+        ends."""
+        self._slope = direction
+        self.slope_changed.emit(direction)
+        self._follow_mouse()
+
+    def unlock_slope(self) -> None:
+        if self._slope is None:
+            return
+        self._end_slope()
+        self._follow_mouse()
+
+    def _end_slope(self) -> None:
+        """The lock is over (its point placed, its drag ended, its CUTTING gone)."""
+        if self._slope is not None:
+            self._slope = None
+            self.slope_changed.emit(None)
+
+    def continue_drag_without_button(self) -> None:
+        """The drag's button was released while a window was open: the drag goes on, and the next press or release
+        ends it there."""
+        self._drag_free = True
+
+    def _follow_mouse(self) -> None:
+        """What follows the mouse (the dashed line, a dragged point) is worked out again, without a move."""
+        if self._mouse is not None:
+            self._on_mouse_moved(*self._mouse)
+
+    def _straight(self) -> bool:
+        """SHIFT's horizontal or vertical: only while no slope is locked (the locked one wins)."""
+        return self._view.shift_held() and self._slope is None
+
+    def slope_at(self, x: float, y: float) -> Vec | None:
+        """The direction of the current segment, as it's shown for the mouse at (x, y): the one a click there would
+        make (CUTTING), or the dragged point's segment from the point before it. None: there's none (DEFAULT, the
+        first point dragged, the ruler on, the mouse right on the previous point)."""
+        if self._ruler.active:
+            return None
+        line = self._editor.cut_line
+        if self._drag_index is not None and line is not None:
+            i = self._drag_index
+            if i == 0:
+                return None
+            direction = (self._drag_target or line.points[i]).position - line.points[i - 1].position
+        elif self._editor.state is EditorState.CUTTING and line is not None:
+            p, cut, vertex, fold = self._hit(x, y)
+            target = self._editor.candidate(p, cut, vertex, fold, self._straight(), self._slope)
+            direction = target.position - line.last.position
+        else:
+            return None
+        return None if direction == Vec(0, 0) else direction
 
     def set_placing(self, placement: Placement | None) -> None:
         """While the window for `placement` is open (None: closed). A point the line would add that's bound to a line
@@ -174,7 +242,9 @@ class CutTool(QObject):
         if self._drag_index is None:
             return
         self._drag_index, self._drag_target, self._drag_over_perimeter = None, None, False
+        self._drag_free = False
         self._delete_press = None
+        self._end_slope()
         self._highlight_fold(None)
         self._highlight_vertex(None)
         self.refresh()
@@ -206,6 +276,8 @@ class CutTool(QObject):
         points = list(line.points) if line is not None and not approving else []
         if self._drag_index is not None and self._drag_target is not None:
             points[self._drag_index] = self._drag_target
+        if self._drag_index is None and self._editor.state is not EditorState.CUTTING:
+            self._end_slope()  # its CUTTING is over (the line closed, or undone)
         self.item.set_points(points)
         self.item.set_show_midpoints(self._editor.state is EditorState.CUT_EDITING)
         rearranged = self._editor.rearranged
@@ -223,6 +295,8 @@ class CutTool(QObject):
 
     def claims(self, x: float, y: float) -> bool:
         """Would a press at sheet point (x, y) mean something in the current state? Anywhere else it pans the sheet."""
+        if self._drag_index is not None:
+            return True  # a drag without its button (after Set slope): any press ends it, wherever it is
         if self._ruler.active:
             return False
         state = self._editor.state
@@ -295,8 +369,9 @@ class CutTool(QObject):
         if self._ruler.active or state not in (EditorState.DEFAULT, EditorState.CUTTING):
             return None
         p, cut, vertex, fold = self._hit(x, y)
-        target = self._editor.candidate(p, cut, vertex, fold, self._view.shift_held())
-        if target.on_perimeter or (state is EditorState.CUTTING and target.fold is not None):
+        cutting = state is EditorState.CUTTING
+        target = self._editor.candidate(p, cut, vertex, fold, self._straight(), self._slope if cutting else None)
+        if target.on_perimeter or (cutting and target.fold is not None):
             return target.position
         return None
 
@@ -308,10 +383,13 @@ class CutTool(QObject):
         if self._ruler.active:
             return None
         line = self._editor.cut_line
-        straight = self._view.shift_held()
+        straight = self._straight()
+        slope = self._slope
         if self._drag_index is not None and line is not None:
             i = self._drag_index
             target = self._drag_target or line.points[i]
+            if slope is not None and i > 0:
+                return Placement(Action.MOVE, target.position, self._sloped(target, line.points[i - 1].position), i)
             if target.vertex is not None:
                 return None
             if target.edge is not None:
@@ -328,8 +406,14 @@ class CutTool(QObject):
         if state not in (EditorState.DEFAULT, EditorState.CUTTING):
             return None
         p, cut, vertex, fold = self._hit(x, y)
-        target = self._editor.candidate(p, cut, vertex, fold, straight)
+        cutting = state is EditorState.CUTTING
+        target = self._editor.candidate(p, cut, vertex, fold, straight, slope if cutting else None)
         action = Action.START if state is EditorState.DEFAULT else Action.ADD
+        if cutting and slope is not None and line is not None:
+            constraint = self._sloped(target, line.last.position)
+            if constraint.fixed is None and not self._editor.net.contains(target.position):
+                return None  # outside the net, no point is made
+            return Placement(action, target.position, constraint)
         if target.vertex is not None:
             return None
         if target.edge is not None:  # the edge wins over SHIFT's line
@@ -344,6 +428,16 @@ class CutTool(QObject):
         else:
             constraint = Constraint.free()
         return Placement(action, target.position, constraint)
+
+    def _sloped(self, target: CutPoint, anchor: Vec) -> Constraint:
+        """With a locked slope: a point snapped to something is fixed where the slope's line meets it; otherwise it's
+        typed along that line."""
+        assert self._slope is not None
+        if target.edge is not None:
+            return Constraint.on_edge(target.edge).fixed_at(target.position)
+        if target.fold is not None and not self._drag_over_perimeter:
+            return Constraint.on_fold(target.fold).fixed_at(target.position)
+        return Constraint.along(anchor, self._slope)
 
     def place(self, placement: Placement, p: Vec) -> Problem | None:
         """Put the point of `placement` exactly at `p` (typed: nothing is rounded); or why it can't go there, and
@@ -372,12 +466,15 @@ class CutTool(QObject):
             if self._editor.move_point(placement.index, point) is not None:
                 return Problem.BREAKS_LINE
             self._drag_index, self._drag_target, self._drag_over_perimeter = None, None, False
+            self._drag_free = False
             self._delete_press = None
+            self._end_slope()
             self._highlight_fold(None)
             self._highlight_vertex(None)
             self.refresh()
             self.edited.emit("move", placement.index, p)
             return None
+        self._end_slope()  # placed: the lock was for this point
         self.refresh()
         self.point_added.emit(p)
         return None
@@ -392,7 +489,7 @@ class CutTool(QObject):
         """What's under the mouse: the point, then a cut or a perimeter vertex, or else a fold line. While cutting with
         SHIFT held, that's about where the mouse brings the end of the straight segment."""
         line = self._editor.cut_line
-        if self._view.shift_held() and line is not None and not line.closed:
+        if self._straight() and line is not None and not line.closed:
             return self._straight_hit(line.last.position, x, y)
         vertex, cut = perimeter_target(self._view, self._editor.net, x, y)
         on_perimeter = vertex is not None or cut is not None
@@ -415,7 +512,7 @@ class CutTool(QObject):
     def hover_target(self, x: float, y: float) -> tuple[NetVertex | None, HalfEdge | None] | None:
         """While cutting with SHIFT held, what highlights is what the straight segment would end on (see `CutHover`)."""
         line = self._editor.cut_line
-        if self._ruler.active or not self._view.shift_held() or line is None or line.closed:
+        if self._ruler.active or not self._straight() or line is None or line.closed:
             return None
         _, cut, vertex, _ = self._hit(x, y)
         return vertex, cut
@@ -431,6 +528,9 @@ class CutTool(QObject):
 
     def _on_left_pressed(self, x: float, y: float) -> None:
         self._mouse = x, y
+        if self._drag_free and self._drag_index is not None:
+            self._on_left_released(x, y)  # the drag without a button: this press ends it
+            return
         if self._ruler.active:
             return  # the ruler takes the clicks
         if self._editor.state is EditorState.CUT_EDITING:
@@ -442,13 +542,15 @@ class CutTool(QObject):
             return
         p, cut, vertex, fold = self._hit(x, y)
         before = len(self._editor.cut_line.points) if self._editor.cut_line else 0
-        straight = self._view.shift_held() and self._editor.state is EditorState.CUTTING
-        rejection = self._editor.click(p, cut, vertex, fold, straight)
+        cutting = self._editor.state is EditorState.CUTTING
+        straight = self._straight() and cutting
+        rejection = self._editor.click(p, cut, vertex, fold, straight, self._slope if cutting else None)
         if rejection is not None:
             self._reject(rejection, rejection.segment[1])
             return
         line = self._editor.cut_line
         if line is not None and len(line.points) > before:
+            self.unlock_slope()  # placed: the lock was for this point
             self.refresh()
             self.point_added.emit(line.last.position)
 
@@ -552,10 +654,12 @@ class CutTool(QObject):
             return
         i, target = self._drag_index, self._drag_target
         self._drag_index, self._drag_target = None, None
+        self._drag_free = False
         self._highlight_fold(None)
         self._highlight_vertex(None)
         if i is None:
             return
+        self._end_slope()  # the lock was for this drag
         if self._delete_press is not None:
             self._delete_press = None
             self._delete_point(i)
@@ -636,7 +740,7 @@ class CutTool(QObject):
             self._highlight_fold(constraint.edge if constraint.kind is LineKind.FOLD else None)
             return
         p, cut, vertex, fold = self._hit(x, y)
-        target = self._editor.candidate(p, cut, vertex, fold, self._view.shift_held())
+        target = self._editor.candidate(p, cut, vertex, fold, self._straight(), self._slope)
         self.item.set_rubber_band((line.last.position, target.position))
         self._highlight_fold(target.fold)
 
@@ -676,11 +780,12 @@ class CutTool(QObject):
             self._delete_press = None
         net = self._editor.net
         original = line.points[i]
-        straight = self._view.shift_held() and i > 0
+        straight = self._straight() and i > 0
+        slope = self._slope if i > 0 else None
         if original.on_perimeter:
             vertex, _ = perimeter_target(self._view, net, x, y)
             target = self._editor.drag_target(
-                i, quantize(x, y), vertex=vertex, current=self._drag_target, straight=straight
+                i, quantize(x, y), vertex=vertex, current=self._drag_target, straight=straight, slope=slope
             )
             self._drag_target = target
             self._highlight_vertex(vertex if target.vertex is vertex else None)
@@ -694,7 +799,7 @@ class CutTool(QObject):
                 vertex, cut = perimeter_target(self._view, net, x, y)
                 fold = fold_target(self._view, net, x, y, prefer=on_fold)
             self._drag_over_perimeter = vertex is not None or cut is not None
-            self._drag_target = self._editor.drag_target(i, p, fold=fold, straight=straight)
+            self._drag_target = self._editor.drag_target(i, p, fold=fold, straight=straight, slope=slope)
             self._highlight_fold(None if self._drag_over_perimeter else self._drag_target.fold)
         self.refresh()
 

@@ -32,6 +32,7 @@ from cube_net.core.cutting import (
     CutPoint,
     Rearranged,
     SplitNet,
+    along,
     approve,
     closest_straight_point,
     invalid_segments,
@@ -111,9 +112,13 @@ class Editor:
         vertex: NetVertex | None = None,
         fold: HalfEdge | None = None,
         straight: bool = False,
+        slope: Vec | None = None,
     ) -> CutPoint:
         """The point a click at `p` would create: exactly at `vertex`, on `cut` or `fold` (the closest point of it), or
-        at `p` inside the net. `straight` (SHIFT, while cutting): the new segment is horizontal or vertical."""
+        at `p` inside the net. `straight` (SHIFT, while cutting): the new segment is horizontal or vertical. `slope` (a
+        locked slope, while cutting: a direction, not zero): the new segment goes that way, and wins over `straight`."""
+        if slope is not None and self.cut_line is not None:
+            return self._sloped_point(self.cut_line.last.position, slope, p, cut, vertex, fold)
         if straight and self.cut_line is not None:
             return self._straight_point(self.cut_line.last.position, p, cut, vertex, fold)
         if cut is not None and vertex is None:
@@ -154,6 +159,39 @@ class Editor:
                 return CutPoint(hit, fold=fold)
         return CutPoint(p)
 
+    def _sloped_point(
+        self,
+        anchor: Vec,
+        direction: Vec,
+        p: Vec,
+        cut: HalfEdge | None,
+        vertex: NetVertex | None,
+        fold: HalfEdge | None,
+    ) -> CutPoint:
+        """The point near `p` on the line from `anchor` going `direction` (a locked slope). What the mouse is on gives
+        where that line crosses it: a cut, a fold; a perimeter vertex: one of its two cuts, the crossing nearest the
+        vertex (the vertex itself only if the line goes through it). Nothing crossed: the line's point nearest `p`."""
+        through = anchor + direction
+        if vertex is not None:
+            hits = [
+                (hit, he)
+                for he in self.net.boundary_edges()
+                if vertex in (he.origin, he.destination)
+                and (hit := line_meets_segment(anchor, through, he.origin.position, he.destination.position))
+                is not None
+                and hit != anchor
+            ]
+            if hits:
+                hit, he = min(hits, key=lambda found: ((found[0] - vertex.position).length_squared(), found[1].id))
+                return self._point_on_cut(hit, he)
+        for edge, on_perimeter in ((cut, True), (fold, False)):
+            if edge is None:
+                continue
+            hit = line_meets_segment(anchor, through, edge.origin.position, edge.destination.position)
+            if hit is not None and hit != anchor:
+                return self._point_on_cut(hit, edge) if on_perimeter else CutPoint(hit, fold=edge)
+        return CutPoint(along(anchor, direction, p))
+
     def click(
         self,
         p: Vec,
@@ -161,9 +199,10 @@ class Editor:
         vertex: NetVertex | None = None,
         fold: HalfEdge | None = None,
         straight: bool = False,
+        slope: Vec | None = None,
     ) -> Rejection | None:
-        """A left click at sheet point `p`; `vertex`, `cut` and `fold` are what the click hit, if anything. `straight`:
-        see `candidate`.
+        """A left click at sheet point `p`; `vertex`, `cut` and `fold` are what the click hit, if anything. `straight`,
+        `slope`: see `candidate`.
 
         Returns a `Rejection` if the click would break the rules; None if it was accepted or means nothing here.
         """
@@ -176,7 +215,7 @@ class Editor:
                     self._record(ActionKind.ADD_POINT, before)
                 return None
             case EditorState.CUTTING:
-                return self._extend(self.candidate(p, cut, vertex, fold, straight))
+                return self._extend(self.candidate(p, cut, vertex, fold, straight, slope))
             case _:
                 return None
 
@@ -236,6 +275,7 @@ class Editor:
         fold: HalfEdge | None = None,
         current: CutPoint | None = None,
         straight: bool = False,
+        slope: Vec | None = None,
     ) -> CutPoint:
         """Where point i goes when dragged to `p`; `current` is where the drag has brought it so far.
 
@@ -245,8 +285,18 @@ class Editor:
 
         `straight` (SHIFT): the segment from the previous point is horizontal or vertical (the first point has none, so
         it goes as usual). The last point then goes to the point of the perimeter closest to `p` that allows that.
+        `slope` (a locked slope: a direction, not zero): the segment from the previous point goes that way, the same
+        way; it wins over `straight`.
         """
         line = self._editing_line()
+        if slope is not None and i > 0:
+            anchor = line.points[i - 1].position
+            if line.points[i].edge is None:
+                return self._sloped_point(anchor, slope, p, None, None, fold)
+            found = closest_straight_point(self.net, anchor, p, slope)
+            if found is None:
+                return current if current is not None else line.points[i]
+            return self._point_on_cut(*found)
         if straight and i > 0:
             anchor = line.points[i - 1].position
             if line.points[i].edge is None:

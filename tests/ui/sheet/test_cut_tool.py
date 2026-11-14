@@ -1205,3 +1205,104 @@ class TestDashedLineWhilePlacing:
         band = tool.item.rubber_band()
         assert band is not None and band[1] == Vec(F(117, 10), F(67, 5))
         tool.set_placing(None)
+
+
+class TestLockedSlope:
+    """Right click -> Set slope: the current segment goes that way until the point is placed or the drag ends."""
+
+    def test_the_dashed_line_goes_that_way_shift_or_not(
+        self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))  # X (11.5, 14)
+        with qtbot.waitSignal(tool.slope_changed) as blocker:
+            tool.lock_slope(Vec(1, -2))
+        assert blocker.args == [Vec(1, -2)] and tool.slope() == Vec(1, -2)
+        view.mouse_moved.emit(11.9, 13.5)
+        band = tool.item.rubber_band()
+        assert band is not None and (band[1] - X).cross(Vec(1, -2)) == 0  # on the slope's line
+        monkeypatch.setattr(view, "shift_held", lambda: True)
+        view.mouse_moved.emit(11.9, 13.5)
+        assert tool.item.rubber_band() == band  # SHIFT means nothing while it's locked
+
+    def test_a_click_follows_it_and_ends_it(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        tool.lock_slope(Vec(1, -2))
+        view.left_pressed.emit(11.9, 13.5)
+        point = positions(tool)[-1]
+        assert (point - X).cross(Vec(1, -2)) == 0
+        assert tool.slope() is None  # placed: the lock is over
+
+    def test_a_rejected_click_keeps_it(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        tool.lock_slope(Vec(0, 1))  # straight up: out of the net
+        view.left_pressed.emit(11.5, 14.5)
+        assert positions(tool) == [X] and tool.slope() == Vec(0, 1)
+
+    def test_the_current_segments_slope(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        assert tool.slope_at(11.5, 13.5) is None  # DEFAULT: no segment
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        assert tool.slope_at(12.0, 13.0) is not None
+        direction = tool.slope_at(11.75, 13.5)
+        assert direction == Vec(F(1, 4), F(-1, 2))
+        assert tool.slope_at(11.5, 14.0) is None  # right on the last point: none
+
+    def test_ends_with_its_cutting(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        tool.lock_slope(Vec(1, -2))
+        with qtbot.waitSignal(tool.slope_changed) as blocker:
+            tool.undo()  # back to DEFAULT
+        assert blocker.args == [None] and tool.slope() is None
+
+    def test_a_drag_follows_it_until_released(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        corner_cut(view)  # X, Y (11.5, 13.5), Z (12, 13.5)
+        view.left_pressed.emit(11.5, 13.5)
+        assert tool.slope_at(11.5, 13.5) == Y - X
+        tool.lock_slope(Vec(1, -2))
+        view.mouse_moved.emit(11.7, 13.4)
+        moved = tool.item.points()[1].position
+        assert (moved - X).cross(Vec(1, -2)) == 0
+        view.left_released.emit(11.7, 13.4)
+        assert positions(tool)[1] == moved and tool.slope() is None
+
+    def test_the_first_points_drag_has_no_segment(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(*(float(c) for c in (X.x, X.y)))
+        assert tool.slope_at(float(X.x), float(X.y)) is None
+        tool.cancel_drag()
+
+    def test_a_drag_without_its_button_ends_with_the_next_press(
+        self, setup: tuple[SheetView, CutTool, RulerTool]
+    ) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(11.5, 13.5)
+        tool.lock_slope(Vec(1, -2))
+        tool.continue_drag_without_button()
+        view.mouse_moved.emit(11.7, 13.4)  # no button: it still follows
+        moved = tool.item.points()[1].position
+        view.left_pressed.emit(11.7, 13.4)  # this press puts it there
+        assert not tool.dragging and positions(tool)[1] == moved and tool.slope() is None
+        view.left_released.emit(11.7, 13.4)  # and its release means nothing more
+        assert positions(tool)[1] == moved
+
+    def test_place_a_vertex_on_the_slope(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.core.cutting.placement import Axis, LineKind
+
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        tool.lock_slope(Vec(1, -2))
+        free = tool.placement_at(11.6, 13.5)
+        assert free is not None and free.constraint.kind is LineKind.STRAIGHT and free.constraint.axis is Axis.BOTH
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        snapped = tool.placement_at(12 - h, 13.1)  # in the hitbox of x = 12: where the slope's line meets it
+        assert snapped is not None and snapped.constraint.axis is Axis.NONE
+        assert snapped.position == Vec(12, 13)  # from X going (1, -2): x = 12 at y = 13 (D_1)
+        assert tool.place(free, free.constraint.point_from(Axis.Y, F(0), F(27, 2))) is None
+        assert tool.slope() is None  # placed: the lock is over

@@ -90,3 +90,34 @@ class TestClosestStraightPoint:
         """Sideways from the top of face 1: not the cut it stands on, but the ones it hits at A_1 and B_1."""
         found = closest_straight_point(default_net(), v("11.5", "14"), v("11.6", "14"))
         assert found is not None and found[0] in (Vec(11, 14), Vec(12, 14))
+
+
+class TestLockedSlope:
+    """A locked slope (right click -> Set slope): SHIFT's straight segments, in any direction."""
+
+    def test_along(self) -> None:
+        from cube_net.core.cutting import along
+
+        assert along(Vec(10, F(25, 2)), Vec(2, 1), Vec(F(53, 5), F(129, 10))) == Vec(F(266, 25), F(641, 50))
+        assert along(Vec(0, 0), Vec(0, 3), Vec(5, 7)) == Vec(0, 7)
+
+    @pytest.mark.parametrize(
+        ("direction", "slope"),
+        [
+            (Vec(4, 2), (1, 2)),
+            (Vec(-4, -2), (1, 2)),  # the opposite way: the same line
+            (Vec(-4, 2), (-1, 2)),
+            (Vec(0, -5), (1, 0)),  # vertical
+            (Vec(3, 0), (0, 1)),  # horizontal
+            (Vec(F(1, 3), F(1, 2)), (3, 2)),
+        ],
+    )
+    def test_slope_of(self, direction: Vec, slope: tuple[int, int]) -> None:
+        from cube_net.core.cutting import slope_of
+
+        assert slope_of(direction) == slope
+
+    def test_the_perimeter_point_along_a_slope(self) -> None:
+        net = default_net()
+        found = closest_straight_point(net, Vec(F(23, 2), F(27, 2)), Vec(13, 13), Vec(1, 1))
+        assert found is not None and found[0] == Vec(12, 14)  # up and right at 45 degrees: B_1

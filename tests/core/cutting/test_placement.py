@@ -114,3 +114,18 @@ class TestNearest:
 
     def test_free_is_where_it_is(self) -> None:
         assert Constraint.free().nearest(Vec(1, 2)) == Vec(1, 2)
+
+
+class TestLockedSlope:
+    def test_along_a_slanted_slope_both_typed(self) -> None:
+        line = Constraint.along(Vec(10, F(25, 2)), Vec(2, 1))
+        assert line.kind is LineKind.STRAIGHT and line.axis is Axis.BOTH and line.bound
+        assert line.point_from(Axis.X, F(11), F(0)) == Vec(11, 13)
+        assert line.point_from(Axis.Y, F(0), F(13)) == Vec(11, 13)
+        assert line.nearest(Vec(15, 15)) == Vec(15, 15)  # on it: (10, 12.5) + 2.5 * (2, 1); no ends
+
+    def test_fixed_nothing_typed(self, net: Net) -> None:
+        edge = Constraint.on_edge(edge_between(net, Vec(10, 12), Vec(10, 13))).fixed_at(Vec(10, F(51, 4)))
+        assert edge.axis is Axis.NONE and edge.bound and edge.kind is LineKind.EDGE
+        assert edge.point_from(Axis.X, F(0), F(0)) == Vec(10, F(51, 4))
+        assert edge.nearest(Vec(0, 0)) == Vec(10, F(51, 4))

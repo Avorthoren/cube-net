@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 
 from cube_net import __version__
 from cube_net.core.bounding import min_area_rectangle
+from cube_net.core.cutting import slope_of
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels
 from cube_net.core.net import Net, default_net
@@ -213,6 +214,17 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.save_state)
         self.sheet_view.mouse_moved.connect(lambda x, y: self.coords_label.setText(format_coordinates(x, y)))
         self.sheet_view.mouse_left.connect(lambda: self.coords_label.setText(NO_COORDINATES))
+        # A locked slope (right click -> Set slope): said in the status bar (a widget of it, so that its passing
+        # messages don't wipe it out), and Escape unlocks it.
+        self.slope_label = QLabel(self)
+        self.slope_label.hide()
+        self.statusBar().addWidget(self.slope_label)
+        self.unlock_slope_action = QAction(self)
+        self.unlock_slope_action.setShortcut(QKeySequence(Qt.Key.Key_Escape))
+        self.unlock_slope_action.setEnabled(False)  # Escape means nothing else then
+        self.unlock_slope_action.triggered.connect(self.cut_tool.unlock_slope)
+        self.addAction(self.unlock_slope_action)
+        self.cut_tool.slope_changed.connect(self._on_slope_changed)
 
         self._create_instruments()
         self._create_menus()
@@ -991,6 +1003,19 @@ class MainWindow(QMainWindow):
         self.sheet_cursor.set_coordinates_shown(checked)
         if self.recorder is not None:
             self.recorder.note("coordinates", "on" if checked else "off")
+
+    def _on_slope_changed(self, direction: Vec | None) -> None:
+        self.unlock_slope_action.setEnabled(direction is not None)
+        if direction is None:
+            self.slope_label.hide()
+        else:
+            y, x = slope_of(direction)
+            self.slope_label.setText(
+                tr("Slope locked: y {y}, x {x} (until the point is placed; Escape unlocks)", y=y, x=x)
+            )
+            self.slope_label.show()
+        if self.recorder is not None:
+            self.recorder.note("slope", *(("off",) if direction is None else (str(c) for c in slope_of(direction))))
 
     def copy_coordinates(self) -> None:
         """Ctrl+C: the coordinates hint's two lines, with every number in full (nothing if it isn't shown)."""

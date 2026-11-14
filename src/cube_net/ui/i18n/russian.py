@@ -76,6 +76,14 @@ RUSSIAN: dict[str, str] = {
     "Show vertex coordinates": "Показывать координаты вершин",
     "Hotkey: C": "Клавиша: C",
     "Place a vertex": "Поставить вершину",
+    "Set slope": "Задать наклон",
+    "Set": "Задать",
+    "Enter a slope: whole numbers, not both 0 (x = 0 is vertical).": (
+        "Введите наклон: целые числа, не оба 0 (x = 0 — вертикаль)."
+    ),
+    "Slope locked: y {y}, x {x} (until the point is placed; Escape unlocks)": (
+        "Наклон закреплён: y {y}, x {x} (пока точка не поставлена; Escape снимает)"
+    ),
     "Place": "Поставить",
     "Enter whole numbers, with denominators above 0.": "Введите целые числа; знаменатели больше 0.",
     "The point is outside the net.": "Точка вне развёртки.",

@@ -155,7 +155,7 @@ def test_not_in_the_help_animations(qtbot: QtBot) -> None:
 
     from cube_net.ui.help.demo.demo_sheet import DemoSheet
 
-    assert DemoSheet(QSize(560, 400)).workspace.place_vertex is None
+    assert DemoSheet(QSize(560, 400)).workspace.context_menu is None
 
 
 def test_while_the_window_is_open_the_mouse_shows_as_usual(
@@ -245,3 +245,105 @@ def test_with_the_window_open_the_dashed_line_stays_on_its_edge(
     answer_menu(lambda menu: (answer_window(look), choose(menu)))
     view.right_pressed.emit(12 - inside(window), 13.6)  # the edge x = 12, from y = 13 to 14
     assert seen == [(Vec(F(23, 2), 14), Vec(12, 13))]
+
+
+def choose_item(i: int) -> Callable[[ContextMenu], None]:
+    def click(menu: ContextMenu) -> None:
+        QTest.mouseClick(menu, Qt.MouseButton.LeftButton, pos=menu.item_rect(i).center())
+
+    return click
+
+
+def answer_slope(y: str, x: str) -> None:
+    from cube_net.ui.sheet.set_slope_window import SetSlopeWindow
+
+    def answer() -> None:
+        dialog = QApplication.activeModalWidget()
+        assert isinstance(dialog, SetSlopeWindow)
+        dialog.y.setText(y)
+        dialog.x.setText(x)
+        dialog.set_button.click()
+
+    QTimer.singleShot(50, answer)
+
+
+class TestSetSlope:
+    def test_disabled_where_theres_no_segment(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = make(qtbot, tmp_path)
+        items: list[list[bool]] = []
+
+        def look(menu: ContextMenu) -> None:
+            items.append([item.enabled for item in menu.items])
+            close(menu)
+
+        answer_menu(look)
+        window.sheet_view.right_pressed.emit(11.5, 14 - inside(window))  # DEFAULT
+        assert items == [[True, False]]
+
+    def test_set_while_cutting_said_and_escape_unlocks(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = make(qtbot, tmp_path)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - inside(window))
+        answer_menu(lambda menu: (answer_slope("-2", "1"), choose_item(1)(menu)))
+        view.right_pressed.emit(11.7, 13.6)
+        assert window.cut_tool.slope() == Vec(1, -2)
+        assert window.slope_label.isVisible()
+        assert window.slope_label.text() == "Slope locked: y -2, x 1 (until the point is placed; Escape unlocks)"
+        window.unlock_slope_action.trigger()  # Escape
+        assert window.cut_tool.slope() is None and not window.slope_label.isVisible()
+        assert not window.unlock_slope_action.isEnabled()  # Escape means nothing else meanwhile
+
+    def test_set_during_a_drag_goes_on_until_a_click(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = make(qtbot, tmp_path)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - inside(window))
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - inside(window), 13.5)
+        view.left_pressed.emit(11.5, 13.5)  # Y
+        view.mouse_moved.emit(11.6, 13.6)
+        answer_menu(lambda menu: (answer_slope("-2", "1"), choose_item(1)(menu)))
+        view.right_pressed.emit(11.6, 13.6)
+        assert window.cut_tool.dragging and window.cut_tool.slope() == Vec(1, -2)
+        view.mouse_moved.emit(11.7, 13.4)  # no button held: it follows, along the slope
+        view.left_pressed.emit(11.7, 13.4)
+        line = window.editor.cut_line
+        assert line is not None and not window.cut_tool.dragging and window.cut_tool.slope() is None
+        assert (line.points[1].position - Vec(F(23, 2), 14)).cross(Vec(1, -2)) == 0
+
+    def test_cancel_in_place_a_vertex_unlocks(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = make(qtbot, tmp_path)
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - inside(window))
+        window.cut_tool.lock_slope(Vec(1, -2))
+        answer_menu(lambda menu: (answer_window(lambda dialog: dialog.reject()), choose(menu)))
+        view.right_pressed.emit(11.6, 13.6)
+        assert window.cut_tool.slope() is None
+
+
+def test_the_drag_after_set_slope_ends_with_a_real_click_anywhere(qtbot: QtBot, tmp_path: Path) -> None:
+    """Through the sheet's own presses (which pan wherever nothing claims them): a click on an empty spot of a face,
+    after Escape too, puts the point."""
+    from PyQt6.QtCore import QPointF
+
+    for unlock_first in (False, True):
+        window = make(qtbot, tmp_path / str(unlock_first))
+        view = window.sheet_view
+        view.left_pressed.emit(11.5, 14 - inside(window))
+        view.left_pressed.emit(11.5, 13.5)
+        view.left_pressed.emit(12 - inside(window), 13.5)
+        view.left_pressed.emit(11.5, 13.5)
+        view.mouse_moved.emit(11.6, 13.6)
+        answer_menu(lambda menu: (answer_slope("-2", "1"), choose_item(1)(menu)))
+        view.right_pressed.emit(11.6, 13.6)
+        assert window.cut_tool.dragging
+        if unlock_first:
+            window.unlock_slope_action.trigger()  # Escape: unlocked, the drag goes on
+            assert window.cut_tool.dragging
+        viewport = view.viewport()
+        assert viewport is not None
+        spot = view.from_sheet(QPointF(11.7, 13.4)).toPoint()  # no point, no circle, no cut there
+        QTest.mouseMove(viewport, spot)
+        QTest.mouseClick(viewport, Qt.MouseButton.LeftButton, pos=spot)
+        assert not window.cut_tool.dragging and not view.is_panning()
+        line = window.editor.cut_line
+        assert line is not None and line.points[1].position != Vec(F(23, 2), F(27, 2))  # it moved, and stays

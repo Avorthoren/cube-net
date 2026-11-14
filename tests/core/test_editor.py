@@ -806,3 +806,66 @@ class TestTypedPoints:
             editor.click(Vec(x, y), None)
         assert editor.too_many_points(CutPoint(v("10.9", "12.5")))
         assert not editor.too_many_points(editor.point_on_cut(v("10.9", "13"), cut("C_1-A_2")))  # it may still end
+
+
+class TestLockedSlope:
+    """A locked slope: the segment from the last point goes that way; what it snaps to is where its line crosses it."""
+
+    def started(self, net: Net, cut: Callable[[str], HalfEdge]) -> Editor:
+        editor = Editor(net)
+        editor.click(v("10", "12.5"), cut("A_2-E_2"))
+        return editor
+
+    def test_free_the_lines_point_nearest_the_mouse(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.started(net, cut)
+        point = editor.candidate(v("10.6", "12.9"), None, slope=Vec(2, 1))
+        assert point == CutPoint(Vec(F(266, 25), F(641, 50)))
+
+    def test_it_wins_over_shift(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.started(net, cut)
+        assert editor.candidate(v("10.6", "12.9"), None, straight=True, slope=Vec(2, 1)).position.y != F(25, 2)
+
+    def test_a_cut_where_the_line_crosses_it(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.started(net, cut)
+        point = editor.candidate(v("10.3", "13"), cut("C_1-A_2"), slope=Vec(1, 1))
+        assert point.position == v("10.5", "13") and point.edge is cut("C_1-A_2")  # not the mouse's 10.3
+
+    def test_a_cut_the_line_misses(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.started(net, cut)
+        point = editor.candidate(v("10.8", "13"), cut("C_1-A_2"), slope=Vec(3, 1))  # crosses y = 13 at x = 11.5
+        assert not point.on_perimeter
+
+    def test_a_fold_where_the_line_crosses_it(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.started(net, cut)
+        fold = next(
+            f for f in net.fold_edges() if {f.origin.position, f.destination.position} == {v("11", "12"), v("11", "13")}
+        )
+        point = editor.candidate(v("11", "12.6"), None, fold=fold, slope=Vec(4, 1))
+        assert point == CutPoint(v("11", "12.75"), fold=fold)
+
+    def test_a_vertex_the_crossing_of_its_cuts_nearest_it(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.started(net, cut)
+        c1 = vertex_at(net, 11, 13)
+        point = editor.candidate(v("11", "13"), None, c1, slope=Vec(3, 2))
+        # y = 12.5 + 2/3 (x - 10): on C_1-A_2 at x = 10.75 (0.25 from C_1), on A_1-C_1 at y = 79/6 (1/6 from it)
+        assert point.position == Vec(11, F(79, 6)) and point.edge is cut("A_1-C_1")
+
+    def test_a_vertex_on_the_line_is_that_vertex(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.started(net, cut)
+        c1 = vertex_at(net, 11, 13)
+        point = editor.candidate(v("11", "13"), None, c1, slope=Vec(2, 1))
+        assert point.vertex is c1
+
+    def test_a_click_follows_it(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.started(net, cut)
+        assert editor.click(v("10.6", "12.9"), None, slope=Vec(2, 1)) is None
+        assert positions(editor)[-1] == Vec(F(266, 25), F(641, 50))
+
+    def test_a_drag_follows_it(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = self.started(net, cut)
+        editor.click(v("10.5", "12.5"), None)
+        editor.click(v("10.5", "13"), cut("C_1-A_2"))
+        inner = editor.drag_target(1, v("10.9", "12.6"), slope=Vec(1, -1))
+        assert inner.position == Vec(F(52, 5), F(121, 10))  # from (10, 12.5) going (1, -1): 0.4 along, nearest it
+        end = editor.drag_target(2, v("10.4", "13"), slope=Vec(1, 1))
+        assert end.on_perimeter and end.position == v("11", "13")  # from (10.5, 12.5) up-right: C_1

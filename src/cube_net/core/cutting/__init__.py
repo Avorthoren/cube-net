@@ -18,7 +18,7 @@ from cube_net.core.cutting.rules import (
     strictly_inside,
 )
 from cube_net.core.cutting.split import SplitNet, connected_regions, split_net
-from cube_net.core.cutting.straight import closest_straight_point, line_meets_segment, straighten
+from cube_net.core.cutting.straight import along, closest_straight_point, line_meets_segment, slope_of, straighten
 
 __all__ = [
     "MAX_POINTS_AFTER_FIRST",
@@ -28,6 +28,7 @@ __all__ = [
     "Piece",
     "Rearranged",
     "SplitNet",
+    "along",
     "approve",
     "closest_straight_point",
     "connected_regions",
@@ -43,6 +44,7 @@ __all__ = [
     "region_at",
     "segment_allowed",
     "segment_valid",
+    "slope_of",
     "split_net",
     "straighten",
     "strictly_inside",

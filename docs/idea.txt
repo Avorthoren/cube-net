@@ -514,6 +514,26 @@ bound to a line, the dashed line to the mouse ends at the point of that line clo
 fold line, never beyond its ends (even where the next edge goes on in line with it), along SHIFT's line anywhere.
 Not in Help's animations.
 
+Set slope (right click)
+The menu's second item, "Set slope", is there in CUTTING and while a point is being dragged in CUT_EDITING (disabled in
+DEFAULT, for the first point's drag, and where the segment would have no length). It's about the current segment, the
+one SHIFT would make horizontal or vertical: while cutting, the one from the last point to where a click would put the
+next; while dragging, the one from the point before the dragged one. It opens a small window, "Set slope":
+    y: [integer]
+    x: [integer]
+the segment rises y while it goes x (x = 0: vertical; not both 0; turning both signs is the same slope), at most 10
+digits each, starting with the slope the segment has now (as the smallest such integers, x not below 0; snapped, the
+slope it would have), y's field selected. Set (the default)
+locks that slope; Cancel doesn't (and ends a drag with the point back, as closing the menu does).
+A locked slope holds until the point is placed (CUTTING) or the drag ends, or until ESCAPE; the status bar says so
+meanwhile. The segment then goes that way, whatever the mouse: SHIFT means nothing, and what it would snap to gives where
+its line crosses it: a cut, a fold line, or for a perimeter vertex, one of the vertex's two cuts (the crossing nearest
+the vertex; the vertex itself only if the line goes through it). Without such a crossing, it's the line's point nearest
+the mouse. A dragged last point stays on the perimeter, at the crossing nearest the mouse. Set during a drag, the drag
+goes on without the button (it was released meanwhile): the next click puts the point.
+With a locked slope, Place a vertex binds the coordinates to the slope's line (no ends), or, where the point would snap
+to something, shows them all fixed (where the line crosses it); its Cancel also unlocks the slope.
+
 Settings
 In the menu bar, to the right of Edit, there's "Settings": it opens a panel on the right side of the window, over the
 sheet (the sheet doesn't move, and the rest of it works as usual); clicking "Settings" again hides it. These are

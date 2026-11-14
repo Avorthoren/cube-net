@@ -12,25 +12,21 @@ it), in full however long. A numerator is an integer, a denominator a positive o
 be typed (a longer number there can still be shortened, and given a minus sign). A point snapped to a line has its
 coordinates tied by the line's equation (`Constraint`): as one is typed, the other follows at once (while the typed one
 is a number). On a slanted line either can be typed; on a vertical or a horizontal one, the fixed coordinate's fields
-are disabled. The y numerator has the focus at first (x's, if y is fixed), with its text selected.
+are disabled. A point fixed by a locked slope (where its line meets what the point snaps to) has all fields disabled,
+and Place has the focus. The y numerator has the focus at first (x's, if y is fixed), with its text selected.
 
 Place (the default button: Enter) places the point; if it can't go there, the window stays and says why. Cancel, Escape
 and the close button change nothing.
 """
 
-import re
 from collections.abc import Callable
 from fractions import Fraction
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QValidator
 from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QGridLayout,
     QLabel,
-    QLineEdit,
     QPushButton,
-    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -40,15 +36,8 @@ from cube_net.core.geometry import Vec
 from cube_net.ui import palette
 from cube_net.ui.dialogs.small_window import SmallWindow
 from cube_net.ui.i18n import tr
-from cube_net.ui.sheet.coordinates_text import MAX_DIGITS, decimal_text, is_exact
-
-# How many digits a field shows at once: a 10-digit number fits, a longer one visibly doesn't (a numerator has room
-# for its minus sign too).
-DENOMINATOR_DIGITS_SHOWN = 10.5
-NUMERATOR_DIGITS_SHOWN = 11.5
-
-# Qt's line edit keeps this much space between its frame and its text, on each side (px).
-FIELD_TEXT_MARGIN_PX = 2
+from cube_net.ui.sheet.coordinates_text import decimal_text, is_exact
+from cube_net.ui.sheet.number_field import Numbers, number_field, set_number
 
 
 def problem_text(problem: Problem) -> str:
@@ -68,45 +57,12 @@ def problem_text(problem: Problem) -> str:
             return tr("From there, the line would leave the net, or touch or cross itself.")
 
 
-class DigitsValidator(QValidator):
-    """An integer of at most `MAX_DIGITS` digits as typed: one already longer (put there as the point's coordinate)
-    can only get shorter, but it can always get a minus sign (`signed`). Not signed: positive, never 0."""
-
-    def __init__(self, field: QLineEdit, signed: bool) -> None:
-        super().__init__(field)
-        self._signed = signed
-        # The field's text before the edit being checked (while it's checked, the field already has the new one).
-        self._before = field.text()
-        field.textChanged.connect(self._remember)
-
-    def _remember(self, text: str) -> None:
-        self._before = text
-
-    def allow(self, text: str) -> None:
-        """`text` is about to be put in the field by the program (a coordinate, however long): it's fine as it is.
-        (Qt checks it at once, and stops undoing invalid edits after a text it found invalid.)"""
-        self._before = text
-
-    def validate(self, a0: str | None, a1: int) -> tuple[QValidator.State, str, int]:
-        text = a0 or ""
-        match = re.fullmatch(r"(-?)(\d*)" if self._signed else r"()(\d*)", text)
-        if match is None:
-            return QValidator.State.Invalid, text, a1
-        digits = len(match.group(2))
-        before = sum(c.isdigit() for c in self._before)
-        if digits > MAX_DIGITS and digits > before:
-            return QValidator.State.Invalid, text, a1
-        if digits == 0 or (not self._signed and int(match.group(2)) == 0):
-            return QValidator.State.Intermediate, text, a1
-        return QValidator.State.Acceptable, text, a1
-
-
 class CoordinateRow:
     """One coordinate's fields and what it's worth, in a row of the window's grid."""
 
     def __init__(self, name: str, value: Fraction, grid: QGridLayout, row: int, parent: QWidget) -> None:
-        self.numerator = _field(parent, signed=True)
-        self.denominator = _field(parent, signed=False)
+        self.numerator = number_field(parent, Numbers.INTEGERS)
+        self.denominator = number_field(parent, Numbers.POSITIVE)
         self.worth = QLabel(parent)
         grid.addWidget(QLabel(f"{name}:", parent), row, 0)
         grid.addWidget(self.numerator, row, 1)
@@ -126,11 +82,8 @@ class CoordinateRow:
         return Fraction(numerator, denominator) if denominator > 0 else None
 
     def set_value(self, value: Fraction) -> None:
-        for field, number in ((self.numerator, value.numerator), (self.denominator, value.denominator)):
-            validator = field.validator()
-            assert isinstance(validator, DigitsValidator)
-            validator.allow(str(number))
-            field.setText(str(number))
+        set_number(self.numerator, value.numerator)
+        set_number(self.denominator, value.denominator)
 
     def set_typed(self, typed: bool) -> None:
         for field in (self.numerator, self.denominator):
@@ -139,23 +92,6 @@ class CoordinateRow:
     def show_worth(self) -> None:
         value = self.value()
         self.worth.setText("" if value is None else f"{'=' if is_exact(value) else '≈'} {decimal_text(value)}")
-
-
-def _field(parent: QWidget, signed: bool) -> QLineEdit:
-    field = QLineEdit(parent)
-    field.setValidator(DigitsValidator(field, signed))
-    field.setAlignment(Qt.AlignmentFlag.AlignRight)
-    digits = NUMERATOR_DIGITS_SHOWN if signed else DENOMINATOR_DIGITS_SHOWN
-    field.setFixedWidth(round(field.fontMetrics().horizontalAdvance("0") * digits) + _field_frame(field))
-    return field
-
-
-def _field_frame(field: QLineEdit) -> int:
-    """How much wider a field is than its text: its frame and margins, on both sides."""
-    style = field.style()
-    frame = style.pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth) if style is not None else 2
-    margins = field.textMargins()
-    return 2 * (frame + FIELD_TEXT_MARGIN_PX) + margins.left() + margins.right()
 
 
 class PlaceVertexWindow(SmallWindow):
@@ -171,8 +107,8 @@ class PlaceVertexWindow(SmallWindow):
         self.y = CoordinateRow("y", placement.position.y, grid, 0, self)
         self.x = CoordinateRow("x", placement.position.x, grid, 1, self)
         axis = placement.constraint.axis
-        self.x.set_typed(axis is not Axis.Y)
-        self.y.set_typed(axis is not Axis.X)
+        self.x.set_typed(axis in (Axis.BOTH, Axis.X))
+        self.y.set_typed(axis in (Axis.BOTH, Axis.Y))
         # The coordinate typed last: on a line, the other one follows it.
         self._source = Axis.X if axis is Axis.X else Axis.Y
         for row, source in ((self.x, Axis.X), (self.y, Axis.Y)):
@@ -197,9 +133,12 @@ class PlaceVertexWindow(SmallWindow):
         layout.addWidget(buttons)
         self.body.addLayout(layout)
         self.place_button.setDefault(True)
-        first = self.x.numerator if axis is Axis.X else self.y.numerator
-        first.setFocus()
-        first.selectAll()
+        if axis is Axis.NONE:  # fixed (a locked slope's line where it meets what the point snaps to)
+            self.place_button.setFocus()
+        else:
+            first = self.x.numerator if axis is Axis.X else self.y.numerator
+            first.setFocus()
+            first.selectAll()
 
     def point(self) -> Vec | None:
         """The typed point (on a line: from the coordinate typed last), or None if a field it needs isn't a number."""

@@ -9,13 +9,14 @@ The point would have been put somewhere by a click or a drag; that place decides
   stay on that edge or fold, between its ends. On a slanted line either coordinate is typed, and the other follows
   from it; on a vertical line only y (x is the line's), on a horizontal one only x;
 - on SHIFT's horizontal or vertical line through the previous point (unless it would have snapped to an edge, which
-  wins): the coordinate along the line is typed, the other is the previous point's.
+  wins), or on a locked slope's line from it: typed as on a perimeter edge's line, but the line has no ends;
+- with a locked slope, where it would snap to something (an edge, a fold): fixed there, nothing is typed.
 
 `Constraint` says which, and `problem` tells why a typed point can't go there, before the editor's own rules (which
 may still reject the segments: see `Problem.BREAKS_LINE`).
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from fractions import Fraction
 
@@ -34,7 +35,7 @@ class LineKind(Enum):
     # On a fold line.
     FOLD = "fold"
 
-    # On SHIFT's horizontal or vertical line through the previous point.
+    # On SHIFT's horizontal or vertical line through the previous point, or a locked slope's line from it.
     STRAIGHT = "straight"
 
 
@@ -47,6 +48,9 @@ class Axis(Enum):
 
     # Only x (a horizontal line: y is the line's).
     X = "x"
+
+    # None: the point is fixed (a locked slope's line where it meets what the point snaps to).
+    NONE = "none"
 
 
 class Problem(Enum):
@@ -80,6 +84,9 @@ class Constraint:
     # EDGE: the cut; FOLD: the fold.
     edge: HalfEdge | None = None
 
+    # Where the point is fixed, if it is: nothing is typed (`Axis.NONE`), it goes there.
+    fixed: Vec | None = None
+
     @staticmethod
     def free() -> Constraint:
         return Constraint(LineKind.FREE)
@@ -94,12 +101,23 @@ class Constraint:
 
     @staticmethod
     def straight(anchor: Vec, horizontal: bool) -> Constraint:
-        return Constraint(LineKind.STRAIGHT, anchor, anchor + (Vec(1, 0) if horizontal else Vec(0, 1)))
+        return Constraint.along(anchor, Vec(1, 0) if horizontal else Vec(0, 1))
+
+    @staticmethod
+    def along(anchor: Vec, direction: Vec) -> Constraint:
+        """The line from `anchor` going `direction` (not zero): SHIFT's, or a locked slope's."""
+        return Constraint(LineKind.STRAIGHT, anchor, anchor + direction)
+
+    def fixed_at(self, point: Vec) -> Constraint:
+        """The same, with the point fixed at `point` (on that edge or fold)."""
+        return replace(self, fixed=point)
 
     @property
     def axis(self) -> Axis:
         """The coordinates that can be typed: both (free, or a slanted line); only y on a vertical line, only x on a
-        horizontal one."""
+        horizontal one; none if the point is fixed."""
+        if self.fixed is not None:
+            return Axis.NONE
         if self.kind is LineKind.FREE:
             return Axis.BOTH
         assert self.a is not None and self.b is not None
@@ -114,7 +132,9 @@ class Constraint:
 
     def point_from(self, source: Axis, x: Fraction, y: Fraction) -> Vec:
         """The point: (x, y) if it's free; on a line, the one whose `source` coordinate (X or Y) is the typed one of
-        (x, y), the other from the line's equation."""
+        (x, y), the other from the line's equation; where it's fixed, if it is."""
+        if self.fixed is not None:
+            return self.fixed
         if self.kind is LineKind.FREE:
             return Vec(x, y)
         a, b = self.a, self.b
@@ -127,7 +147,10 @@ class Constraint:
 
     def nearest(self, p: Vec) -> Vec:
         """The point of the line closest to `p`: of an edge or a fold, between its ends (never beyond them, even where
-        the next edge goes on in line with it: that's another edge); of SHIFT's line, anywhere; free: `p` itself."""
+        the next edge goes on in line with it: that's another edge); of SHIFT's line, anywhere; free: `p` itself;
+        fixed: where it's fixed."""
+        if self.fixed is not None:
+            return self.fixed
         if self.kind is LineKind.FREE:
             return p
         a, b = self.a, self.b
