@@ -163,3 +163,12 @@ def test_update_settings(tmp_path: Path) -> None:
     assert again.check_updates is False
     assert again.last_update_check == datetime.date(2026, 11, 12)
     assert again.skipped_update == "1.2.0"
+
+
+def test_show_vertex_coordinates_default_and_persisted(tmp_path: Path) -> None:
+    from cube_net.ui.app_settings import DEFAULT_SHOW_VERTEX_COORDINATES
+
+    s = settings_at(tmp_path / "s.ini")
+    assert s.show_vertex_coordinates is DEFAULT_SHOW_VERTEX_COORDINATES is True
+    s.show_vertex_coordinates = False
+    assert settings_at(tmp_path / "s.ini").show_vertex_coordinates is False

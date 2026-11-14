@@ -49,8 +49,10 @@ class PreferencesTab(QWidget):
         language: Language = Language.ENGLISH,
         menu_entry: QAction | None = None,
         parent: QWidget | None = None,
+        coordinates: QAction | None = None,
     ) -> None:
-        """`menu_entry`: the switch of the applications menu's entry, where there's one (Linux, an AppImage)."""
+        """`menu_entry`: the switch of the applications menu's entry, where there's one (Linux, an AppImage).
+        `coordinates`: the switch of the coordinates hint (none: no such box)."""
         super().__init__(parent)
         self.language_label = QLabel(self)
         bind(self.language_label, self.language_label.setText, "Language")
@@ -68,6 +70,12 @@ class PreferencesTab(QWidget):
         bind(self.show_labels, self.show_labels.setText, "Show vertex labels")
         bind(self.show_labels, self.show_labels.setToolTip, "Hotkey: L")  # its key (see `MainWindow`)
         _mirror(self.show_labels, labels)
+        self.show_coordinates: QCheckBox | None = None
+        if coordinates is not None:
+            self.show_coordinates = QCheckBox(self)
+            bind(self.show_coordinates, self.show_coordinates.setText, "Show vertex coordinates")
+            bind(self.show_coordinates, self.show_coordinates.setToolTip, "Hotkey: C")  # its key (see `MainWindow`)
+            _mirror(self.show_coordinates, coordinates)
         self.auto_log = QCheckBox(self)
         bind(self.auto_log, self.auto_log.setText, "Auto-start logging")
         _mirror(self.auto_log, logs)
@@ -104,6 +112,8 @@ class PreferencesTab(QWidget):
         language_row.addStretch()
         layout.addRow(language_row)
         layout.addRow(self.show_labels)
+        if self.show_coordinates is not None:
+            layout.addRow(self.show_coordinates)
         layout.addRow(self.auto_log)
         layout.addRow(self.blink)
         layout.addRow(self.check_updates)

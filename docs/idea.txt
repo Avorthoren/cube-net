@@ -500,6 +500,25 @@ disappear as soon as it leaves (no delay either way).
    - Show vertex labels (its hint: "Hotkey: L"). The L key switches it too, anywhere in the main window, with the settings
      panel open or not: when the key is released (once, however long it's held), not while a text or number field has
      the focus, and not with SHIFT, CTRL or ALT;
+   - Show vertex coordinates (on by default; its hint: "Hotkey: C"; the C key switches it as L does the labels). The
+     coordinates hint: a point's exact coordinates, where they aren't just the mouse's (the footer's), since points,
+     the perimeter and the fold lines have hitboxes. It's shown at once, above and to the right of the mouse (to its
+     left, or below it, where it wouldn't fit in the view), in a translucent box, in a monospace font, for:
+     - a point under the mouse (in its circle): the net's vertices (the rearranged net's too, while approving), the
+       cut line's points, its small dots (the crossings with fold lines, the endpoints' counterpart images);
+     - where a click would make a point that snaps to something: the line's first point on the perimeter, the next
+       one on the perimeter or on a fold line (with SHIFT too: the point the straight segment would end on);
+     - a point being dragged, while it's snapped to the perimeter or a fold line.
+     Not over the approve button (its own tooltip wins), nor while the sheet is being dragged; never in Help's
+     animations. Two lines, y first, each the exact reduced fraction, then "=" if the decimal with 3 digits is exact
+     or "≈", then that decimal (rounded as the mouse's position is, so a point made where the mouse was shows the
+     footer's digits; a tiny negative is "-0.000"). An integer is just that number, without "/" and without the rest:
+         y: -892392/7255 ≈ -123.004        y:  17
+         x:    5405/539  ≈   10.028        x: 101/8 = 12.625
+     The slashes are one under the other, and so are the signs and the decimal points; one space between "y:" and the
+     longest numerator, and between the sign and the longest decimal. A numerator or a denominator of more than 10
+     digits shows as "too_long". CTRL+C copies the two lines while the hint is shown, with every number in full (a
+     text field with the focus copies its own text instead);
    - Auto-start logging (off by default): when it's on, logging (the session log) starts by itself when the
      application starts.
      Switching it doesn't start or stop logging now: the button above "Logs" on the instruments panel does that (a

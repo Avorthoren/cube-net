@@ -55,6 +55,7 @@ class SettingsPanel(QFrame):
         language: Language = Language.ENGLISH,
         menu_entry: QAction | None = None,
         check_updates: bool = True,
+        coordinates: QAction | None = None,
     ) -> None:
         super().__init__(parent)
         self.setFrameShape(QFrame.Shape.StyledPanel)
@@ -67,6 +68,7 @@ class SettingsPanel(QFrame):
             check_updates=check_updates,
             language=language,
             menu_entry=menu_entry,
+            coordinates=coordinates,
         )
         self.style_tab = StyleTab(style)
         self.tabs = QTabWidget(self)

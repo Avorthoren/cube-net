@@ -9,7 +9,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from PyQt6.QtCore import QEvent, QObject, Qt, QTimer, QUrl
-from PyQt6.QtGui import QAction, QCloseEvent, QDesktopServices
+from PyQt6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
@@ -68,6 +68,7 @@ from cube_net.ui.session.start import (
 )
 from cube_net.ui.settings_panel.panel import SettingsPanel
 from cube_net.ui.sheet.bounding_item import BoundingItem
+from cube_net.ui.sheet.coordinates_text import copied_text
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.sheet.workspace import Workspace
 from cube_net.ui.style import Style, apply_style
@@ -266,6 +267,7 @@ class MainWindow(QMainWindow):
             self._record_snapshot(recorder)
         self._record_net_state(recorder)
         recorder.note("state", "labels", "on" if self.settings.show_vertex_labels else "off")
+        recorder.note("state", "coordinates", "on" if self.settings.show_vertex_coordinates else "off")
         recorder.note("state", "language", self.settings.language.value)
         recorder.note("state", "blink", "on" if self.settings.blink_on_success else "off")
         recorder.note("state", "max_zoom", self.settings.max_zoom)
@@ -873,6 +875,19 @@ class MainWindow(QMainWindow):
         # L switches them, when it's released (with the settings panel open or not).
         self.labels_key = KeyReleaseShortcut(Qt.Key.Key_L, self)
         self.labels_key.activated.connect(self.show_labels_action.toggle)
+        # The coordinates hint: its switch, C (when it's released, as L), and Ctrl+C, which copies what it shows.
+        self.show_coordinates_action = QAction(self)
+        bind(self.show_coordinates_action, self.show_coordinates_action.setText, "Show vertex coordinates")
+        self.show_coordinates_action.setCheckable(True)
+        self.show_coordinates_action.setChecked(self.settings.show_vertex_coordinates)
+        self.show_coordinates_action.toggled.connect(self._on_show_coordinates_toggled)
+        self.coordinates_key = KeyReleaseShortcut(Qt.Key.Key_C, self)
+        self.coordinates_key.activated.connect(self.show_coordinates_action.toggle)
+        self.copy_coordinates_action = QAction(self)
+        self.copy_coordinates_action.setShortcut(QKeySequence.StandardKey.Copy)  # a text field with the focus wins
+        self.copy_coordinates_action.triggered.connect(self.copy_coordinates)
+        self.addAction(self.copy_coordinates_action)
+        self.sheet_cursor.set_coordinates_shown(self.settings.show_vertex_coordinates)
         self.auto_log_action = QAction(self)
         bind(self.auto_log_action, self.auto_log_action.setText, "Auto-start logging")
         self.auto_log_action.setCheckable(True)
@@ -919,6 +934,7 @@ class MainWindow(QMainWindow):
             self.settings.language,
             self.menu_entry_action,
             self.settings.check_updates,
+            coordinates=self.show_coordinates_action,
         )
         self.settings_panel.preferences.check_updates_changed.connect(self._on_check_updates_changed)
         self.settings_panel.preferences.language_changed.connect(self._on_language_changed)
@@ -969,6 +985,21 @@ class MainWindow(QMainWindow):
             kept = rearranged.kept
             ends = format_point(kept.origin.position), format_point(kept.destination.position)
             self.recorder.note("cut", "glue", *ends, "ok" if rearranged.valid else "overlap")
+
+    def _on_show_coordinates_toggled(self, checked: bool) -> None:
+        self.settings.show_vertex_coordinates = checked
+        self.sheet_cursor.set_coordinates_shown(checked)
+        if self.recorder is not None:
+            self.recorder.note("coordinates", "on" if checked else "off")
+
+    def copy_coordinates(self) -> None:
+        """Ctrl+C: the coordinates hint's two lines, with every number in full (nothing if it isn't shown)."""
+        point = self.sheet_cursor.coordinates()
+        clipboard = QApplication.clipboard()
+        if point is not None and clipboard is not None:
+            clipboard.setText(copied_text(point))
+            if self.recorder is not None:
+                self.recorder.note("coordinates", "copied", format_point(point))
 
     def _on_show_labels_toggled(self, checked: bool) -> None:
         self.settings.show_vertex_labels = checked

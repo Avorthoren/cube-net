@@ -251,6 +251,36 @@ class CutTool(QObject):
             return ""
         return tr("Approve") if self.approve_button.enabled() else tr("Cancel")
 
+    def coordinates_at(self, x: float, y: float) -> Vec | None:
+        """The point whose exact coordinates the hint shows for the mouse at sheet point (x, y), if any (docs/idea.txt).
+        Where they're not just the mouse's (the footer's), as the points have hitboxes, and so do the perimeter and the
+        fold lines:
+        - over the approve button: none (its own tooltip says what it does);
+        - while a point is dragged: where it is, while it's snapped (to the perimeter, a vertex, a fold line);
+        - over a point (in its circle): that point. Any drawn point: the net's vertices, the cut line's points, its
+          small dots (crossings with fold lines, the endpoints' counterpart images);
+        - else, while a click would make a point (the line's first, or the next one): that point, if it would be
+          snapped to the perimeter or (while cutting) to a fold line."""
+        if self._on_approve_button(x, y):
+            return None
+        if self._drag_index is not None and self._drag_target is not None:
+            target = self._drag_target
+            snapped = target.on_perimeter or (target.fold is not None and not self._drag_over_perimeter)
+            return target.position if snapped else None
+        positions = [point.position for point in self.item.points()] + self.item.crossings() + self.item.images()
+        positions += [vertex.position for vertex in self._editor.display_net.vertices]
+        i = self._closest(x, y, positions, net_style.VERTEX_RADIUS_PX)
+        if i is not None:
+            return positions[i]
+        state = self._editor.state
+        if self._ruler.active or state not in (EditorState.DEFAULT, EditorState.CUTTING):
+            return None
+        p, cut, vertex, fold = self._hit(x, y)
+        target = self._editor.candidate(p, cut, vertex, fold, self._view.shift_held())
+        if target.on_perimeter or (state is EditorState.CUTTING and target.fold is not None):
+            return target.position
+        return None
+
     def _on_approve_button(self, x: float, y: float) -> bool:
         position = self.approve_button.position()
         if position is None:

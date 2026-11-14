@@ -989,3 +989,79 @@ class TestCtrlClickDeletes:
         assert tool.item.flash() == ((before[0], before[2]),)  # the shortcut in black
         qtbot.waitUntil(lambda: tool.item.flash() is None, timeout=FLASH_MS + 500)
         assert positions(tool) == before
+
+
+class TestCoordinates:
+    """Which point the coordinates hint describes (`CutTool.coordinates_at`): where it isn't just the mouse's."""
+
+    def test_a_vertex_under_the_mouse(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()  # inside its circle, off its centre
+        assert tool.coordinates_at(10 + near, 13 - near) == Vec(10, 13)
+
+    def test_where_a_click_on_the_perimeter_would_start_the_line(
+        self, setup: tuple[SheetView, CutTool, RulerTool]
+    ) -> None:
+        view, tool, _ = setup
+        assert tool.coordinates_at(*just_inside_top_of_face_1(view)) == X  # on the cut, not where the mouse is
+
+    def test_nothing_where_the_mouse_is_the_point(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        assert tool.coordinates_at(11.5, 13.5) is None  # inside a face: the footer tells
+        assert tool.coordinates_at(11.5, 13 + half_fold_hitbox(view)) is None  # a fold can't start a line
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        assert tool.coordinates_at(11.6, 13.6) is None  # the next point would be just where the mouse is
+
+    def test_where_a_click_on_a_fold_would_put_the_next_point(
+        self, setup: tuple[SheetView, CutTool, RulerTool]
+    ) -> None:
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        assert tool.coordinates_at(11.6, 13 + half_fold_hitbox(view)) == Vec(F(58, 5), 13)
+
+    def test_the_lines_points_its_crossings_and_images(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        view.left_pressed.emit(11.8, 12.4)  # across the fold C_1-D_1 (y = 13)
+        crossing = tool.item.crossings()[0]
+        assert crossing == Vec(F(187, 16), 13)  # 11.6875
+        image = tool.item.images()[0]
+        for point in (X, Vec(F(59, 5), F(62, 5)), crossing, image):
+            assert tool.coordinates_at(float(point.x), float(point.y)) == point
+
+    def test_while_dragging_only_where_the_point_is_snapped(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(11.5, 13.5)
+        view.mouse_moved.emit(11.6, 13.6)
+        assert tool.coordinates_at(11.6, 13.6) is None  # free: it's where the mouse is
+        near = half_fold_hitbox(view)
+        view.mouse_moved.emit(11.6, 13 + near)
+        assert tool.coordinates_at(11.6, 13 + near) == Vec(F(58, 5), 13)  # on the fold
+        view.left_released.emit(11.6, 13 + near)
+
+    def test_the_ruler_leaves_only_the_existing_points(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, ruler = setup
+        ruler.set_active(True)
+        assert tool.coordinates_at(10, 13) == Vec(10, 13)
+        assert tool.coordinates_at(*just_inside_top_of_face_1(view)) is None  # a click would measure, not cut
+
+    def test_the_rearranged_nets_vertices(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        rearranged_corner_cut(view)
+        assert tool.editor.state is EditorState.CUT_APPROVING
+        for vertex in tool.editor.display_net.vertices:
+            if not tool._on_approve_button(float(vertex.position.x), float(vertex.position.y)):
+                assert tool.coordinates_at(float(vertex.position.x), float(vertex.position.y)) == vertex.position
+
+    def test_the_approve_button_wins(
+        self, setup: tuple[SheetView, CutTool, RulerTool], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        view, tool, _ = setup
+        rearranged_corner_cut(view)
+        rearranged = tool.editor.rearranged
+        assert rearranged is not None
+        end = rearranged.kept.destination.position
+        assert tool.coordinates_at(float(end.x), float(end.y)) == end
+        monkeypatch.setattr(net_style, "APPROVE_BUTTON_RADIUS_PX", 10_000.0)  # zoomed out: it covers the vertex
+        assert tool.coordinates_at(float(end.x), float(end.y)) is None

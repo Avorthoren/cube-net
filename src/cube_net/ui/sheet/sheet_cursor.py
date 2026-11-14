@@ -6,6 +6,10 @@
 They're worked out again when the mouse moves, and when what's under it changes without a move (a click changed the
 state, the ruler was switched, SHIFT). While the sheet is being dragged, the view shows its own closed hand.
 
+Also the coordinates hint (`CoordinatesHint`): the exact coordinates of the point under the mouse, or of the point a
+click or a drag would make where that isn't just the mouse's position (`CutTool.coordinates_at`), at once, while it's
+switched on (Settings -> Preferences, the C key). Only the main window has a `SheetCursor`: the animations of Help ->
+Help show neither.
 The tooltip is shown here, not with `setToolTip`: a graphics view asks its scene for tooltips, which only knows those of
 items. It appears after `TOOLTIP_DELAY_MS` over the same thing, and goes as soon as the mouse leaves it (`QToolTip`
 would linger: see `TooltipLabel`).
@@ -13,6 +17,9 @@ would linger: see `TooltipLabel`).
 
 from PyQt6.QtCore import QObject, QPointF, QTimer
 
+from cube_net.core.geometry import Vec
+from cube_net.ui.sheet.coordinates_hint import CoordinatesHint
+from cube_net.ui.sheet.coordinates_text import coordinate_lines
 from cube_net.ui.sheet.cursors import CursorKind, cursor_for
 from cube_net.ui.sheet.cut_tool import CutTool
 from cube_net.ui.sheet.ruler_tool import RulerTool
@@ -32,6 +39,11 @@ class SheetCursor(QObject):
         self._kind = CursorKind.ARROW
         self._tooltip = ""
         self.tooltip_label = TooltipLabel(view)
+        viewport = view.viewport()
+        assert viewport is not None
+        self.coordinates_hint = CoordinatesHint(viewport)
+        self._coordinates_shown = True
+        self._coordinates: Vec | None = None
         self._tooltip_timer = QTimer(self)
         self._tooltip_timer.setSingleShot(True)
         self._tooltip_timer.setInterval(TOOLTIP_DELAY_MS)
@@ -44,18 +56,40 @@ class SheetCursor(QObject):
         cut_tool.line_changed.connect(self.update)
         cut_tool.net_changed.connect(self.update)
         ruler.points_changed.connect(self.update)
+        view.zoom_changed.connect(lambda *_: self.update())
 
     def kind(self) -> CursorKind:
         return self._kind
 
     def update(self) -> None:
         if self._mouse is None or self._view.is_panning():
+            self._show_coordinates(None)
             return
         viewport = self._view.viewport()
         assert viewport is not None
         self._kind = self._cut_tool.cursor_at(*self._mouse)
         viewport.setCursor(cursor_for(self._kind))
         self._set_tooltip(self._cut_tool.tooltip_at(*self._mouse))
+        self._show_coordinates(self._cut_tool.coordinates_at(*self._mouse) if self._coordinates_shown else None)
+
+    def set_coordinates_shown(self, shown: bool) -> None:
+        """Whether the coordinates hint is shown (Settings -> Preferences)."""
+        self._coordinates_shown = shown
+        self.update()
+        if not shown:
+            self._show_coordinates(None)
+
+    def coordinates(self) -> Vec | None:
+        """The point whose coordinates the hint shows now (None: it's hidden)."""
+        return self._coordinates
+
+    def _show_coordinates(self, point: Vec | None) -> None:
+        self._coordinates = point
+        if point is None or self._mouse is None:
+            self.coordinates_hint.hide()
+            return
+        where = self._view.from_sheet(QPointF(*self._mouse)).toPoint()
+        self.coordinates_hint.show_at(coordinate_lines(point), where)
 
     def tooltip(self) -> str:
         """The tooltip of what's under the mouse ("": none), shown or about to be."""
@@ -87,3 +121,4 @@ class SheetCursor(QObject):
         self._mouse = None
         self._kind = CursorKind.ARROW
         self._set_tooltip("")
+        self._show_coordinates(None)

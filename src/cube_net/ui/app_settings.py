@@ -17,6 +17,9 @@ from cube_net.ui.style import DEFAULT_STYLE, Style, StyleError
 # ON while the app is being developed; False for releases.
 DEFAULT_SHOW_VERTEX_LABELS = True
 
+# The exact coordinates of the point under the mouse, next to it (the coordinates hint).
+DEFAULT_SHOW_VERTEX_COORDINATES = True
+
 # Session recording: a compact log of user input (one file per launch), so that problems can be reproduced exactly.
 # Off unless the user switches it on (Settings -> Preferences), or starts it with the button above Logs.
 DEFAULT_RECORD_SESSION = False
@@ -28,6 +31,7 @@ DEFAULT_BLINK_ON_SUCCESS = True
 DEFAULT_CHECK_UPDATES = True
 
 _SHOW_VERTEX_LABELS = "debug/show_vertex_labels"
+_SHOW_VERTEX_COORDINATES = "view/show_vertex_coordinates"
 _RECORD_SESSION = "debug/record_session"
 _BLINK_ON_SUCCESS = "view/blink_on_success"
 _LAST_PROJECT = "project/last"
@@ -53,6 +57,14 @@ class AppSettings:
     @show_vertex_labels.setter
     def show_vertex_labels(self, value: bool) -> None:
         self._settings.setValue(_SHOW_VERTEX_LABELS, value)
+
+    @property
+    def show_vertex_coordinates(self) -> bool:
+        return self._bool(_SHOW_VERTEX_COORDINATES, DEFAULT_SHOW_VERTEX_COORDINATES)
+
+    @show_vertex_coordinates.setter
+    def show_vertex_coordinates(self, value: bool) -> None:
+        self._settings.setValue(_SHOW_VERTEX_COORDINATES, value)
 
     @property
     def menu_entry(self) -> bool | None:

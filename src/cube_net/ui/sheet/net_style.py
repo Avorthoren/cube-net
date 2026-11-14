@@ -82,6 +82,12 @@ APPROVE_BUTTON_SHADOW_PX = 2.0
 # Width of the check mark or the "x" on that button, and of its outline.
 APPROVE_CHECK_WIDTH_PX = 3.0
 
+# The coordinates hint (a point's exact coordinates): the size of its monospace text, the space around the text inside
+# its box, and how far its corner is from the mouse (above and to the right of it, unless it wouldn't fit there).
+COORDINATES_FONT_PX = 12
+COORDINATES_PADDING_PX = 4
+COORDINATES_OFFSET_PX = 14
+
 
 def set_sizes(
     edge_width: float,

@@ -114,6 +114,63 @@ def test_l_switches_the_vertex_labels_when_released(qtbot: QtBot, tmp_path: Path
         assert window.show_labels_action.isChecked() and box.isChecked()
 
 
+def test_c_switches_the_coordinates_hint_when_released(qtbot: QtBot, tmp_path: Path) -> None:
+    from PyQt6.QtTest import QTest
+
+    settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    window = MainWindow(settings=settings)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    handle = window.windowHandle()
+    assert handle is not None
+    box = window.settings_panel.preferences.show_coordinates
+    assert box is not None and box.toolTip() == "Hotkey: C" and box.text() == "Show vertex coordinates"
+    assert window.show_coordinates_action.isChecked()  # on by default
+    QTest.keyPress(handle, Qt.Key.Key_C)
+    assert window.show_coordinates_action.isChecked()  # not yet
+    QTest.keyRelease(handle, Qt.Key.Key_C)
+    assert not window.show_coordinates_action.isChecked() and not box.isChecked()
+    assert settings.show_vertex_coordinates is False
+    window.sheet_view.mouse_moved.emit(10.0, 13.0)  # a vertex
+    assert not window.sheet_cursor.coordinates_hint.isVisible()
+    QTest.keyClick(handle, Qt.Key.Key_C)
+    assert window.show_coordinates_action.isChecked() and window.sheet_cursor.coordinates_hint.isVisible()
+
+
+def test_the_coordinates_hint_off_at_start_when_switched_off(qtbot: QtBot, tmp_path: Path) -> None:
+    settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    settings.show_vertex_coordinates = False
+    window = MainWindow(settings=settings)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    window.sheet_view.mouse_moved.emit(10.0, 13.0)
+    assert not window.show_coordinates_action.isChecked()
+    assert not window.sheet_cursor.coordinates_hint.isVisible()
+
+
+def test_ctrl_c_copies_what_the_hint_shows(qtbot: QtBot, tmp_path: Path) -> None:
+    from PyQt6.QtGui import QKeySequence
+    from PyQt6.QtWidgets import QApplication
+
+    settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
+    window = MainWindow(settings=settings)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    assert window.copy_coordinates_action.shortcut() == QKeySequence(QKeySequence.StandardKey.Copy)
+    clipboard = QApplication.clipboard()
+    assert clipboard is not None
+    clipboard.setText("what the user copied")
+    window.sheet_view.mouse_moved.emit(11.5, 12.5)  # no hint: the clipboard stays as it is
+    window.copy_coordinates_action.trigger()
+    assert clipboard.text() == "what the user copied"
+    window.sheet_view.mouse_moved.emit(10.0, 13.0)
+    window.copy_coordinates_action.trigger()
+    assert clipboard.text() == "y: 13\nx: 10"
+
+
 def test_labels_off_at_start_when_disabled_in_settings(qtbot: QtBot, tmp_path: Path) -> None:
     settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
     settings.show_vertex_labels = False
@@ -142,9 +199,10 @@ def test_recording_started_at_launch(qtbot: QtBot, tmp_path: Path) -> None:
     assert window.recorder is not None
     lines = session_lines(window.recorder.log.path)
     assert "# recording started: at app launch" in lines
-    assert lines[-11:] == [
+    assert lines[-12:] == [
         "state net default",
         "state labels on",
+        "state coordinates on",
         "state language en",
         "state blink on",
         "state max_zoom 1000",

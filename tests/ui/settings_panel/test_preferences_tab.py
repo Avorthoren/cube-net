@@ -60,3 +60,29 @@ def test_blink_like_the_other_switches(qtbot: QtBot) -> None:
     with qtbot.waitSignal(tab.blink_changed) as blocker:
         tab.blink.setChecked(False)
     assert blocker.args == [False]
+
+
+def test_the_coordinates_box_right_below_the_labels_one(qtbot: QtBot) -> None:
+    from PyQt6.QtWidgets import QFormLayout
+
+    labels, logs, coordinates = QAction("labels"), QAction("logs"), QAction("coordinates")
+    for action in (labels, logs, coordinates):
+        action.setCheckable(True)
+    coordinates.setChecked(True)
+    tab = PreferencesTab(labels, logs, True, 1234, coordinates=coordinates)
+    qtbot.addWidget(tab)
+    box = tab.show_coordinates
+    assert box is not None
+    assert (box.text(), box.toolTip(), box.isChecked()) == ("Show vertex coordinates", "Hotkey: C", True)
+    box.setChecked(False)
+    assert not coordinates.isChecked()  # one switch
+    layout = tab.layout()
+    assert isinstance(layout, QFormLayout)
+    rows = [layout.itemAt(i, QFormLayout.ItemRole.SpanningRole) for i in range(layout.rowCount())]
+    widgets = [row.widget() if row is not None else None for row in rows]
+    assert widgets.index(box) == widgets.index(tab.show_labels) + 1
+
+
+def test_no_coordinates_box_without_its_switch(qtbot: QtBot) -> None:
+    tab, _, _ = make(qtbot)
+    assert tab.show_coordinates is None

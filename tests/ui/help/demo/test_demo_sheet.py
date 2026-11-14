@@ -72,3 +72,12 @@ def test_the_bounding_rectangle_if_wanted(qtbot: QtBot) -> None:
     assert sheet.bounding_item is not None
     assert set(sheet.bounding_item.corners()) == {Vec(10, 10), Vec(13, 10), Vec(13, 14), Vec(10, 14)}
     assert not sheet.bounding_item.success()  # 12 isn't below a new project's target
+
+
+def test_no_coordinates_hint_in_the_animations(qtbot: QtBot) -> None:
+    """They show the very essence of the application, as little as possible besides."""
+    from cube_net.ui.sheet.coordinates_hint import CoordinatesHint
+
+    sheet = DemoSheet(QSize(560, 400))
+    assert sheet.workspace.sheet_cursor is None
+    assert sheet.findChildren(CoordinatesHint) == []

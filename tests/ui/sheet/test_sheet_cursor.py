@@ -171,3 +171,41 @@ def test_ctrl_turns_it_into_a_red_x_without_a_move(qtbot: QtBot, tmp_path: Path)
     assert window.sheet_cursor.kind() is CursorKind.DELETE
     qtbot.keyRelease(view, Qt.Key.Key_Control)
     assert window.sheet_cursor.kind() is CursorKind.PENCIL
+
+
+class TestCoordinatesHint:
+    """The exact coordinates next to the mouse: at once, while the setting is on (the main window's only)."""
+
+    def test_over_a_vertex_and_gone_off_it(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = make(qtbot, tmp_path)
+        cursor = window.sheet_cursor
+        view = window.sheet_view
+        near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
+        view.mouse_moved.emit(10 + near, 13)
+        assert cursor.coordinates_hint.lines() == ["y: 13", "x: 10"]
+        assert cursor.coordinates() is not None
+        view.mouse_moved.emit(11.5, 12.5)
+        assert cursor.coordinates_hint.lines() == [] and cursor.coordinates() is None
+        view.mouse_moved.emit(10 + near, 13)
+        view.mouse_left.emit()
+        assert not cursor.coordinates_hint.isVisible()
+
+    def test_switched_off_and_on(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = make(qtbot, tmp_path)
+        cursor = window.sheet_cursor
+        window.sheet_view.mouse_moved.emit(10.0, 13.0)
+        cursor.set_coordinates_shown(False)
+        assert not cursor.coordinates_hint.isVisible() and cursor.coordinates() is None
+        cursor.set_coordinates_shown(True)
+        assert cursor.coordinates_hint.isVisible()  # at once, without a move
+
+    def test_follows_a_change_without_a_move(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = make(qtbot, tmp_path)
+        view = window.sheet_view
+        h = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
+        fold = net_style.FOLD_HITBOX_PX / 4 / view.scale_factor()
+        view.mouse_moved.emit(11.6, 13 + fold)
+        assert not window.sheet_cursor.coordinates_hint.isVisible()  # DEFAULT: a fold can't start a line
+        view.left_pressed.emit(11.5, 14 - h)  # the line starts, the mouse is elsewhere
+        view.mouse_moved.emit(11.6, 13 + fold)
+        assert window.sheet_cursor.coordinates_hint.lines()[0] == "y: 13"  # the next point: on the fold

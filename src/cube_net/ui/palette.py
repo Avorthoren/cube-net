@@ -87,6 +87,11 @@ VERTEX_HIGHLIGHT = QColor(255, 214, 0, 230)
 # Translucent box behind debug labels, so they're readable on the hatch too.
 LABEL_BACKGROUND = QColor(255, 255, 255, 200)
 
+# The coordinates hint (a point's exact coordinates, next to the mouse): its translucent box, its border and its text.
+COORDINATES_BACKGROUND = QColor(255, 255, 255, 190)
+COORDINATES_BORDER = QColor(95, 99, 104, 160)
+COORDINATES_TEXT = QColor("#202124")
+
 # Points the cut line gets automatically (crossings with cube edges): plain grey while the line is being drawn
 # and edited, so they're not mistaken for points the user placed (and can drag or delete).
 DERIVED_POINT = QColor("#9E9E9E")
