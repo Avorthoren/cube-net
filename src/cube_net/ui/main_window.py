@@ -935,7 +935,8 @@ class MainWindow(QMainWindow):
         # L switches them, when it's released (with the settings panel open or not).
         self.labels_key = KeyReleaseShortcut(Qt.Key.Key_L, self)
         self.labels_key.activated.connect(self.show_labels_action.toggle)
-        # The coordinates hint: its switch, C (when it's released, as L), and Ctrl+C, which copies what it shows.
+        # The coordinates hint: its switch, C (when it's released, as L), and Ctrl+C, which copies what it shows (or
+        # the area's hint, while that's shown).
         self.show_coordinates_action = QAction(self)
         bind(self.show_coordinates_action, self.show_coordinates_action.setText, "Show vertex coordinates")
         self.show_coordinates_action.setCheckable(True)
@@ -1066,10 +1067,15 @@ class MainWindow(QMainWindow):
             self.recorder.note("slope", *(("off",) if direction is None else (str(c) for c in slope_of(direction))))
 
     def copy_coordinates(self) -> None:
-        """Ctrl+C: the coordinates hint's two lines, with every number in full (nothing if it isn't shown)."""
+        """Ctrl+C: the area's hint while it's shown; otherwise the coordinates hint's two lines; with every number in
+        full (nothing if neither is shown)."""
         point = self.sheet_cursor.coordinates()
         clipboard = QApplication.clipboard()
-        if point is not None and clipboard is not None:
+        if self.bounding.hint_shown() and clipboard is not None:
+            clipboard.setText(self.bounding.copied_hint())
+            if self.recorder is not None:
+                self.recorder.note("area", "copied")
+        elif point is not None and clipboard is not None:
             clipboard.setText(copied_text(point))
             if self.recorder is not None:
                 self.recorder.note("coordinates", "copied", format_point(point))

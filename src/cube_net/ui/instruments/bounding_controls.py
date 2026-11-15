@@ -5,7 +5,8 @@
 
 - The area of the minimum-area bounding rectangle is always shown, with 3 decimals. Its hint has a second line with
   the exact area, a reduced fraction like the coordinates hint's, then "=" or "≈" and the panel's 3 decimals:
-  "16129/1250 ≈ 12.903".
+  "16129/1250 ≈ 12.903". The hint shows as soon as the mouse is over the area (`InstantTooltips`), and while it's
+  shown, Ctrl+C copies it, with every number in full (`copied_hint`).
 - The toggle button shows / hides the rectangle on the sheet.
 - Below the area: the project's target area, which the user can edit there. What's typed is taken on Enter, or when
   the field loses the focus: when the user clicks anywhere else in the window, even on what doesn't take the focus
@@ -25,9 +26,10 @@ from cube_net.core.bounding import BoundingRectangle
 from cube_net.core.project_settings import MAX_AREA_THRESHOLD, MIN_AREA_THRESHOLD
 from cube_net.ui import palette
 from cube_net.ui.i18n import TRANSLATIONS, bind, tr
+from cube_net.ui.instant_tooltips import InstantTooltips
 from cube_net.ui.instruments.button_look import RADIUS_PX
 from cube_net.ui.sheet.bounding_item import BoundingItem
-from cube_net.ui.sheet.coordinates_text import fraction_text, is_exact
+from cube_net.ui.sheet.coordinates_text import MAX_DIGITS, fraction_text, is_exact
 
 # The target area has at most 3 decimals; the field's arrows change it by this much.
 TARGET_DECIMALS = 3
@@ -41,9 +43,10 @@ def format_area(area: Fraction) -> str:
     return f"{float(area):.3f}"
 
 
-def exact_area_text(area: Fraction) -> str:
-    """The hint's second line: the exact area, and what the panel shows ("16129/1250 ≈ 12.903", "12 = 12.000")."""
-    return f"{fraction_text(area)} {'=' if is_exact(area) else '≈'} {format_area(area)}"
+def exact_area_text(area: Fraction, limit: int | None = MAX_DIGITS) -> str:
+    """The hint's second line: the exact area, and what the panel shows ("16129/1250 ≈ 12.903", "12 = 12.000"). A
+    numerator or a denominator longer than `limit` digits shows as `TOO_LONG` (None: every number in full)."""
+    return f"{fraction_text(area, limit)} {'=' if is_exact(area) else '≈'} {format_area(area)}"
 
 
 class BoundingControls(QObject):
@@ -64,6 +67,7 @@ class BoundingControls(QObject):
         toolbar.addSeparator()
         self.label = QLabel(toolbar)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.tooltips = InstantTooltips(self.label)  # at once: no waiting over the area
         self._show_tooltip()  # and again with every area, and in another language
         toolbar.addWidget(self.label)
         self.target_label = QLabel(toolbar)
@@ -154,10 +158,22 @@ class BoundingControls(QObject):
 
     def _show_tooltip(self) -> None:
         """What the area is, and (once there is one) its exact value."""
+        self.label.setToolTip(self._hint())
+        self.tooltips.refresh()  # if it's shown
+
+    def _hint(self, limit: int | None = MAX_DIGITS) -> str:
         text = tr("Area of the smallest rectangle (any orientation) that contains the net")
         if self._rectangle is not None:
-            text += "\n" + exact_area_text(self._rectangle.area)
-        self.label.setToolTip(text)
+            text += "\n" + exact_area_text(self._rectangle.area, limit)
+        return text
+
+    def hint_shown(self) -> bool:
+        """Is the area's hint shown now?"""
+        return self.tooltips.shown_for() is self.label
+
+    def copied_hint(self) -> str:
+        """What Ctrl+C copies while the hint is shown: its text, with every number in full."""
+        return self._hint(limit=None)
 
     def _show_area(self) -> None:
         self._show_tooltip()

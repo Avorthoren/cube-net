@@ -305,6 +305,7 @@ RUSSIAN: dict[str, str] = {
         "предыдущему"
     ),
     "Show or hide the smallest bounding rectangle": "Показать или скрыть наименьший описанный прямоугольник",
+    "Copy the area's hint (while it's shown)": "Скопировать подсказку площади (пока она видна)",
     "The view": "Вид",
     "mouse wheel": "колёсико мыши",
     "Zoom in or out": "Увеличить или уменьшить",

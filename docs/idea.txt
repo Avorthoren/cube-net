@@ -203,7 +203,9 @@ of the bounding rectangle for the default cube net is 12.000 square units, it ha
 rectangle in this specific case.
 The area's hint (tooltip) has two lines: what the area is, then its exact value as a reduced fraction, "=" or "≈",
 and the 3 decimals shown on the panel: "16129/1250 ≈ 12.903" (an integer is just that: "12 = 12.000"; a numerator or
-a denominator of more than 10 digits shows as "too_long", as in the coordinates hint).
+a denominator of more than 10 digits shows as "too_long", as in the coordinates hint). It shows as soon as the mouse is
+over the area (no delay) and goes as soon as it leaves; while it's shown, Ctrl+C copies its two lines, with every
+number in full.
 Also, somewhere on the UI (maybe, close to the numeric value of its area) there should be a button. When user turns it
 on - application should permanently show bounding rectangle (thin black line). It should not "interrupt" any other
 features.

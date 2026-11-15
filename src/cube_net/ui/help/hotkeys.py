@@ -112,6 +112,7 @@ HOTKEYS = (
                 held=True,
             ),
             Hotkey("B", "", "Show or hide the smallest bounding rectangle"),
+            Hotkey("Ctrl+C", "", "Copy the area's hint (while it's shown)"),
         ),
     ),
     HotkeyGroup(

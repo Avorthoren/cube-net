@@ -41,6 +41,11 @@ class InstantTooltips(QObject):
         self._shown_for = None
         self.label.hide()
 
+    def refresh(self) -> None:
+        """A shown tooltip's text changed: show the new one, where the mouse is."""
+        if self._shown_for is not None:
+            self.label.show_at(self._shown_for.toolTip(), QCursor.pos())
+
     def shown_for(self) -> QWidget | None:
         """The widget whose tooltip is shown, if any."""
         return self._shown_for

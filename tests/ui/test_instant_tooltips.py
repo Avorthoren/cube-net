@@ -80,3 +80,12 @@ def test_hidden_with_its_widget(panel: Panel) -> None:
 def test_qts_own_late_tooltip_is_not_shown(panel: Panel) -> None:
     event = QHelpEvent(QEvent.Type.ToolTip, QPoint(5, 5), panel.box.mapToGlobal(QPoint(5, 5)))
     assert QApplication.sendEvent(panel.box, event)  # taken: Qt doesn't show its own
+
+
+def test_refresh_shows_the_new_text(panel: Panel) -> None:
+    panel.tooltips.refresh()  # nothing shown: nothing happens
+    assert not panel.tooltips.label.isVisible()
+    enter(panel.box)
+    panel.box.setToolTip("Hotkey: L (new)")
+    panel.tooltips.refresh()
+    assert panel.tooltips.label.isVisible() and panel.tooltips.label.text() == "Hotkey: L (new)"

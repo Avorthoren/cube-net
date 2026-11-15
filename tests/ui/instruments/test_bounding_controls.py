@@ -260,3 +260,20 @@ def test_the_hint_in_another_language(controls: BoundingControls) -> None:
         assert lines[0].startswith("Площадь") and lines[1] == "71/10 = 7.100"
     finally:
         TRANSLATIONS.set_language(Language.ENGLISH)
+
+
+def test_the_hint_at_once_updated_and_copied_in_full(controls: BoundingControls) -> None:
+    from PyQt6.QtCore import QPoint, QPointF
+    from PyQt6.QtGui import QEnterEvent
+    from PyQt6.QtWidgets import QApplication
+
+    area = F(1, 3 * 10**11)
+    controls.update(rect(F(71, 10)), F(7))
+    assert not controls.hint_shown()
+    point = QPointF(5, 5)
+    QApplication.sendEvent(controls.label, QEnterEvent(point, point, QPointF(controls.label.mapToGlobal(QPoint(5, 5)))))
+    assert controls.hint_shown()  # no waiting
+    assert controls.tooltips.label.text().endswith("71/10 = 7.100")
+    controls.update(rect(area), F(7))
+    assert controls.tooltips.label.text().endswith("1/too_long ≈ 0.000")  # the shown hint follows the area
+    assert controls.copied_hint().endswith(f"1/{3 * 10**11} ≈ 0.000")  # every number in full

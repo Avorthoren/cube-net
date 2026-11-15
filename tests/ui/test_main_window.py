@@ -151,7 +151,8 @@ def test_the_coordinates_hint_off_at_start_when_switched_off(qtbot: QtBot, tmp_p
 
 
 def test_ctrl_c_copies_what_the_hint_shows(qtbot: QtBot, tmp_path: Path) -> None:
-    from PyQt6.QtGui import QKeySequence
+    from PyQt6.QtCore import QPoint, QPointF
+    from PyQt6.QtGui import QEnterEvent, QKeySequence
     from PyQt6.QtWidgets import QApplication
 
     settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
@@ -169,6 +170,12 @@ def test_ctrl_c_copies_what_the_hint_shows(qtbot: QtBot, tmp_path: Path) -> None
     window.sheet_view.mouse_moved.emit(10.0, 13.0)
     window.copy_coordinates_action.trigger()
     assert clipboard.text() == "y: 13\nx: 10"
+    label = window.bounding.label
+    at = QPointF(5, 5)
+    QApplication.sendEvent(label, QEnterEvent(at, at, QPointF(label.mapToGlobal(QPoint(5, 5)))))  # over the area
+    window.copy_coordinates_action.trigger()
+    assert clipboard.text() == window.bounding.copied_hint()  # the area's hint wins while it's shown
+    assert clipboard.text().endswith("12 = 12.000")
 
 
 def test_labels_off_at_start_when_disabled_in_settings(qtbot: QtBot, tmp_path: Path) -> None:
