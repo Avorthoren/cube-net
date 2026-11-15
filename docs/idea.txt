@@ -201,6 +201,9 @@ forced to be axis-aligned, i.e. can have any orientation. I think, there is effe
 So, somewhere on the UI there should always be the area of bounding rectangle up to 3 decimals. For example, area
 of the bounding rectangle for the default cube net is 12.000 square units, it happens to be axis-aligned 3-by-4
 rectangle in this specific case.
+The area's hint (tooltip) has two lines: what the area is, then its exact value as a reduced fraction, "=" or "≈",
+and the 3 decimals shown on the panel: "16129/1250 ≈ 12.903" (an integer is just that: "12 = 12.000"; a numerator or
+a denominator of more than 10 digits shows as "too_long", as in the coordinates hint).
 Also, somewhere on the UI (maybe, close to the numeric value of its area) there should be a button. When user turns it
 on - application should permanently show bounding rectangle (thin black line). It should not "interrupt" any other
 features.
@@ -574,6 +577,8 @@ disappear as soon as it leaves (no delay either way).
      or below it, where it wouldn't fit in the view), in a translucent box, in a monospace font, for:
      - a point under the mouse (in its circle): the net's vertices (the rearranged net's too, while approving), the
        cut line's points, its small dots (the crossings with fold lines, the endpoints' counterpart images);
+     - while Bounds is on, a corner of the bounding rectangle under the mouse (in a circle as big as a vertex's, though
+       the corners look as they always do; one on a vertex of the net is that vertex anyway);
      - where a click would make a point that snaps to something: the line's first point on the perimeter, the next
        one on the perimeter or on a fold line (with SHIFT too: the point the straight segment would end on);
      - a point being dragged, while it's snapped to the perimeter or a fold line.

@@ -347,6 +347,8 @@ class MainWindow(QMainWindow):
         self.bounding.set_target(self.project_settings.area_threshold)
         self.bounding.set_blink_enabled(self.settings.blink_on_success)
         self.bounding.target_changed.connect(self._on_target_changed)
+        # The rectangle's corners have the coordinates hint too, while it's shown (an empty list while it isn't).
+        self.cut_tool.hint_points = self.bounding_item.corners
         self._update_bounding()
 
         spacer = QWidget(toolbar)  # pushes what follows to the bottom of the panel
@@ -367,6 +369,7 @@ class MainWindow(QMainWindow):
         """Recompute the minimum-area bounding rectangle of the current net."""
         rectangle = min_area_rectangle(v.position for v in self.net.vertices)
         self.bounding.update(rectangle, self.project_settings.area_threshold)
+        self.sheet_cursor.update()  # the hint, over one of its corners
 
     def _on_approve(self) -> None:
         self.cut_tool.approve()
@@ -442,6 +445,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(tr("Could not open the folder with session logs"), 5000)
 
     def _on_bounding_toggled(self, checked: bool) -> None:
+        self.sheet_cursor.update()  # the hint, over one of its corners
         if self.recorder is not None:
             self.recorder.note("bounds", "on" if checked else "off")
 

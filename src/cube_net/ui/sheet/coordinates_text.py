@@ -49,6 +49,13 @@ def _number(value: int, limit: int | None) -> str:
     return str(value)
 
 
+def fraction_text(value: Fraction, limit: int | None = MAX_DIGITS) -> str:
+    """`value` as its reduced fraction ("101/8"), an integer as just that ("17"); a numerator or a denominator longer
+    than `limit` digits as `TOO_LONG` (None: every number in full)."""
+    numerator = _number(value.numerator, limit)
+    return numerator if value.denominator == 1 else f"{numerator}/{_number(value.denominator, limit)}"
+
+
 def coordinate_lines(point: Vec, limit: int | None = MAX_DIGITS) -> list[str]:
     """The hint's lines: y, then x (see the module's docstring). `limit`: the longest number shown as it is (None:
     every number in full, as copied)."""

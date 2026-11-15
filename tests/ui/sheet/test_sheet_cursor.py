@@ -201,6 +201,25 @@ class TestCoordinatesHint:
         assert cursor.coordinates_hint.lines() == ["y:  0", "x: -1"]  # at once, without a move
         assert cursor.coordinates() == Vec(-1, 0)
 
+    def test_the_bounding_rectangles_corners_while_bounds_is_on(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.core.bounding import min_area_rectangle
+        from cube_net.ui.sheet.coordinates_text import coordinate_lines
+
+        window = make(qtbot, tmp_path)
+        cursor = window.sheet_cursor
+        view = window.sheet_view
+        vertices = {v.position for v in window.net.vertices}
+        corners = min_area_rectangle(vertices).corners
+        corner = next(c for c in corners if c not in vertices)  # one that isn't a vertex of the net
+        near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
+        view.mouse_moved.emit(float(corner.x) + near, float(corner.y))
+        assert cursor.coordinates() is None  # Bounds is off
+        window.bounding.action.trigger()
+        assert cursor.coordinates() == corner  # at once, without a move
+        assert cursor.coordinates_hint.lines() == coordinate_lines(corner)
+        window.bounding.action.trigger()
+        assert cursor.coordinates() is None
+
     def test_switched_off_and_on(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = make(qtbot, tmp_path)
         cursor = window.sheet_cursor

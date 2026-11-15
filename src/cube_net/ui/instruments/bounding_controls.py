@@ -3,7 +3,9 @@
 
 """`BoundingControls`: the bounding rectangle's area label and toggle button on the instrument panel (docs/idea.txt).
 
-- The area of the minimum-area bounding rectangle is always shown, with 3 decimals.
+- The area of the minimum-area bounding rectangle is always shown, with 3 decimals. Its hint has a second line with
+  the exact area, a reduced fraction like the coordinates hint's, then "=" or "≈" and the panel's 3 decimals:
+  "16129/1250 ≈ 12.903".
 - The toggle button shows / hides the rectangle on the sheet.
 - Below the area: the project's target area, which the user can edit there. What's typed is taken on Enter, or when
   the field loses the focus: when the user clicks anywhere else in the window, even on what doesn't take the focus
@@ -25,6 +27,7 @@ from cube_net.ui import palette
 from cube_net.ui.i18n import TRANSLATIONS, bind, tr
 from cube_net.ui.instruments.button_look import RADIUS_PX
 from cube_net.ui.sheet.bounding_item import BoundingItem
+from cube_net.ui.sheet.coordinates_text import fraction_text, is_exact
 
 # The target area has at most 3 decimals; the field's arrows change it by this much.
 TARGET_DECIMALS = 3
@@ -36,6 +39,11 @@ BLINK_INTERVAL_MS = round(1000 / 6)
 
 def format_area(area: Fraction) -> str:
     return f"{float(area):.3f}"
+
+
+def exact_area_text(area: Fraction) -> str:
+    """The hint's second line: the exact area, and what the panel shows ("16129/1250 ≈ 12.903", "12 = 12.000")."""
+    return f"{fraction_text(area)} {'=' if is_exact(area) else '≈'} {format_area(area)}"
 
 
 class BoundingControls(QObject):
@@ -56,9 +64,7 @@ class BoundingControls(QObject):
         toolbar.addSeparator()
         self.label = QLabel(toolbar)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        bind(
-            self.label, self.label.setToolTip, "Area of the smallest rectangle (any orientation) that contains the net"
-        )
+        self._show_tooltip()  # and again with every area, and in another language
         toolbar.addWidget(self.label)
         self.target_label = QLabel(toolbar)
         bind(self.target_label, self.target_label.setText, "Target area")
@@ -146,7 +152,15 @@ class BoundingControls(QObject):
             self._timer.stop()
             self._set_blink(self._success)
 
+    def _show_tooltip(self) -> None:
+        """What the area is, and (once there is one) its exact value."""
+        text = tr("Area of the smallest rectangle (any orientation) that contains the net")
+        if self._rectangle is not None:
+            text += "\n" + exact_area_text(self._rectangle.area)
+        self.label.setToolTip(text)
+
     def _show_area(self) -> None:
+        self._show_tooltip()
         if self._rectangle is not None:
             text = f"{tr('Area')}\n{format_area(self._rectangle.area)}"
             self.label.setText(text)

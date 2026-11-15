@@ -27,7 +27,7 @@
 """
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
 
@@ -89,6 +89,11 @@ class CutTool(QObject):
         self._view = view
         self._editor = editor
         self._ruler = ruler
+
+        # Points drawn by others whose coordinates the hint shows too, as for vertices (the bounding rectangle's
+        # corners, while it's shown): see `coordinates_at`.
+        self.hint_points: Callable[[], Sequence[Vec]] = tuple
+
         self.item = CutLineItem(editor.net)
         scene = view.scene()
         assert scene is not None
@@ -354,6 +359,8 @@ class CutTool(QObject):
         - while a point is dragged: where it is, while it's snapped (to the perimeter, a vertex, a fold line);
         - over a point (in its circle): that point. Any drawn point: the net's vertices, the cut line's points, its
           small dots (crossings with fold lines, the endpoints' counterpart images);
+        - over one of `hint_points` (in a circle as big as a vertex's, though none is drawn): that point (they come
+          after the drawn ones: where one is on a vertex, it's that vertex anyway);
         - else, while a click would make a point (the line's first, or the next one): that point, if it would be
           snapped to the perimeter or (while cutting) to a fold line."""
         if self._on_approve_button(x, y):
@@ -365,6 +372,10 @@ class CutTool(QObject):
         point = self._drawn_point_at(x, y)
         if point is not None:
             return point
+        others = list(self.hint_points())
+        i = self._closest(x, y, others, net_style.VERTEX_RADIUS_PX)
+        if i is not None:
+            return others[i]
         state = self._editor.state
         if self._ruler.active or state not in (EditorState.DEFAULT, EditorState.CUTTING):
             return None

@@ -92,3 +92,14 @@ def test_a_point_placed_where_the_mouse_is_shows_the_footers_digits(x: float, y:
         assert decimal_text(point.x) == expected_x
     if point.y != 0 or not expected_y.startswith("-"):
         assert decimal_text(point.y) == expected_y
+
+
+def test_fraction_text() -> None:
+    from fractions import Fraction
+
+    from cube_net.ui.sheet.coordinates_text import TOO_LONG, fraction_text
+
+    assert fraction_text(Fraction(17)) == "17"
+    assert fraction_text(Fraction(-101, 8)) == "-101/8"
+    assert fraction_text(Fraction(1, 10**11)) == f"1/{TOO_LONG}"
+    assert fraction_text(Fraction(1, 10**11), limit=None) == f"1/{10**11}"

@@ -12,7 +12,12 @@ from pytestqt.qtbot import QtBot
 from cube_net.core.bounding import BoundingRectangle
 from cube_net.core.geometry import Vec
 from cube_net.ui import palette
-from cube_net.ui.instruments.bounding_controls import BLINK_INTERVAL_MS, BoundingControls, format_area
+from cube_net.ui.instruments.bounding_controls import (
+    BLINK_INTERVAL_MS,
+    BoundingControls,
+    exact_area_text,
+    format_area,
+)
 from cube_net.ui.sheet.bounding_item import BoundingItem
 
 CORNERS = (Vec(0, 0), Vec(3, 0), Vec(3, 4), Vec(0, 4))
@@ -227,3 +232,31 @@ class TestTakingWhatWasTyped:
         qtbot.addWidget(other)
         with qtbot.assertNotEmitted(controls.target_changed):
             qtbot.mouseClick(other, Qt.MouseButton.LeftButton)
+
+
+def test_exact_area_text() -> None:
+    assert exact_area_text(F(12)) == "12 = 12.000"
+    assert exact_area_text(F(71, 10)) == "71/10 = 7.100"
+    assert exact_area_text(F(16129, 1250)) == "16129/1250 ≈ 12.903"
+    assert exact_area_text(F(1, 3 * 10**11)) == "1/too_long ≈ 0.000"  # as long as the coordinates hint allows
+
+
+def test_the_hint_has_the_exact_area_once_there_is_one(controls: BoundingControls) -> None:
+    what = "Area of the smallest rectangle (any orientation) that contains the net"
+    assert controls.label.toolTip() == what
+    controls.update(rect(F(16129, 1250)), F(7))
+    assert controls.label.toolTip() == f"{what}\n16129/1250 ≈ 12.903"
+    controls.update(rect(F(12)), F(7))
+    assert controls.label.toolTip().split("\n")[1] == "12 = 12.000"
+
+
+def test_the_hint_in_another_language(controls: BoundingControls) -> None:
+    from cube_net.ui.i18n import TRANSLATIONS, Language
+
+    controls.update(rect(F(71, 10)), F(7))
+    TRANSLATIONS.set_language(Language.RUSSIAN)
+    try:
+        lines = controls.label.toolTip().split("\n")
+        assert lines[0].startswith("Площадь") and lines[1] == "71/10 = 7.100"
+    finally:
+        TRANSLATIONS.set_language(Language.ENGLISH)

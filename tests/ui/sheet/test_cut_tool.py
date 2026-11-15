@@ -983,6 +983,17 @@ class TestCtrlClickDeletes:
 class TestCoordinates:
     """Which point the coordinates hint describes (`CutTool.coordinates_at`): where it isn't just the mouse's."""
 
+    def test_hint_points_with_a_vertexs_hitbox(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
+        far = net_style.VERTEX_RADIUS_PX * 1.5 / view.scale_factor()
+        corner = Vec(F(37, 4), F(41, 4))  # off the net
+        assert tool.coordinates_at(9.25 + near, 10.25) is None
+        tool.hint_points = lambda: (corner, Vec(10, 13))
+        assert tool.coordinates_at(9.25 + near, 10.25) == corner
+        assert tool.coordinates_at(9.25 + far, 10.25) is None  # not beyond a vertex's circle
+        assert tool.coordinates_at(10 + near, 13) == Vec(10, 13)  # on a vertex: the vertex, all the same
+
     def test_a_vertex_under_the_mouse(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
         view, tool, _ = setup
         near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()  # inside its circle, off its centre
