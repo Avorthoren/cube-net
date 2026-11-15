@@ -109,6 +109,8 @@ RUSSIAN: dict[str, str] = {
     ),
     "px": "пикс.",
     "Faces colors": "Цвета граней",
+    "Choose the color": "Выбрать цвет",
+    "Face {face} color": "Цвет грани {face}",
     "Faces tiling": "Разбиение граней",
     "Cuts and folds": "Разрезы и сгибы",
     "Vertices": "Вершины",

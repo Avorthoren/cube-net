@@ -8,7 +8,7 @@ from dataclasses import replace
 from PyQt6.QtCore import QLocale, pyqtSignal
 from PyQt6.QtWidgets import QDoubleSpinBox, QFrame, QLabel, QSpinBox, QVBoxLayout, QWidget
 
-from cube_net.ui.i18n import bind
+from cube_net.ui.i18n import bind, tr
 from cube_net.ui.settings_panel.color_field import ColorField
 from cube_net.ui.settings_panel.section import Section
 from cube_net.ui.settings_panel.swatches import ColorSwatch, GridSwatch
@@ -88,7 +88,7 @@ class StyleTab(QWidget):
         for face in range(1, 7):
             swatch, field = (
                 ColorSwatch(style.face_colors[face - 1], colors),
-                ColorField(style.face_colors[face - 1], colors),
+                ColorField(style.face_colors[face - 1], colors, lambda face=face: tr("Face {face} color", face=face)),
             )
             field.changed.connect(lambda color, face=face: self._on_face_color(face, color))
             colors.add_row(QLabel(f"{face}", colors), swatch, field)

@@ -605,7 +605,11 @@ disappear as soon as it leaves (no delay either way).
 2. Style. Every section starts with its name and a "Restore default" button to the right of it, which restores the
    defaults of just that section after the user confirms it.
    - Faces colors: 6 lines, the k-th for face k: a 10x10 square of its colour, then '#' and an input for the colour as
-     RGB hex digits.
+     RGB hex digits, then a button (hint: "Choose the color") that opens a colour picker, "Face k color" (Qt's own,
+     the same on every system, in the application's language). The colour it shows is used at once (the sheet and
+     the square follow it); OK keeps it, Cancel, Escape and the close button go back to the colour there was.
+     It opens with its right edge on the application's right edge, so the net stays in sight on the left (where the
+     system lets an application place its windows: not on Wayland, where the system decides).
    - Faces tiling: the number of columns and rows each face is divided into (now 10 x 5), integers from 1 to 30.
    - Cuts and folds: number of dashes of each colour along a whole cube edge (1 to 30, now 10), and their thickness
      in pixels (1 to 15, now 4). Hovered elements are drawn 1.5 times as thick, as before.

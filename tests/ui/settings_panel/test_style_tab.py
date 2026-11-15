@@ -160,3 +160,33 @@ def test_restoring_the_vertices_keeps_them_large_enough(qtbot: QtBot, monkeypatc
     monkeypatch.setattr("cube_net.ui.settings_panel.section.confirm_restore", lambda *_: True)
     tab.sections[VERTICES].restore_button.click()
     assert tab.style().vertex_radius == 10.5  # the default is too small for these edges
+
+
+def test_a_colour_picker_for_every_face_only(qtbot: QtBot) -> None:
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QApplication, QColorDialog
+
+    from cube_net.ui.i18n import TRANSLATIONS, Language
+
+    tab = StyleTab(DEFAULT_STYLE)
+    qtbot.addWidget(tab)
+    assert all(field.pick_button is not None for field in tab.face_fields)
+    assert tab.grid_color.pick_button is None
+    titles: list[str] = []
+
+    def close() -> None:
+        picker = QApplication.activeModalWidget()
+        assert isinstance(picker, QColorDialog)
+        titles.append(picker.windowTitle())
+        picker.reject()
+
+    TRANSLATIONS.set_language(Language.RUSSIAN)
+    try:
+        QTimer.singleShot(50, close)
+        tab.face_fields[2].pick()
+    finally:
+        TRANSLATIONS.set_language(Language.ENGLISH)
+    QTimer.singleShot(50, close)
+    tab.face_fields[2].pick()
+    assert titles == ["Цвет грани 3", "Face 3 color"]
+    assert tab.style() == DEFAULT_STYLE  # nothing chosen
