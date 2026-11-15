@@ -1143,6 +1143,49 @@ class TestPlacement:
         assert tool.place(free, Vec(F(23, 2), F(27, 2))) is Problem.BREAKS_LINE  # back across the line
         assert positions(tool) == [X, Vec(F(23, 2), 13)]
 
+    def test_typed_on_the_perimeter_while_cutting_it_ends_the_line(
+        self, setup: tuple[SheetView, CutTool, RulerTool]
+    ) -> None:
+        """Right-clicked inside a face (a free point), typed on the perimeter: the line's last point, as a click on
+        the perimeter would make it (it used to be refused: "only the line's ends can be there")."""
+        from cube_net.core.editor import EditorState
+
+        view, tool, _ = setup
+        near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
+        view.left_pressed.emit(11 + near, 13)  # C_1
+        free = tool.placement_at(11.5, 13.5)
+        assert free is not None and free.constraint.kind.name == "FREE"
+        end = Vec(11 + F(17, 37), 14)  # on A_1-B_1
+        assert tool.place(free, end) is None
+        assert positions(tool) == [Vec(11, 13), end]
+        assert tool.editor.state is EditorState.CUT_EDITING
+        last = tool.editor.cut_line.points[-1]  # type: ignore[union-attr]
+        assert last.edge is not None and last.vertex is None
+
+    def test_typed_on_a_perimeter_vertex_while_cutting(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        view, tool, _ = setup
+        near = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
+        view.left_pressed.emit(11 + near, 13)  # C_1
+        free = tool.placement_at(11.5, 13.5)
+        assert free is not None
+        assert tool.place(free, Vec(12, 14)) is None  # B_1
+        last = tool.editor.cut_line.points[-1]  # type: ignore[union-attr]
+        assert last.vertex is not None and last.position == Vec(12, 14)
+
+    def test_an_inner_point_still_cant_be_moved_onto_the_perimeter(
+        self, setup: tuple[SheetView, CutTool, RulerTool]
+    ) -> None:
+        from cube_net.core.cutting.placement import Problem
+
+        view, tool, _ = setup
+        corner_cut(view)
+        view.left_pressed.emit(11.5, 13.5)  # the inner point
+        view.mouse_moved.emit(11.6, 13.6)
+        placement = tool.placement_at(11.6, 13.6)
+        assert placement is not None
+        assert tool.place(placement, Vec(11, F(27, 2))) is Problem.ON_PERIMETER
+        assert positions(tool)[1] != Vec(11, F(27, 2))
+
     def test_while_dragging(self, setup: tuple[SheetView, CutTool, RulerTool], qtbot: QtBot) -> None:
         from cube_net.core.cutting.placement import Action, Axis, LineKind
 

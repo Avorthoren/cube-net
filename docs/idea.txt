@@ -508,7 +508,9 @@ are disabled). The line is the perimeter edge or the fold line the point would s
 horizontal or vertical line, unless the point would snap to an edge (the edge wins). The y numerator has the focus at
 first (x's, if y is fixed), its text selected.
 Place (the default: ENTER) puts the point exactly there (nothing is rounded, unlike a click): the line's first point,
-its next one, or where the dragged point goes (that ends the drag). If it can't go there, the window stays and says
+its next one, or where the dragged point goes (that ends the drag). While cutting, a point typed on the perimeter
+(right-clicked inside a face, say) is the line's last point, as a click on the perimeter would make it: on its edge, or
+the vertex. If it can't go there, the window stays and says
 why, in red: outside the net; on the perimeter (only the line's ends can be); beyond the ends of its edge or fold
 line; too many points; or the line would leave the net, or touch or cross itself. Cancel, ESCAPE and the close button
 change nothing; for a drag, they (and closing the menu without choosing) end it with the point back where it was.

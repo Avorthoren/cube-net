@@ -183,6 +183,11 @@ def fold_through(net: Net, p: Vec) -> HalfEdge | None:
     )
 
 
+def perimeter_edge_through(net: Net, p: Vec) -> HalfEdge | None:
+    """A cut of the perimeter `p` lies exactly on, if any (at a perimeter vertex, one of its two)."""
+    return next((he for he in net.boundary_edges() if on_segment(p, he.origin.position, he.destination.position)), None)
+
+
 class Action(Enum):
     # DEFAULT: the line's first point (on the perimeter).
     START = "start"

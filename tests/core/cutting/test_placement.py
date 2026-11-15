@@ -89,6 +89,16 @@ def test_the_fold_a_point_is_on(net: Net) -> None:
     assert fold_through(net, Vec(F(23, 2), F(27, 2))) is None
 
 
+def test_the_perimeter_cut_a_point_is_on(net: Net) -> None:
+    from cube_net.core.cutting.placement import perimeter_edge_through
+
+    cut = perimeter_edge_through(net, Vec(F(23, 2), 14))
+    assert cut is not None and {cut.origin.position, cut.destination.position} == {Vec(11, 14), Vec(12, 14)}
+    assert perimeter_edge_through(net, Vec(12, 14)) is not None  # a perimeter vertex: one of its cuts
+    assert perimeter_edge_through(net, Vec(F(23, 2), F(27, 2))) is None  # inside
+    assert perimeter_edge_through(net, Vec(F(23, 2), 13)) is None  # on a fold
+
+
 class TestNearest:
     """The point of the line closest to a point (where the dashed line ends while a point is placed by typing)."""
 

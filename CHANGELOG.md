@@ -9,6 +9,7 @@ What's new in every version of Cube Net. While working, write the changes under 
  - Help opens by itself at the first start
  - Language selector added to Help page
  - Color picker added in Settings
+ - Bug with "Place Vertex" feature not allowing to end the cut fixed
 
 ## 1.1.0 (2026-11-15)
  - "Place vertex" feature implemented

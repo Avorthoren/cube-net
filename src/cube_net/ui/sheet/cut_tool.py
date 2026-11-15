@@ -32,7 +32,15 @@ from collections.abc import Callable, Sequence
 from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
 
 from cube_net.core.cutting import CutPoint, straighten
-from cube_net.core.cutting.placement import Action, Constraint, LineKind, Placement, Problem, fold_through
+from cube_net.core.cutting.placement import (
+    Action,
+    Constraint,
+    LineKind,
+    Placement,
+    Problem,
+    fold_through,
+    perimeter_edge_through,
+)
 from cube_net.core.editor import Editor, EditorState, Rejection
 from cube_net.core.geometry import Vec, quantize
 from cube_net.core.net import HalfEdge, NetVertex, boundary_edge_at
@@ -479,9 +487,15 @@ class CutTool(QObject):
         net = self._editor.net
         constraint = placement.constraint
         problem = constraint.problem(net, p)
-        if problem is not None:
+        # While cutting, a point typed on the perimeter (a free one, or on a line that reaches it) is the line's last
+        # point, as a click on the perimeter would make it.
+        ending = problem is Problem.ON_PERIMETER and placement.action is Action.ADD
+        end_cut = perimeter_edge_through(net, p) if ending else None
+        if problem is not None and end_cut is None:
             return problem
-        if constraint.kind is LineKind.EDGE:
+        if end_cut is not None:
+            point = self._editor.point_on_cut(p, end_cut)
+        elif constraint.kind is LineKind.EDGE:
             assert constraint.edge is not None
             point = self._editor.point_on_cut(p, constraint.edge)
         elif constraint.kind is LineKind.FOLD:
