@@ -4,6 +4,8 @@ What's new in every version of Cube Net. While working, write the changes under 
 (`./release.sh 1.2.0`) gives that section its version and date, and its text becomes the release's notes.
 
 ## Unreleased
+
+## 1.2.0 (2026-11-15)
  - Exact value of bounding rectangle area added to the hint
  - Hint found bounding rectangle vertices added
  - Help opens by itself at the first start

@@ -3,7 +3,7 @@
 
 """Cube Net: explore unit cube nets by cutting and re-gluing them."""
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 # When this version was made (ISO: year-month-day).
 __version_date__ = "2026-11-15"
