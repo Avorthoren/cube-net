@@ -3356,6 +3356,20 @@ class TestLanguage:
         assert other.ruler_action.text() == "Линейка"
         assert other.settings_panel.preferences.language.currentText() == "Русский"
 
+    def test_also_in_help_one_setting(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.ui.i18n import Language
+
+        window = self.make(qtbot, tmp_path)
+        window.help_action.trigger()
+        help_window = window.help_window
+        assert help_window is not None
+        box = help_window.language
+        box.setCurrentIndex(box.findText("Русский"))
+        assert window.settings.language is Language.RUSSIAN and window.ruler_action.text() == "Линейка"
+        assert window.settings_panel.preferences.language.currentText() == "Русский"
+        self.choose(window, "English")  # and the other way round
+        assert box.currentText() == "English"
+
     def test_not_a_change_of_the_project(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
         self.choose(window, "Русский")

@@ -839,6 +839,7 @@ class MainWindow(QMainWindow):
         """Help -> Help: one window, brought to the front if it's open already."""
         if self.help_window is None:
             self.help_window = HelpWindow(self, self.settings.show_vertex_labels)
+            self.help_window.language_changed.connect(self._on_language_changed)
         self.help_window.show()
         self.help_window.raise_()
         self.help_window.activateWindow()

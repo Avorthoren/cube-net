@@ -12,7 +12,7 @@ from collections.abc import Callable, Sequence
 from fractions import Fraction as F
 from html import escape
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
@@ -24,7 +24,9 @@ from cube_net.ui.help.demo.player import DemoPlayer
 from cube_net.ui.help.demo.steps import Step
 from cube_net.ui.help.hotkeys import HOTKEYS, HotkeyGroup
 from cube_net.ui.help.text_block import ACCENT, BADGE_PX, BADGE_SCHEME, TextBlock
-from cube_net.ui.i18n import bind, tr
+from cube_net.ui.i18n import TRANSLATIONS, bind, tr
+from cube_net.ui.language_box import LanguageBox
+from cube_net.ui.no_wheel import ignore_wheel
 
 # The page and its text.
 PAGE = "#FFFFFF"
@@ -88,6 +90,9 @@ BOUNDS_TEXT = (
 VIEW_TEXT = "Zoom with the mouse wheel; drag the sheet to move it."
 HOTKEYS_TITLE = "Hotkeys"
 
+# Room between the application's name at the top and the language list after it (px).
+LANGUAGE_GAP_PX = 20
+
 # The size of a group's title in the hotkeys, against the usual text's.
 GROUP_SIZE = 1.15
 
@@ -96,6 +101,9 @@ KEYS_COLUMN_PX = 260
 
 
 class HelpWindow(QWidget):
+    # The user chose another language in the list at the top (a `Language`): it's the application's setting.
+    language_changed = pyqtSignal(object)
+
     def __init__(self, parent: QWidget | None = None, labels: bool = False) -> None:
         """`labels`: whether the animations show the vertex labels (an app setting)."""
         super().__init__(parent)
@@ -112,6 +120,7 @@ class HelpWindow(QWidget):
         self._column.setContentsMargins(0, 28, 0, 40)
         self._column.setSpacing(14)
         self._heading()
+        self._language_box()
         self._paragraph(INTRO)
         self._paragraph(IDEA)
         self._title(CUT_TITLE, 1)
@@ -186,6 +195,33 @@ class HelpWindow(QWidget):
             return f'<p style="margin: 0 0 4px 0;">{name}</p><p style="margin: 0 0 16px 0;">{subtitle}</p>'
 
         self._text().add(html)
+
+    def _language_box(self) -> None:
+        """The language list, right after the application's name, where it's seen at once (over the text, which stays
+        one document to select in): the same setting as Settings -> Preferences."""
+        block = self._text()
+        self.language = LanguageBox(TRANSLATIONS.language, block)
+        bind(self.language, self.language.setToolTip, "Language")
+        self.language.chosen.connect(self.language_changed)
+        ignore_wheel([self.language], self)  # the wheel scrolls the page wherever the mouse is
+        self._place_language()
+        TRANSLATIONS.changed.connect(self._place_language)  # after the text's own refresh: it's connected before
+
+    def _place_language(self) -> None:
+        """`LANGUAGE_GAP_PX` after the name's end, its middle on the middle of the name's line."""
+        block = self.blocks[0]
+        document = block.document()
+        assert document is not None
+        layout = document.documentLayout()
+        first = document.firstBlock()
+        lines = first.layout()
+        assert layout is not None and lines is not None
+        line = lines.lineAt(0)
+        top = layout.blockBoundingRect(first).top() + line.y()
+        size = self.language.sizeHint()
+        self.language.resize(size)
+        x = line.x() + line.naturalTextWidth() + LANGUAGE_GAP_PX
+        self.language.move(round(x), round(top + line.height() / 2 - size.height() / 2))
 
     def _paragraph(self, text: str, values: Callable[[], dict[str, str]] | None = None, bullet: bool = False) -> None:
         """A paragraph (an item of a list, if `bullet`); `values` gives what goes into its {placeholders}, in the

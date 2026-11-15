@@ -7,6 +7,7 @@ What's new in every version of Cube Net. While working, write the changes under 
  - Exact value of bounding rectangle area added to the hint
  - Hint found bounding rectangle vertices added
  - Help opens by itself at the first start
+ - Language selector added to Help page
 
 ## 1.1.0 (2026-11-15)
  - "Place vertex" feature implemented

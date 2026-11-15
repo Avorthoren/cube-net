@@ -125,3 +125,48 @@ def test_the_hotkeys_by_group(qtbot: QtBot) -> None:
     hotkeys = text[text.index(HOTKEYS_TITLE) :]
     assert "Shift + drag a vertex" in hotkeys and "hold Shift" in hotkeys
     assert "right-click" not in hotkeys  # Good to know tells about it
+
+
+def test_the_language_list_by_the_name(qtbot: QtBot) -> None:
+    window = make(qtbot)
+    box = window.language
+    assert box.currentData() is TRANSLATIONS.language and box.toolTip() == "Language"
+    from cube_net.ui.help.help_window import LANGUAGE_GAP_PX
+
+    block = window.blocks[0]
+    document = block.document()
+    assert document is not None
+    name = document.firstBlock().layout()
+    assert box.parent() is block and name is not None
+    end = name.lineAt(0).naturalTextWidth()
+    assert box.x() == round(end + LANGUAGE_GAP_PX)  # right after "Cube Net", where it's seen
+    assert box.geometry().top() < 40  # on the name's line, above "How it works"
+    chosen: list[Language] = []
+    window.language_changed.connect(chosen.append)
+    box.setCurrentIndex(list(Language).index(Language.RUSSIAN))
+    assert chosen == [Language.RUSSIAN]
+
+
+def test_the_wheel_over_the_language_list_scrolls_the_page(qtbot: QtBot) -> None:
+    from PyQt6.QtCore import QPoint, QPointF
+    from PyQt6.QtGui import QWheelEvent
+    from PyQt6.QtWidgets import QApplication
+
+    window = make(qtbot)
+    box = window.language
+    before = box.currentIndex()
+    bar = window.scroll.verticalScrollBar()
+    assert bar is not None
+    pos = QPointF(box.width() / 2, box.height() / 2)
+    down = QWheelEvent(
+        pos,
+        box.mapToGlobal(pos),
+        QPoint(0, 0),
+        QPoint(0, -120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    QApplication.sendEvent(box, down)
+    assert box.currentIndex() == before and bar.value() > 0

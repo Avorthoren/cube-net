@@ -6,10 +6,11 @@ applications menu's entry (Linux, an AppImage), how far the sheet can be zoomed 
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel, QSpinBox, QWidget
+from PyQt6.QtWidgets import QCheckBox, QFormLayout, QHBoxLayout, QLabel, QSpinBox, QWidget
 
 from cube_net.ui.i18n import Language, bind
 from cube_net.ui.i18n.translator import in_every_language
+from cube_net.ui.language_box import LanguageBox
 from cube_net.ui.sheet.zoom import MAX_ZOOM_RANGE
 
 # Room between the language's label and its list, after the label's longest text.
@@ -61,11 +62,8 @@ class PreferencesTab(QWidget):
         metrics = self.language_label.fontMetrics()
         width = max(metrics.horizontalAdvance(text) for text in in_every_language("Language"))
         self.language_label.setFixedWidth(width + LANGUAGE_GAP_PX)
-        self.language = QComboBox(self)
-        for known in Language:
-            self.language.addItem(known.native_name, known)  # in its own language, whatever the current one is
-        self.language.setCurrentIndex(list(Language).index(language))
-        self.language.currentIndexChanged.connect(lambda i: self.language_changed.emit(self.language.itemData(i)))
+        self.language = LanguageBox(language, self)  # it follows a change made elsewhere (Help -> Help)
+        self.language.chosen.connect(self.language_changed)
         self.show_labels = QCheckBox(self)
         bind(self.show_labels, self.show_labels.setText, "Show vertex labels")
         bind(self.show_labels, self.show_labels.setToolTip, "Hotkey: L")  # its key (see `MainWindow`)
