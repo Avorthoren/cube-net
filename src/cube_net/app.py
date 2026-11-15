@@ -25,10 +25,21 @@ ICON = files("cube_net.ui.icons") / "cube_net.png"
 SMOKE_TEST = "--smoke-test"
 SMOKE_TEST_MS = 1500
 
+# Added to the name of a run from source (not a packaged build): Qt keeps the settings and the app data folder (the
+# session logs) under the application's name, so it has its own, and never changes those of the installed application
+# (its last project, above all: a project saved in a newer format couldn't be reopened by an older installed version).
+FROM_SOURCE_SUFFIX = " (dev)"
+
+
+def application_name(packaged: bool) -> str:
+    """What the application is called for its settings and data: "Cube Net" when packaged (PyInstaller's builds),
+    "Cube Net (dev)" when run from source."""
+    return APP_TITLE if packaged else APP_TITLE + FROM_SOURCE_SUFFIX
+
 
 def main(argv: list[str] | None = None) -> int:
     app = QApplication(sys.argv if argv is None else argv)
-    app.setApplicationName(APP_TITLE)
+    app.setApplicationName(application_name(packaged=getattr(sys, "frozen", False)))  # PyInstaller sets `frozen`
     app.setOrganizationName("cube_net")
     app.setDesktopFileName(ENTRY_NAME)  # which desktop entry the windows belong to: the Dock shows its icon
     app.setWindowIcon(QIcon(str(ICON)))  # every window's, and the taskbar's

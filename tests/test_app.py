@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -22,8 +23,11 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         def arguments(self) -> list[str]:
             return list(self._argv)
 
-        def setApplicationName(self, _name: str) -> None:
-            pass
+        # The names it was given, by every application made (kept apart from what `main` does, in order).
+        names: ClassVar[list[str]] = []
+
+        def setApplicationName(self, name: str) -> None:
+            self.names.append(name)
 
         def setOrganizationName(self, _name: str) -> None:
             pass
@@ -127,3 +131,16 @@ def test_the_smoke_test_shows_the_window_and_quits(calls: list[str], monkeypatch
     assert app.main(["cube-net", app.SMOKE_TEST]) == 7
     # Its own settings (not the user's), no project opened or reopened.
     assert calls[3:] == ["window with its own settings", "show", f"quit in {app.SMOKE_TEST_MS} ms", "exec"]
+
+
+def test_a_run_from_source_has_its_own_settings_and_logs() -> None:
+    assert app.application_name(packaged=True) == "Cube Net"
+    assert app.application_name(packaged=False) == "Cube Net (dev)"
+
+
+def test_named_by_how_it_runs(calls: list[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(app.sys, "frozen", True, raising=False)
+    app.main(["cube-net"])
+    monkeypatch.delattr(app.sys, "frozen")
+    app.main(["cube-net"])
+    assert app.QApplication.names == ["Cube Net", "Cube Net (dev)"]  # type: ignore[attr-defined]

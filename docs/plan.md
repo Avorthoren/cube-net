@@ -442,6 +442,9 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
 ### 6.7 Session recording (`ui/session/`)
 - Purpose: reproduce exactly what the user did when they report a problem. One file per launch,
   `session-<date>-<time>-<pid>.log` in the app data folder (on Linux `~/.local/share/cube_net/Cube Net/sessions/`).
+  Run from source (not a packaged build), the application is called "Cube Net (dev)": its settings
+  (`~/.config/cube_net/Cube Net (dev).conf`) and logs (`~/.local/share/cube_net/Cube Net (dev)/sessions/`) are its own,
+  so it never touches the installed application's (its last project above all).
   The path is printed to stderr and shown in the status bar at start.
 - `SessionRecorder` is an application-wide event filter. It never consumes events, and the line format is described
   in its module docstring: positions over the sheet in sheet coordinates (3 decimals = the input rounding), other
