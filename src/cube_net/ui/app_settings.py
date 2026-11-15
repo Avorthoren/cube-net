@@ -9,6 +9,8 @@ from pathlib import Path
 
 from PyQt6.QtCore import QSettings
 
+from cube_net.core.body import CUBE
+from cube_net.core.body.body import COLOR_PATTERN
 from cube_net.ui.i18n.language import Language
 from cube_net.ui.sheet.zoom import DEFAULT_MAX_ZOOM, MAX_ZOOM_RANGE
 from cube_net.ui.style import DEFAULT_STYLE, Style, StyleError
@@ -216,6 +218,19 @@ class AppSettings:
         for field in fields(Style):
             value = getattr(style, field.name)
             self._settings.setValue(_STYLE + field.name, ",".join(value) if isinstance(value, tuple) else value)
+
+    @property
+    def legacy_face_colors(self) -> tuple[str, ...] | None:
+        """The face colours of Settings -> Style from before they belonged to projects (version 1.2.0 and earlier), if
+        they were stored: projects saved then open with them, and new projects of the cube start with them. Never
+        written any more."""
+        stored = self._settings.value(_STYLE + "face_colors")
+        if stored is None:
+            return None
+        colors = tuple(str(stored).upper().split(","))
+        if len(colors) != len(CUBE.face_numbers) or not all(COLOR_PATTERN.fullmatch(c) for c in colors):
+            return None
+        return colors
 
     def _bool(self, key: str, default: bool) -> bool:
         return bool(self._settings.value(key, default, type=bool))

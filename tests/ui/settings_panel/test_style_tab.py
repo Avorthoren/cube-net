@@ -4,6 +4,7 @@
 import pytest
 from pytestqt.qtbot import QtBot
 
+from cube_net.core.body import CUBE
 from cube_net.ui.settings_panel.style_tab import (
     CUTS_AND_FOLDS,
     FACE_COLORS,
@@ -18,6 +19,7 @@ from cube_net.ui.style.style import least_vertex_radius
 
 def make(qtbot: QtBot) -> StyleTab:
     tab = StyleTab(DEFAULT_STYLE)
+    tab.set_face_colors(CUBE.colors, CUBE.colors)
     qtbot.addWidget(tab)
     return tab
 
@@ -28,7 +30,7 @@ def test_sections_in_order(qtbot: QtBot) -> None:
 
 def test_it_shows_the_style(qtbot: QtBot) -> None:
     tab = make(qtbot)
-    assert [f.color() for f in tab.face_fields] == list(DEFAULT_STYLE.face_colors)
+    assert [f.color() for f in tab.face_fields] == list(CUBE.colors)
     assert (tab.hatch_columns.value(), tab.hatch_rows.value()) == (10, 5)
     shown = (tab.dashes.value(), tab.edge_width.value(), tab.vertex_radius.value())
     assert shown == (DEFAULT_STYLE.dashes_per_edge, DEFAULT_STYLE.edge_width, DEFAULT_STYLE.vertex_radius)
@@ -79,13 +81,29 @@ def test_restore_puts_back_just_its_section(qtbot: QtBot, monkeypatch: pytest.Mo
 
 def test_restore_face_colors(qtbot: QtBot, monkeypatch: pytest.MonkeyPatch) -> None:
     tab = make(qtbot)
+    changed: list[tuple[str, ...]] = []
+    tab.face_colors_changed.connect(changed.append)
     tab.face_fields[2].edit.setText("")
     qtbot.keyClicks(tab.face_fields[2].edit, "000000")
-    assert tab.style().face_colors[2] == "#000000"
+    assert tab.face_colors()[2] == "#000000"
+    assert changed[-1][2] == "#000000"
     monkeypatch.setattr("cube_net.ui.settings_panel.section.confirm_restore", lambda *_: True)
     tab.sections[FACE_COLORS].restore_button.click()
-    assert tab.style().face_colors == DEFAULT_STYLE.face_colors
-    assert tab.face_swatches[2].color().name().upper() == DEFAULT_STYLE.face_colors[2]
+    assert tab.face_colors() == changed[-1] == CUBE.colors
+    assert tab.face_swatches[2].color().name().upper() == CUBE.colors[2]
+    assert tab.style() == DEFAULT_STYLE  # the face colours aren't part of the style
+
+
+def test_a_row_per_face_of_the_projects_body(qtbot: QtBot) -> None:
+    tab = make(qtbot)
+    changed: list[tuple[str, ...]] = []
+    tab.face_colors_changed.connect(changed.append)
+    tab.set_face_colors(("#111111", "#222222"), ("#FFFFFF", "#FFFFFF"))
+    assert [f.color() for f in tab.face_fields] == ["#111111", "#222222"]
+    assert len(tab.face_swatches) == 2
+    assert changed == []  # shown, not changed by the user
+    tab.set_face_colors(CUBE.colors, CUBE.colors)
+    assert len(tab.face_fields) == 6
 
 
 def test_units_are_outside_the_fields(qtbot: QtBot) -> None:
@@ -168,8 +186,7 @@ def test_a_colour_picker_for_every_face_only(qtbot: QtBot) -> None:
 
     from cube_net.ui.i18n import TRANSLATIONS, Language
 
-    tab = StyleTab(DEFAULT_STYLE)
-    qtbot.addWidget(tab)
+    tab = make(qtbot)
     assert all(field.pick_button is not None for field in tab.face_fields)
     assert tab.grid_color.pick_button is None
     titles: list[str] = []
@@ -189,4 +206,4 @@ def test_a_colour_picker_for_every_face_only(qtbot: QtBot) -> None:
     QTimer.singleShot(50, close)
     tab.face_fields[2].pick()
     assert titles == ["Цвет грани 3", "Face 3 color"]
-    assert tab.style() == DEFAULT_STYLE  # nothing chosen
+    assert tab.style() == DEFAULT_STYLE and tab.face_colors() == CUBE.colors  # nothing chosen

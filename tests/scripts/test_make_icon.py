@@ -9,7 +9,7 @@ import pytest
 from PyQt6.QtGui import QColor, QImage
 from pytestqt.qtbot import QtBot
 
-from cube_net.ui.style import DEFAULT_STYLE
+from cube_net.core.body import CUBE
 from scripts import make_icon
 
 
@@ -20,7 +20,7 @@ def test_the_faces_in_their_colours_and_nothing_around(qtbot: QtBot, size: int) 
     assert image.pixelColor(0, 0).alpha() == 0  # a corner: outside the net
     assert image.pixelColor(size - 1, size - 1).alpha() == 0
     # The cross is 3 x 4 faces: the middle of its column is face 2 (orange), its top face 1 (blue).
-    colours = {face: QColor(DEFAULT_STYLE.face_colors[face - 1]) for face in range(1, 7)}
+    colours = {face: QColor(CUBE.colors[face - 1]) for face in range(1, 7)}
     middle = image.pixelColor(size // 2, int(size * 0.42))
     assert middle == colours[2]
     used = {image.pixelColor(x, y).name().upper() for x in range(0, size, max(1, size // 64)) for y in range(size)}

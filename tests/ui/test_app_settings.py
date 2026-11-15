@@ -78,14 +78,14 @@ def test_style_default_and_persisted(tmp_path: Path) -> None:
 
     s = settings_at(tmp_path / "s.ini")
     assert s.style == DEFAULT_STYLE
-    changed = replace(DEFAULT_STYLE, edge_width=7.5, hatch_columns=3, face_colors=("#000000",) * 6)
+    changed = replace(DEFAULT_STYLE, edge_width=7.5, hatch_columns=3)
     s.style = changed
     assert settings_at(tmp_path / "s.ini").style == changed
 
 
 @pytest.mark.parametrize(
     ("key", "stored"),
-    [("edge_width", "99"), ("edge_width", "abc"), ("hatch_rows", "0"), ("grid_color", "#xyz"), ("face_colors", "#1")],
+    [("edge_width", "99"), ("edge_width", "abc"), ("hatch_rows", "0"), ("grid_color", "#xyz")],
 )
 def test_a_bad_style_value_gives_just_its_default(tmp_path: Path, key: str, stored: str) -> None:
     from dataclasses import replace
@@ -179,3 +179,25 @@ def test_help_not_shown_at_a_start_yet_then_remembered(tmp_path: Path) -> None:
     assert s.help_shown is False  # a first start, or the first after an update to a version with it
     s.help_shown = True
     assert settings_at(tmp_path / "s.ini").help_shown is True
+
+
+def test_the_face_colours_of_an_older_version(tmp_path: Path) -> None:
+    """Version 1.2.0 kept the face colours in Settings -> Style; they are read, never written."""
+    from dataclasses import replace
+
+    from cube_net.ui.style import DEFAULT_STYLE
+
+    assert settings_at(tmp_path / "s.ini").legacy_face_colors is None
+    stored = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
+    stored.setValue("style/face_colors", "#111111,#222222,#333333,#444444,#555555,#66660a")
+    stored.sync()
+    s = settings_at(tmp_path / "s.ini")
+    assert s.legacy_face_colors == ("#111111", "#222222", "#333333", "#444444", "#555555", "#66660A")
+    s.style = replace(DEFAULT_STYLE, edge_width=7.5)  # saving the style leaves them as they are
+    assert settings_at(tmp_path / "s.ini").legacy_face_colors == s.legacy_face_colors
+
+
+@pytest.mark.parametrize("stored", ["#111111", "#111111,#222222,#333333,#444444,#555555,red", ""])
+def test_unusable_face_colours_of_an_older_version(tmp_path: Path, stored: str) -> None:
+    QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat).setValue("style/face_colors", stored)
+    assert settings_at(tmp_path / "s.ini").legacy_face_colors is None

@@ -19,7 +19,6 @@ def test_everything_reads_the_new_values() -> None:
             dashes_per_edge=7,
             grid_width=0.0,
             grid_color="#ABCDEF",
-            face_colors=("#111111", "#222222", "#333333", "#444444", "#555555", "#666666"),
         )
     )
     assert net_style.EDGE_WIDTH_PX == 8.0
@@ -29,7 +28,6 @@ def test_everything_reads_the_new_values() -> None:
     assert (net_style.HATCH_COLUMNS, net_style.HATCH_ROWS, net_style.DASHES_PER_EDGE) == (4, 3, 7)
     assert net_style.GRID_WIDTH_PX == 0.0
     assert palette.GRID.name().upper() == "#ABCDEF"
-    assert palette.FACE_COLORS[6].name() == "#666666"
 
 
 def test_and_back() -> None:

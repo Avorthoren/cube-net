@@ -206,7 +206,7 @@ def test_recording_started_at_launch(qtbot: QtBot, tmp_path: Path) -> None:
     assert window.recorder is not None
     lines = session_lines(window.recorder.log.path)
     assert "# recording started: at app launch" in lines
-    assert lines[-12:] == [
+    assert lines[-13:] == [
         "state net default",
         "state labels on",
         "state coordinates on",
@@ -214,6 +214,7 @@ def test_recording_started_at_launch(qtbot: QtBot, tmp_path: Path) -> None:
         "state blink on",
         "state max_zoom 1000",
         f"state style {format_style(DEFAULT_STYLE)}",
+        "state face_colors #0057B8/#F28E00/#008A4B/#8B45B5/#E50055/#00A6D6",
         f"state window {window.width()}x{window.height()}",
         "state bounds off",
         "state ruler off",
@@ -2412,7 +2413,7 @@ class TestTargetArea:
     def test_its_range_and_decimals(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
         field = window.bounding.target
-        assert (field.minimum(), field.maximum(), field.decimals()) == (0, 20, 3)
+        assert (field.minimum(), field.maximum(), field.decimals()) == (0, 10000, 3)
 
     def test_an_entered_value_is_used_at_once(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
@@ -2434,8 +2435,8 @@ class TestTargetArea:
 
     def test_out_of_range_cannot_get_through(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
-        self.enter(qtbot, window, "99")
-        assert 0 <= window.project_settings.area_threshold <= 20
+        self.enter(qtbot, window, "12345")
+        assert 0 <= window.project_settings.area_threshold <= 10000
 
     def test_a_change_is_an_unsaved_change(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
@@ -2694,14 +2695,15 @@ class TestSnapshots:
         window.stop_recording("test over")
 
     def test_unsaved_settings_are_in_it(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from dataclasses import replace
         from fractions import Fraction
 
-        from cube_net.core.project_settings import ProjectSettings
-
         window = self.make(qtbot, tmp_path, record=False)
-        window.project_settings = ProjectSettings(Fraction(5))
+        window.project_settings = replace(
+            window.project_settings, area_threshold=Fraction(5), face_colors=("#000000",) * 6
+        )
         window.logging_action.trigger()
-        assert project_from_bytes(self.snapshots(window)[-1]).settings == ProjectSettings(Fraction(5))
+        assert project_from_bytes(self.snapshots(window)[-1]).settings == window.project_settings
         window.stop_recording("test over")
 
     def test_one_more_for_another_project(self, qtbot: QtBot, tmp_path: Path) -> None:
@@ -2986,7 +2988,6 @@ class TestStyle:
         return window
 
     def test_a_change_is_saved_and_used_at_once(self, qtbot: QtBot, tmp_path: Path) -> None:
-        from cube_net.ui import palette
         from cube_net.ui.sheet import net_style
 
         window = self.make(qtbot, tmp_path, record=True)
@@ -2995,14 +2996,54 @@ class TestStyle:
         assert net_style.EDGE_WIDTH_PX == 8
         assert net_style.CUT_HITBOX_PX == 12  # still 1.5 times as wide: a hovered cut is drawn this wide too
         assert window.settings.style.edge_width == 8
+        assert window.recorder is not None
+        assert session_lines(window.recorder.log.path)[-1].startswith("settings style tiling=")
+        assert not window.is_dirty  # the style is the application's
+        window.stop_recording("test over")
+
+    def test_face_colours_are_the_projects(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.core.body import CUBE
+        from cube_net.core.project import load_project
+        from cube_net.ui import palette
+
+        window = self.make(qtbot, tmp_path, record=True)
+        tab = window.settings_panel.style_tab
+        assert window.project_settings.face_colors == CUBE.colors
         tab.face_fields[0].edit.setText("")
         qtbot.keyClicks(tab.face_fields[0].edit, "123abc")
         assert palette.FACE_COLORS[1].name().upper() == "#123ABC"
         assert tab.face_swatches[0].color().name().upper() == "#123ABC"
         assert window.recorder is not None
-        assert session_lines(window.recorder.log.path)[-1].startswith("settings style faces=#123ABC/")
+        assert session_lines(window.recorder.log.path)[-1].startswith("project face_colors #123ABC/")
+        assert window.is_dirty
+        path = tmp_path / "colours.cubenet"
+        assert window.save_project_to(path)
+        assert load_project(path).settings.face_colors == ("#123ABC", *CUBE.colors[1:])
+        window.start_new_project()
+        assert window.project_settings.face_colors == CUBE.colors
+        assert tab.face_fields[0].color() == CUBE.colors[0]
+        assert window.open_project_from(path)
+        assert palette.FACE_COLORS[1].name().upper() == "#123ABC"
         assert not window.is_dirty
         window.stop_recording("test over")
+
+    def test_the_face_colours_of_an_older_version(self, qtbot: QtBot, tmp_path: Path) -> None:
+        """Version 1.2.0 kept the face colours in the Style: projects saved by it, and new ones, start with them."""
+        from cube_net.core.project import new_project, save_project
+        from cube_net.ui import palette
+
+        older = ("#111111", "#222222", "#333333", "#444444", "#555555", "#666666")
+        stored = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
+        stored.setValue("style/face_colors", ",".join(older))
+        stored.sync()
+        path = tmp_path / "old.cubenet"
+        save_project(new_project(), path)  # no colours, as one saved by 1.2.0 would have
+        window = self.make(qtbot, tmp_path)
+        assert window.project_settings.face_colors == older
+        assert window.open_project_from(path)
+        assert window.project_settings.face_colors == older
+        assert palette.FACE_COLORS[6].name().upper() == "#666666"
+        assert not window.is_dirty  # filled in, not changed
 
     def test_it_comes_back_next_time(self, qtbot: QtBot, tmp_path: Path) -> None:
         from cube_net.ui.sheet import net_style

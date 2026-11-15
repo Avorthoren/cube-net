@@ -1,7 +1,8 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""`Style`: the values of Settings -> Style, with their ranges. The defaults are what the style files say."""
+"""`Style`: the values of Settings -> Style, with their ranges. The defaults are what the style files say. The face
+colours, shown there too, belong to the project (`ProjectSettings.face_colors`)."""
 
 import math
 import re
@@ -27,9 +28,6 @@ class StyleError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Style:
-    # Face k's colour is face_colors[k - 1], as "#RRGGBB".
-    face_colors: tuple[str, str, str, str, str, str]
-
     # A face is tiled into hatch_columns x hatch_rows rectangles.
     hatch_columns: int
     hatch_rows: int
@@ -49,11 +47,8 @@ class Style:
     grid_width: float
 
     def __post_init__(self) -> None:
-        for color in (*self.face_colors, self.grid_color):
-            if not COLOR_PATTERN.fullmatch(color):
-                raise StyleError(f"a colour must be #RRGGBB with capital letters, got {color!r}")
-        if len(self.face_colors) != 6:
-            raise StyleError(f"there are 6 faces, got {len(self.face_colors)} colours")
+        if not COLOR_PATTERN.fullmatch(self.grid_color):
+            raise StyleError(f"a colour must be #RRGGBB with capital letters, got {self.grid_color!r}")
         _check("tiling", self.hatch_columns, TILING_RANGE)
         _check("tiling", self.hatch_rows, TILING_RANGE)
         _check("dashes", self.dashes_per_edge, DASHES_RANGE)
@@ -87,7 +82,6 @@ def _name(color: object) -> str:
 # What the style files say, taken before anything could change it. The README's animation shows it: after changing
 # the defaults, run scripts/make_readme_animation.py.
 DEFAULT_STYLE = Style(
-    face_colors=tuple(_name(palette.FACE_COLORS[face]) for face in range(1, 7)),  # type: ignore[arg-type]
     hatch_columns=net_style.HATCH_COLUMNS,
     hatch_rows=net_style.HATCH_ROWS,
     dashes_per_edge=net_style.DASHES_PER_EDGE,

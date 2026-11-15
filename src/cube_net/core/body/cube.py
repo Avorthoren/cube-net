@@ -46,6 +46,16 @@ DEFAULT_FACE_ORIGINS: Mapping[Face, Vec] = MappingProxyType(
     }
 )
 
+# The default face colours from docs/idea.txt. Look-alike colours are on opposite faces (1-6, 2-5, 3-4).
+FACE_COLORS: tuple[str, ...] = (
+    "#0057B8",  # deep blue
+    "#F28E00",  # orange
+    "#008A4B",  # green
+    "#8B45B5",  # purple
+    "#E50055",  # magenta
+    "#00A6D6",  # cyan
+)
+
 # Faces are added to the default net in this order, so vertex ids (creation order) number the images of each cube
 # vertex exactly as in docs/idea.txt: A_1 = (11, 14), A_2 = (10, 13), A_3 = (11, 10), E_1 = (11, 11), E_2 = (10, 12).
 BUILD_ORDER: tuple[Face, ...] = (1, 2, 6, 3, 4, 5)
@@ -56,6 +66,7 @@ def cube_body() -> Body:
     return Body(
         {face: (LOCAL_CORNERS, FACE_CORNERS[face]) for face in FACES},
         [(face, Rigid90.translation(DEFAULT_FACE_ORIGINS[face])) for face in BUILD_ORDER],
+        FACE_COLORS,
     )
 
 

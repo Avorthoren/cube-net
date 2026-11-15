@@ -1,12 +1,15 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""The Style tab: how the net and the sheet look (docs/idea.txt, settings). Every change takes effect at once."""
+"""The Style tab: how the net and the sheet look (docs/idea.txt, settings). Every change takes effect at once.
 
+The face colours belong to the open project (one row per face of its body); everything else is the application's."""
+
+from collections.abc import Sequence
 from dataclasses import replace
 
 from PyQt6.QtCore import QLocale, pyqtSignal
-from PyQt6.QtWidgets import QDoubleSpinBox, QFrame, QLabel, QSpinBox, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout, QWidget
 
 from cube_net.ui.i18n import bind, tr
 from cube_net.ui.settings_panel.color_field import ColorField
@@ -38,9 +41,8 @@ CUTS_AND_FOLDS = "Cuts and folds"
 VERTICES = "Vertices"
 GRID = "Grid"
 
-# Which values each section restores.
+# Which values of the style each section restores (the face colours are the project's).
 SECTION_FIELDS = {
-    FACE_COLORS: ("face_colors",),
     FACE_TILING: ("hatch_columns", "hatch_rows"),
     CUTS_AND_FOLDS: ("dashes_per_edge", "edge_width"),
     VERTICES: ("vertex_radius",),
@@ -74,26 +76,26 @@ class StyleTab(QWidget):
     # The user changed the style.
     style_changed = pyqtSignal(object)
 
+    # The user changed the project's face colours (a tuple of "#RRGGBB", face k: [k - 1]).
+    face_colors_changed = pyqtSignal(object)
+
     def __init__(self, style: Style, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._style = style
+        self._face_colors: tuple[str, ...] = ()
+        self._default_face_colors: tuple[str, ...] = ()
         self._filling = False
         layout = QVBoxLayout(self)
         self.sections: dict[str, Section] = {}
         self.separators: list[QFrame] = []
 
-        colors = self._section(FACE_COLORS)
+        self._colors_section = self._section(FACE_COLORS)
+        self._face_rows = QWidget(self._colors_section)
+        self._face_rows_layout = QVBoxLayout(self._face_rows)
+        self._face_rows_layout.setContentsMargins(0, 0, 0, 0)
+        self._colors_section.body.addWidget(self._face_rows)
         self.face_swatches: list[ColorSwatch] = []
         self.face_fields: list[ColorField] = []
-        for face in range(1, 7):
-            swatch, field = (
-                ColorSwatch(style.face_colors[face - 1], colors),
-                ColorField(style.face_colors[face - 1], colors, lambda face=face: tr("Face {face} color", face=face)),
-            )
-            field.changed.connect(lambda color, face=face: self._on_face_color(face, color))
-            colors.add_row(QLabel(f"{face}", colors), swatch, field)
-            self.face_swatches.append(swatch)
-            self.face_fields.append(field)
 
         tiling = self._section(FACE_TILING)
         self.hatch_columns, self.hatch_rows = _count_box(TILING_RANGE, tiling), _count_box(TILING_RANGE, tiling)
@@ -128,6 +130,43 @@ class StyleTab(QWidget):
     def style(self) -> Style:
         return self._style
 
+    def face_colors(self) -> tuple[str, ...]:
+        return self._face_colors
+
+    def set_face_colors(self, colors: Sequence[str], defaults: Sequence[str]) -> None:
+        """Show the open project's face colours (without taking that for a change by the user); `defaults` are what
+        Restore default brings back. A row per face: rebuilt if the number of faces differs."""
+        self._face_colors, self._default_face_colors = tuple(colors), tuple(defaults)
+        if len(self.face_fields) != len(colors):
+            self._build_face_rows(len(colors))
+        self._filling = True
+        try:
+            for i, color in enumerate(colors):
+                self.face_swatches[i].set_color(color)
+                self.face_fields[i].set_color(color)
+        finally:
+            self._filling = False
+
+    def _build_face_rows(self, count: int) -> None:
+        while (item := self._face_rows_layout.takeAt(0)) is not None:
+            row = item.widget()
+            if row is not None:
+                row.deleteLater()
+        self.face_swatches, self.face_fields = [], []
+        for face in range(1, count + 1):
+            row = QWidget(self._face_rows)
+            swatch = ColorSwatch("#FFFFFF", row)
+            field = ColorField("#FFFFFF", row, lambda face=face: tr("Face {face} color", face=face))
+            field.changed.connect(lambda color, face=face: self._on_face_color(face, color))
+            line = QHBoxLayout(row)
+            line.setContentsMargins(0, 0, 0, 0)
+            for widget in (QLabel(f"{face}", row), swatch, field):
+                line.addWidget(widget)
+            line.addStretch()
+            self._face_rows_layout.addWidget(row)
+            self.face_swatches.append(swatch)
+            self.face_fields.append(field)
+
     def _section(self, title: str) -> Section:
         section = Section(title, self)
         section.restore_requested.connect(lambda: self._restore(title))
@@ -147,9 +186,6 @@ class StyleTab(QWidget):
         """Show `style` in the fields (without taking that for a change by the user)."""
         self._filling = True
         try:
-            for i, color in enumerate(style.face_colors):
-                self.face_swatches[i].set_color(color)
-                self.face_fields[i].set_color(color)
             self.hatch_columns.setValue(style.hatch_columns)
             self.hatch_rows.setValue(style.hatch_rows)
             self.dashes.setValue(style.dashes_per_edge)
@@ -165,9 +201,15 @@ class StyleTab(QWidget):
             self._filling = False
 
     def _on_face_color(self, face: int, color: str) -> None:
-        colors = list(self._style.face_colors)
+        if self._filling:
+            return
+        colors = list(self._face_colors)
         colors[face - 1] = color
-        self._change(face_colors=tuple(colors))
+        self._change_face_colors(tuple(colors))
+
+    def _change_face_colors(self, colors: tuple[str, ...]) -> None:
+        self.set_face_colors(colors, self._default_face_colors)  # the swatches follow
+        self.face_colors_changed.emit(colors)
 
     def _change(self, **values: object) -> None:
         if self._filling:
@@ -178,4 +220,7 @@ class StyleTab(QWidget):
         self.style_changed.emit(self._style)
 
     def _restore(self, title: str) -> None:
-        self._change(**{name: getattr(DEFAULT_STYLE, name) for name in SECTION_FIELDS[title]})
+        if title == FACE_COLORS:
+            self._change_face_colors(self._default_face_colors)
+        else:
+            self._change(**{name: getattr(DEFAULT_STYLE, name) for name in SECTION_FIELDS[title]})

@@ -6,9 +6,12 @@
 The README's animation shows the default look: after changing a default here, run scripts/make_readme_animation.py.
 """
 
+from collections.abc import Sequence
 from types import MappingProxyType
 
 from PyQt6.QtGui import QColor
+
+from cube_net.core.body.cube import FACE_COLORS as CUBE_FACE_COLORS
 
 # Background of the main area around the sheet.
 MAIN_AREA = QColor("#9AA0A6")
@@ -19,18 +22,9 @@ SHEET_BORDER = QColor("#5F6368")
 # Thin light-grey 1x1 grid on the sheet.
 GRID = QColor("#D3D3D3")
 
-FACE_COLORS = MappingProxyType(
-    {
-        # Default face colours from docs/idea.txt. Look-alike colours are on opposite faces (1-6, 2-5, 3-4).
-        # The user can change them (Settings -> Style): `set_colors` puts the user's colours in place.
-        1: QColor("#0057B8"),  # deep blue
-        2: QColor("#F28E00"),  # orange
-        3: QColor("#008A4B"),  # green
-        4: QColor("#8B45B5"),  # purple
-        5: QColor("#E50055"),  # magenta
-        6: QColor("#00A6D6"),  # cyan
-    }
-)
+# The open project's face colours (face k: FACE_COLORS[k]); `set_face_colors` puts them in place. The cube's default
+# ones (docs/idea.txt) until a project says otherwise.
+FACE_COLORS = MappingProxyType({face: QColor(color) for face, color in enumerate(CUBE_FACE_COLORS, start=1)})
 
 # Outline of the grid's preview square in the settings.
 SWATCH_OUTLINE = QColor("#000000")
@@ -123,8 +117,13 @@ APPROVE_BUTTON_PRESSED_TOP = QColor("#9AA0A6")
 APPROVE_BUTTON_DISABLED = QColor("#9E9E9E")
 
 
-def set_colors(face_colors: dict[int, QColor], grid: QColor) -> None:
-    """Use these colours from now on."""
-    global FACE_COLORS, GRID
-    FACE_COLORS = MappingProxyType(dict(face_colors))
+def set_face_colors(colors: Sequence[str]) -> None:
+    """Use these face colours ("#RRGGBB", face k: colors[k - 1]) from now on."""
+    global FACE_COLORS
+    FACE_COLORS = MappingProxyType({face: QColor(color) for face, color in enumerate(colors, start=1)})
+
+
+def set_grid_color(grid: QColor) -> None:
+    """Use this grid colour from now on."""
+    global GRID
     GRID = grid

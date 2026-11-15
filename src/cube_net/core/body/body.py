@@ -14,6 +14,7 @@ the other's, so coordinates stay rational in every frame.
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -23,6 +24,12 @@ from cube_net.core.geometry import Rigid90, Vec, on_segment, signed_area
 
 type Face = int
 type VertexName = str
+
+# How a colour is written: #RRGGBB, capital letters.
+COLOR_PATTERN = re.compile(r"#[0-9A-F]{6}")
+
+# A face's colour when nothing says otherwise.
+WHITE = "#FFFFFF"
 
 
 class BodyError(ValueError):
@@ -97,9 +104,11 @@ class Body:
         self,
         faces: Mapping[Face, tuple[Sequence[Vec], Sequence[VertexName]]],
         start: Sequence[tuple[Face, Rigid90]],
+        colors: Sequence[str] | None = None,
     ) -> None:
         """`faces`: for each face number (1, 2, ...), its corners, counter-clockwise in its own frame, and their names.
         `start`: where each face goes in the starting net (local -> sheet), in the order its vertices get their ids.
+        `colors`: each face's default colour ("#RRGGBB"; face k: colors[k - 1]), white if not given.
         """
         self._faces = {n: BodyFace(n, tuple(corners), tuple(names)) for n, (corners, names) in faces.items()}
         _check_faces(self._faces)
@@ -114,6 +123,12 @@ class Body:
         placed = sorted(face for face, _ in self._start)
         if placed != sorted(self._faces):
             raise BodyError(f"the starting net must place every face once, got faces {placed}")
+        self._colors = tuple(colors) if colors is not None else (WHITE,) * len(self._faces)
+        if len(self._colors) != len(self._faces):
+            raise BodyError(f"{len(self._faces)} faces, but {len(self._colors)} colours")
+        for color in self._colors:
+            if not COLOR_PATTERN.fullmatch(color):
+                raise BodyError(f"a colour must be #RRGGBB with capital letters, got {color!r}")
 
     # --- faces --------------------------------------------------------------------------------------------------------
 
@@ -131,6 +146,11 @@ class Body:
     def area(self) -> Fraction:
         """The area of the whole surface: the sum of its faces' areas."""
         return self._area
+
+    @property
+    def colors(self) -> tuple[str, ...]:
+        """Each face's default colour, as "#RRGGBB" (face k: colors[k - 1])."""
+        return self._colors
 
     @property
     def start(self) -> tuple[tuple[Face, Rigid90], ...]:

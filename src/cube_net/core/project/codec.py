@@ -6,7 +6,8 @@
 All numbers are exact: fractions are written as strings ("1/3"). Nets, rearrangements and states are stored once each,
 in tables, and referred to by their index: the history holds up to 2000 states, while most of them share the same net.
 Going through the tables also keeps that sharing after loading. The order of the elements of a net and their ids are
-kept as they were, so that a loaded project behaves exactly like the saved one.
+kept as they were, so that a loaded project behaves exactly like the saved one. The body is written out too (unless
+it's the cube), so a project of a body made from a template doesn't need the template.
 """
 
 from __future__ import annotations
@@ -31,10 +32,17 @@ from cube_net.core.project_settings import ProjectSettings, format_threshold
 sys.set_int_max_str_digits(0)
 
 # Raise it whenever the format changes (and keep reading the older ones, if there's anything worth keeping).
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 
-# The older versions still read. 1: no origin (the states have the default one).
-READ_VERSIONS = (1, FORMAT_VERSION)
+# The older versions still read. 1: no origin (the states have the default one). 1 and 2: no kind, always the cube,
+# no face colours (the application fills them in).
+READ_VERSIONS = (1, 2, FORMAT_VERSION)
+
+# What a file of format 3 or later holds: a project (a template is the other kind).
+PROJECT_KIND = "project"
+
+# The body of a project of the cube, which isn't written out.
+CUBE_BODY = "cube"
 
 
 def encode_project(project: Project) -> dict[str, Any]:
@@ -50,6 +58,8 @@ def decode_project(data: object) -> Project:
         if isinstance(version, int) and version > FORMAT_VERSION:
             raise ProjectFileError("It was saved by a newer version of the application.")
         raise ProjectFileError("It has an unknown format version: {version}.", version=repr(version))
+    if version >= 3 and data.get("kind") != PROJECT_KIND:
+        raise ProjectFileError("It isn't a Cube Net project.")
     try:
         return _Decoder(data).project()
     except (KeyError, IndexError, TypeError, ValueError, AttributeError, ZeroDivisionError, NetInvariantError) as e:
@@ -95,6 +105,38 @@ def _write_motion(motion: Rigid90) -> dict[str, Any]:
 
 def _read_motion(data: dict[str, Any]) -> Rigid90:
     return Rigid90(data["k"], _read_vec(data["t"]))
+
+
+def _write_body(body: Body) -> str | dict[str, Any]:
+    if body is CUBE:
+        return CUBE_BODY
+    return {
+        "faces": [
+            {"corners": [_write_vec(c) for c in body.face(n).corners], "names": list(body.face(n).names)}
+            for n in body.face_numbers
+        ],
+        "start": [{"face": face, "placement": _write_motion(placement)} for face, placement in body.start],
+        "colors": list(body.colors),
+    }
+
+
+def _read_body(data: object) -> Body:
+    if data == CUBE_BODY:
+        return CUBE
+    if not isinstance(data, dict):
+        raise TypeError(f"expected a body, got {data!r}")
+    faces = {
+        n: ([_read_vec(c) for c in face["corners"]], [_read_name(name) for name in face["names"]])
+        for n, face in enumerate(data["faces"], start=1)
+    }
+    start = [(s["face"], _read_motion(s["placement"])) for s in data["start"]]
+    return Body(faces, start, [str(c) for c in data["colors"]])
+
+
+def _read_name(name: object) -> str:
+    if not isinstance(name, str):
+        raise TypeError(f"expected a vertex name, got {name!r}")
+    return name
 
 
 def _write_point(point: SurfacePoint) -> dict[str, Any]:
@@ -179,9 +221,15 @@ class _Encoder:
             "undone": [self._entry(entry) for entry in project.history.undone_entries()],
         }
         names, next_index = project.labels.saved()
+        colors = project.settings.face_colors
         return {
             "format_version": FORMAT_VERSION,
-            "settings": {"area_threshold": format_threshold(project.settings.area_threshold)},
+            "kind": PROJECT_KIND,
+            "body": _write_body(project.state.net.body),
+            "settings": {
+                "area_threshold": format_threshold(project.settings.area_threshold),
+                "face_colors": None if colors is None else list(colors),
+            },
             "labels": {"names": [[_write_point(p), name] for p, name in names.items()], "next": next_index},
             "nets": self._nets_data,
             "rearranged": self._rearranged_data,
@@ -252,8 +300,7 @@ class _Encoder:
 class _Decoder:
     def __init__(self, data: dict[str, Any]) -> None:
         self._data = data
-        # Every project is of the cube so far.
-        self._body = CUBE
+        self._body = _read_body(data["body"]) if data["format_version"] >= 3 else CUBE
         self._nets = [_LoadedNet(self._body, net) for net in data["nets"]]
         self._rearranged = [self._rearrangement(r) for r in data["rearranged"]]
         self._states = [self._state(state) for state in data["states"]]
@@ -270,9 +317,17 @@ class _Decoder:
         return Project(
             self._states[data["state"]],
             history,
-            ProjectSettings(_read_number(data["settings"]["area_threshold"])),
+            ProjectSettings(_read_number(data["settings"]["area_threshold"]), self._face_colors()),
             PointLabels.restored(self._body, names, data["labels"]["next"]),
         )
+
+    def _face_colors(self) -> tuple[str, ...] | None:
+        colors = self._data["settings"].get("face_colors")
+        if colors is None:
+            return None
+        if len(colors) != len(self._body.face_numbers):
+            raise ValueError(f"{len(colors)} face colours for {len(self._body.face_numbers)} faces")
+        return tuple(colors)
 
     def _entry(self, data: dict[str, Any]) -> HistoryEntry[EditorSnapshot]:
         return HistoryEntry(

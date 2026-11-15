@@ -314,6 +314,18 @@ Done in T2:
   vertex shows only its label for now (to decide in T6/T7).
 - Saving and loading a project of another body waits for T3 (the file has no body yet).
 
+Done in T3:
+- Project files are format 3: `"kind": "project"`, `"body"` (`"cube"`, or the faces, starting net and default colours
+  of another body), and `settings.face_colors`. Formats 1 and 2 still load: the cube, no colours. A file of format 3
+  with another kind is "not a Cube Net project" until T4 reads templates.
+- The target area goes up to `TEMPLATE_SHEET_WIDTH * TEMPLATE_SHEET_HEIGHT` = 10000 (core/sheet.py), for every project.
+- Face colours are a project setting (`ProjectSettings.face_colors`): Settings -> Style -> Faces colors shows one row
+  per face of the open project's body, a change marks the project unsaved, Restore default brings back the body's
+  colours. The application's style no longer has them; the colours 1.2.0 kept there (`AppSettings.legacy_face_colors`)
+  are only read: a project without colours opens with them, a new cube project starts with them.
+- Still to do for other bodies: Help's animation of the cube paints with the open project's colours (it must use the
+  cube's, T7); the Style tab's scroll bar (T7).
+
 T2 is where any cube assumption I've missed would show up: the test bodies aren't cubes, have faces that aren't
 squares (and one that isn't convex), vertices with 4 faces, and two faces sharing several edges.
 

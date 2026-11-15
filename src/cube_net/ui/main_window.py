@@ -5,6 +5,7 @@
 
 import datetime
 import os
+from dataclasses import replace
 from fractions import Fraction
 from pathlib import Path
 
@@ -23,7 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from cube_net import __version__
-from cube_net.core.body import CUBE
+from cube_net.core.body import CUBE, Body
 from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.cutting import slope_of
 from cube_net.core.editor import EditorSnapshot
@@ -43,6 +44,7 @@ from cube_net.core.project_settings import ProjectSettings, format_threshold
 from cube_net.core.sheet import sheet_box
 from cube_net.core.update_policy import due_today, offer_automatically
 from cube_net.core.version import newer
+from cube_net.ui import palette
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.desktop_integration import AppImage, DesktopEntry, data_home
 from cube_net.ui.dialogs.message_window import MessageIcon, tell
@@ -127,7 +129,7 @@ def project_files() -> str:
 def format_style(style: Style) -> str:
     """The style in session recordings, in one word."""
     return (
-        f"faces={'/'.join(style.face_colors)};tiling={style.hatch_columns}x{style.hatch_rows};"
+        f"tiling={style.hatch_columns}x{style.hatch_rows};"
         f"dashes={style.dashes_per_edge};edge={style.edge_width};radius={style.vertex_radius};"
         f"grid={style.grid_color}/{style.grid_width}"
     )
@@ -162,7 +164,8 @@ class MainWindow(QMainWindow):
         apply_style(self.settings.style)  # before anything gets drawn
         TRANSLATIONS.set_language(self.settings.language)  # before any text is set
         self.point_labels = PointLabels(CUBE)
-        self.project_settings = ProjectSettings()
+        self.project_settings = self._with_face_colors(ProjectSettings(), CUBE)
+        palette.set_face_colors(self._face_colors())
 
         # The file of the project, once it has one.
         self.project_path: Path | None = None
@@ -293,6 +296,7 @@ class MainWindow(QMainWindow):
         recorder.note("state", "blink", "on" if self.settings.blink_on_success else "off")
         recorder.note("state", "max_zoom", self.settings.max_zoom)
         recorder.note("state", "style", format_style(self.settings.style))
+        recorder.note("state", "face_colors", "/".join(self._face_colors()))
         recorder.note("state", "window", f"{self.width()}x{self.height()}")
         recorder.note("state", "bounds", "on" if self.bounding.action.isChecked() else "off")
         ruler_points = [format_point(p) for p in self.ruler_tool.ruler.points]
@@ -759,11 +763,14 @@ class MainWindow(QMainWindow):
     def _show_project(self, project: Project, path: Path | None) -> None:
         self.editor.load(project.state, project.history)
         self.point_labels = project.labels
-        self.project_settings = project.settings
-        self.bounding.set_target(project.settings.area_threshold)
+        # Colours filled in aren't a change: the project looks as it did (or as a new one should).
+        settings = self._with_face_colors(project.settings, project.state.net.body)
+        self.project_settings = settings
+        self._show_face_colors()
+        self.bounding.set_target(settings.area_threshold)
         self.project_path = path
         self._saved_revision = project.history.revision
-        self._saved_settings = project.settings
+        self._saved_settings = settings
         self._update_title()
         self._update_saved_state()
         self.cut_tool.reload()
@@ -845,9 +852,42 @@ class MainWindow(QMainWindow):
         self.help_window.raise_()
         self.help_window.activateWindow()
 
+    def _with_face_colors(self, settings: ProjectSettings, body: Body) -> ProjectSettings:
+        """`settings` with face colours, if it has none: the cube's from Settings -> Style of an older version, if
+        there are any, or else the body's own."""
+        if settings.face_colors is not None:
+            return settings
+        legacy = self.settings.legacy_face_colors if body is CUBE else None
+        return replace(settings, face_colors=legacy if legacy is not None else body.colors)
+
+    def _face_colors(self) -> tuple[str, ...]:
+        colors = self.project_settings.face_colors
+        assert colors is not None  # `_with_face_colors` filled them in
+        return colors
+
+    def _show_face_colors(self) -> None:
+        """Put the project's face colours in place: on the sheet and in Settings -> Style."""
+        palette.set_face_colors(self._face_colors())
+        self.settings_panel.style_tab.set_face_colors(self._face_colors(), self.editor.net.body.colors)
+        self._repaint_net()
+
+    def _on_face_colors_changed(self, colors: tuple[str, ...]) -> None:
+        self.project_settings = replace(self.project_settings, face_colors=colors)
+        palette.set_face_colors(colors)
+        self._repaint_net()
+        self._update_saved_state()
+        if self.recorder is not None:
+            self.recorder.note("project", "face_colors", "/".join(colors))
+
     def _on_style_changed(self, style: Style) -> None:
         self.settings.style = style
         apply_style(style)
+        self._repaint_net()
+        if self.recorder is not None:
+            self.recorder.note("settings", "style", format_style(style))
+
+    def _repaint_net(self) -> None:
+        """Paint the net and Help's animation again, in the colours and sizes in place now."""
         item = self.sheet_view.net_item()
         if item is not None:
             item.restyle()
@@ -856,13 +896,11 @@ class MainWindow(QMainWindow):
         scene = self.sheet_view.scene()
         if scene is not None:
             scene.update()
-        if self.recorder is not None:
-            self.recorder.note("settings", "style", format_style(style))
 
     def _on_target_changed(self, threshold: Fraction) -> None:
         if threshold == self.project_settings.area_threshold:
             return
-        self.project_settings = ProjectSettings(threshold)
+        self.project_settings = replace(self.project_settings, area_threshold=threshold)
         self._update_bounding()
         self._update_saved_state()
         if self.recorder is not None:
@@ -1016,6 +1054,8 @@ class MainWindow(QMainWindow):
         self.settings_panel.tabs.currentChanged.connect(self._on_settings_tab_changed)
         self.settings_panel.preferences.max_zoom_changed.connect(self._on_max_zoom_changed)
         self.settings_panel.style_tab.style_changed.connect(self._on_style_changed)
+        self.settings_panel.style_tab.set_face_colors(self._face_colors(), CUBE.colors)
+        self.settings_panel.style_tab.face_colors_changed.connect(self._on_face_colors_changed)
         self.sheet_view.installEventFilter(self)
         self.settings_action = QAction(self)
         bind(self.settings_action, self.settings_action.setText, "&Settings")

@@ -24,10 +24,11 @@ from project_checks import (
     with_something_to_redo,
 )
 
-from cube_net.core.body import CUBE
+from cube_net.core.body import CUBE, Body, SurfacePoint
 from cube_net.core.editor import Editor, EditorState
+from cube_net.core.geometry import Vec, on_segment
 from cube_net.core.labels import PointLabels
-from cube_net.core.net import validate_net
+from cube_net.core.net import starting_net, validate_net
 from cube_net.core.project import FORMAT_VERSION, ProjectFileError, decode_project, encode_project
 from cube_net.core.project_settings import ProjectSettings
 
@@ -151,7 +152,7 @@ class TestTheRest:
         assert round_trip(project).settings.area_threshold == F(6789, 1000)
 
     def test_the_threshold_is_a_decimal_string(self) -> None:
-        assert encode_project(project_of(editing()))["settings"] == {"area_threshold": "7.100"}
+        assert encode_project(project_of(editing()))["settings"] == {"area_threshold": "7.100", "face_colors": None}
 
     @pytest.mark.parametrize("make", [editing, a_second_cut_in_progress], ids=["first", "second"])
     def test_point_names_stay_the_same(self, make: Callable[[], Editor]) -> None:
@@ -225,7 +226,7 @@ def damage_state_ref(data: dict[str, Any]) -> None:
 
 
 def damage_threshold_too_big(data: dict[str, Any]) -> None:
-    data["settings"]["area_threshold"] = "99.000"
+    data["settings"]["area_threshold"] = "10000.001"
 
 
 def damage_threshold_too_precise(data: dict[str, Any]) -> None:
@@ -359,5 +360,73 @@ class TestOrigin:
     def test_a_name_that_isnt_text_is_damage(self) -> None:
         data = json.loads(json.dumps(encode_project(project_of(self.moved()))))
         data["states"][-1]["origin"]["name"] = 7
+        with pytest.raises(ProjectFileError, match="damaged"):
+            decode_project(data)
+
+
+class TestBodies:
+    def test_a_project_of_the_cube(self) -> None:
+        data = encode_project(project_of(editing()))
+        assert (data["format_version"], data["kind"], data["body"]) == (3, "project", "cube")
+        assert round_trip(project_of(editing())).state.net.body is CUBE
+
+    @pytest.mark.parametrize("body_name", ["long_box", "pinwheel_box", "pillow", "flat_pillow"])
+    def test_a_project_of_another_body(self, body_name: str, request: pytest.FixtureRequest) -> None:
+        """The body goes into the file: the project doesn't need anything else to be opened."""
+        body: Body = request.getfixturevalue(body_name)
+        editor = Editor(starting_net(body))
+        colors = tuple(f"#0000{n:02X}" for n in body.face_numbers)
+        project = project_of(editor, PointLabels(body), ProjectSettings(face_colors=colors))
+        loaded = round_trip(project)
+        again = loaded.state.net.body
+        assert again is not body
+        assert again.face_numbers == body.face_numbers
+        assert all(again.face(n) == body.face(n) for n in body.face_numbers)
+        assert again.start == body.start and again.colors == body.colors and again.area == body.area
+        assert loaded.settings.face_colors == colors
+        assert loaded.labels.name(SurfacePoint.at_vertex(again, body.vertex_names[0])) == body.vertex_names[0]
+        assert state_contents(loaded.state) == state_contents(project.state)
+
+    def test_a_cut_of_another_body_after_loading(self, l_prism: Body) -> None:
+        editor = Editor(starting_net(l_prism))
+        loaded = round_trip(project_of(editor, PointLabels(l_prism)))
+        again = Editor(loaded.state.net)
+        # Across side face 4, the square from (2, 0) to (3, 1): from the middle of its bottom to that of its right.
+        for p in (Vec(F(5, 2), 0), Vec(3, F(1, 2))):
+            cut = next(
+                he for he in again.net.boundary_edges() if on_segment(p, he.origin.position, he.destination.position)
+            )
+            assert again.click(p, cut) is None
+        assert again.state is EditorState.CUT_EDITING
+
+    def test_version_2_is_the_cube_with_no_colours(self) -> None:
+        data = json.loads(json.dumps(encode_project(project_of(editing()))))
+        data["format_version"] = 2
+        for key in ("kind", "body"):
+            del data[key]
+        del data["settings"]["face_colors"]
+        loaded = decode_project(data)
+        assert loaded.state.net.body is CUBE and loaded.settings.face_colors is None
+
+    @pytest.mark.parametrize("kind", [None, "template", "something"])
+    def test_not_a_project(self, kind: object) -> None:
+        data = json.loads(json.dumps(encode_project(project_of(editing()))))
+        data["kind"] = kind
+        with pytest.raises(ProjectFileError, match="isn't a Cube Net project"):
+            decode_project(data)
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            lambda data: data["settings"].__setitem__("face_colors", ["#000000"] * 5),
+            lambda data: data["settings"].__setitem__("face_colors", ["#00000X"] * 6),
+            lambda data: data.__setitem__("body", "sphere"),
+            lambda data: data.__setitem__("body", {"faces": [], "start": [], "colors": []}),
+        ],
+        ids=["5 colours", "bad colour", "unknown body", "empty body"],
+    )
+    def test_damaged(self, damage: Callable[[dict[str, Any]], None]) -> None:
+        data = json.loads(json.dumps(encode_project(project_of(editing()))))
+        damage(data)
         with pytest.raises(ProjectFileError, match="damaged"):
             decode_project(data)

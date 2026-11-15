@@ -15,7 +15,6 @@ def test_the_defaults_are_what_the_style_files_say() -> None:
     assert DEFAULT_STYLE.vertex_radius == net_style.VERTEX_RADIUS_PX
     assert (DEFAULT_STYLE.hatch_columns, DEFAULT_STYLE.hatch_rows) == (net_style.HATCH_COLUMNS, net_style.HATCH_ROWS)
     assert DEFAULT_STYLE.dashes_per_edge == net_style.DASHES_PER_EDGE
-    assert DEFAULT_STYLE.face_colors[0] == palette.FACE_COLORS[1].name().upper()
     assert DEFAULT_STYLE.grid_color == palette.GRID.name().upper()
 
 
@@ -32,8 +31,6 @@ def test_the_defaults_are_what_the_style_files_say() -> None:
         {"grid_width": 5.5},
         {"grid_color": "#12345"},
         {"grid_color": "red"},
-        {"face_colors": ("#000000",) * 5},
-        {"face_colors": ("#00000g",) * 6},
     ],
 )
 def test_out_of_range(values: dict[str, object]) -> None:

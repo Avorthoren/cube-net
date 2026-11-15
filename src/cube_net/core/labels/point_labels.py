@@ -31,11 +31,10 @@ class PointLabels:
             raise ValueError("two points have the same name")
         labels._names.update(names)
         labels._taken.update(names.values())
-        if next_index < len(labels._names):
-            count = len(labels._names)
-            raise ValueError(f"the next name's number {next_index} is less than the {count} names there are")
+        # Names before it may be free (a gap stays); the next one itself never is taken.
+        if next_index < 0 or excel_label(next_index) in labels._taken:
+            raise ValueError(f"the next name's number {next_index} is a name taken already")
         labels._next = next_index
-        labels._skip_taken()
         return labels
 
     def saved(self) -> tuple[dict[SurfacePoint, str], int]:

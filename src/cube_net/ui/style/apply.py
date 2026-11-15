@@ -20,6 +20,4 @@ def apply_style(style: Style) -> None:
         style.dashes_per_edge,
         style.grid_width,
     )
-    palette.set_colors(
-        {face: QColor(color) for face, color in enumerate(style.face_colors, start=1)}, QColor(style.grid_color)
-    )
+    palette.set_grid_color(QColor(style.grid_color))
