@@ -825,6 +825,16 @@ class MainWindow(QMainWindow):
         if self.recorder is not None:
             self.recorder.note("settings", "max_zoom", max_zoom)
 
+    def show_help_at_first_start(self) -> None:
+        """At start: Help -> Help opens by itself the first time (the first start ever, or the first one after an
+        update from a version that didn't do it), and never again."""
+        if self.settings.help_shown:
+            return
+        self.settings.help_shown = True
+        self.show_help()
+        if self.recorder is not None:
+            self.recorder.note("help", "first start")
+
     def show_help(self) -> None:
         """Help -> Help: one window, brought to the front if it's open already."""
         if self.help_window is None:

@@ -44,6 +44,7 @@ _MENU_ENTRY = "linux/menu_entry"
 _CHECK_UPDATES = "updates/check"
 _LAST_UPDATE_CHECK = "updates/last_check"
 _SKIPPED_UPDATE = "updates/skipped"
+_HELP_SHOWN = "help/shown_at_start"
 
 
 class AppSettings:
@@ -124,6 +125,15 @@ class AppSettings:
     @skipped_update.setter
     def skipped_update(self, version: str) -> None:
         self._settings.setValue(_SKIPPED_UPDATE, version)
+
+    @property
+    def help_shown(self) -> bool:
+        """Has Help -> Help been opened by itself at a start already (the first one with this setting)?"""
+        return self._bool(_HELP_SHOWN, False)
+
+    @help_shown.setter
+    def help_shown(self, value: bool) -> None:
+        self._settings.setValue(_HELP_SHOWN, value)
 
     @property
     def language(self) -> Language:

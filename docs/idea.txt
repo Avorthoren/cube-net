@@ -639,7 +639,9 @@ Help menu (to the right of Settings): About, Help, Check for updates.
    license's name) and closes the window. Escape closes it, as does the close button in its corner. It has no minimize
    or maximize buttons: Ubuntu's GNOME draws them on every window it frames, so it draws its own title bar (title and
    close button; dragging it moves the window), like all the application's small windows.
-2. Help (F1): a big window (an ordinary one, it can be resized) that explains the application, with animations: what
+2. Help (F1): a big window (an ordinary one, it can be resized) that explains the application. It also opens by
+   itself, over the reopened project, at the first start (the first ever, or the first after an update from a version
+   that didn't do this), and never again by itself (an app setting remembers it). With animations: what
    a cube net is (a simple polygon that folds onto the whole surface of the unit cube without overlaps, so its area
    is always 6); 1. make a cut (animation: a cut of two segments, not aligned, from A_1 to the middle of A_3-B_3);
    2. adjust it (animation, from where the first ends: the end is dragged onto G_1-F_1, twice as close to F_1 as to

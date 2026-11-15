@@ -3224,6 +3224,18 @@ class TestHelpMenu:
         window.help_action.trigger()
         assert window.help_window is first and first.isVisible()  # the same one again
 
+    def test_opens_by_itself_at_the_first_start_only(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert not window.settings.help_shown
+        window.show_help_at_first_start()
+        assert window.help_window is not None and window.help_window.isVisible()
+        assert window.settings.help_shown
+        window.help_window.close()
+        again = MainWindow(settings=window.settings, session_dir=tmp_path)  # the next start, the same settings
+        qtbot.addWidget(again)
+        again.show_help_at_first_start()
+        assert again.help_window is None
+
     def test_its_animations_follow_the_vertex_labels_setting(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
         window.show_labels_action.setChecked(True)

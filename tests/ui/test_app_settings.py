@@ -172,3 +172,10 @@ def test_show_vertex_coordinates_default_and_persisted(tmp_path: Path) -> None:
     assert s.show_vertex_coordinates is DEFAULT_SHOW_VERTEX_COORDINATES is True
     s.show_vertex_coordinates = False
     assert settings_at(tmp_path / "s.ini").show_vertex_coordinates is False
+
+
+def test_help_not_shown_at_a_start_yet_then_remembered(tmp_path: Path) -> None:
+    s = settings_at(tmp_path / "s.ini")
+    assert s.help_shown is False  # a first start, or the first after an update to a version with it
+    s.help_shown = True
+    assert settings_at(tmp_path / "s.ini").help_shown is True

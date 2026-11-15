@@ -65,6 +65,9 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         def check_for_updates_at_start(self) -> None:
             done.append("updates")
 
+        def show_help_at_first_start(self) -> None:
+            done.append("help")
+
         def open_project_at_start(self, path: Path) -> None:
             done.append(f"open {path}")
 
@@ -90,6 +93,7 @@ def test_the_window_is_shown_and_then_reopens_the_last_project(calls: list[str])
         "menu entry",
         "file requests",
         "reopen",
+        "help",
         "updates",
         "exec",
     ]
