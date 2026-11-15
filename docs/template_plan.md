@@ -168,12 +168,13 @@ words it (§6.5). The first failing check stops the rest.
 6. Counterparts run in opposite directions along the loop (`A→CT` on one, `CT→A` on the other). Without it the pair
    can't be glued without turning one side over (§2.2).
 7. No fold has the same two names as a pair of loop segments.
-8. All instances of each name are glued together. Two instances are glued directly when one name is adjacent to both
+8. No two folds have the same two names (`Body` refuses them: 4 face sides would join the same two vertices).
+9. All instances of each name are glued together. Two instances are glued directly when one name is adjacent to both
    along the loop (loop segments only: folds glue nothing); the direct gluings must connect all of a name's instances
    into one group (union-find). Pairwise direct gluing would be too strict: a vertex with 4 instances has them glued
    in a ring, M_1–M_2–M_3–M_4–M_1, and M_1, M_3 share no neighbour.
-9. The net has at least 4 faces.
-10. Indices of each name are `1..k` with no gaps; on failure offer to reindex (Yes/No), keeping the order.
+10. The net has at least 4 faces.
+11. Indices of each name are `1..k` with no gaps; on failure offer to reindex (Yes/No), keeping the order.
 
 No Euler characteristic check: a torus is allowed.
 
@@ -301,9 +302,17 @@ found in its region's frame) replace every "the ends share 2 faces" test; `Point
 (`default_net()` is the cube's); dashes on an edge are still measured from its alphabetically first vertex, so the
 cube looks exactly as before.
 
-Known for T2: a cut's counterpart is looked up by its two end points (`Net.reindex`). On a body where two different
-segments join the same two points (in different faces, or twice in one face glued to itself), that pair is
-ambiguous; the lookup must also use the face (or edge) the segment lies in.
+Done in T2:
+- Test bodies (`tests/core/conftest.py`): a 1x1x2 box, an L-shaped prism (a reflex face corner, 450-degree vertices),
+  the pinwheel 2x2x1 box (a 4-face vertex with 4 images, flat vertices), the pillow and the fold-less pillow. Random
+  chains of cuts and cuts along folds run on all of them (`tests/core/cutting/test_approve.py`).
+- A cut's counterpart is looked up by the segment of the body it is an image of (its ends in its face's frame, or in
+  its edge's), not by its two end points: in the pillow, Q and S are joined by a diagonal of each face.
+- A vertex of the body with exactly 360 degrees around it (`Body.vertex_angle`) can end up inside the net: approval
+  keeps it, validation allows it, and a cut line passing through it uses it. Templates have such vertices whenever a
+  labelled loop vertex lies where the body is flat. The sheet paints vertex circles only on the perimeter, so such a
+  vertex shows only its label for now (to decide in T6/T7).
+- Saving and loading a project of another body waits for T3 (the file has no body yet).
 
 T2 is where any cube assumption I've missed would show up: the test bodies aren't cubes, have faces that aren't
 squares (and one that isn't convex), vertices with 4 faces, and two faces sharing several edges.

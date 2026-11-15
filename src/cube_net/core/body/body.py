@@ -13,6 +13,7 @@ the other's, so coordinates stay rational in every frame.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -107,6 +108,7 @@ class Body:
         for face in self._faces.values():
             for corner, name in zip(face.corners, face.names, strict=True):
                 self._vertex_corners.setdefault(name, []).append((face.number, corner))
+        self._angles = _vertex_angles(self._faces)
         self._area = sum((signed_area(f.corners) for f in self._faces.values()), Fraction(0))
         self._start = tuple(start)
         placed = sorted(face for face, _ in self._start)
@@ -145,6 +147,14 @@ class Body:
         """Every face corner that is this vertex, as (face, local position)."""
         try:
             return tuple(self._vertex_corners[name])
+        except KeyError:
+            raise ValueError(f"no such vertex: {name!r}") from None
+
+    def vertex_angle(self, name: VertexName) -> int:
+        """The total angle of the faces around a vertex, in degrees: 270 at a cube's corner, 360 where the surface is
+        flat (such a vertex can end up inside a net), more at a saddle."""
+        try:
+            return self._angles[name]
         except KeyError:
             raise ValueError(f"no such vertex: {name!r}") from None
 
@@ -205,6 +215,25 @@ def _check_faces(faces: Mapping[Face, BodyFace]) -> None:
             a, b = face.side_names(i)
             if a == b:
                 raise BodyError(f"side {i} of face {face.number} joins vertex {a} to itself")
+
+
+def _vertex_angles(faces: Mapping[Face, BodyFace]) -> dict[VertexName, int]:
+    """The total angle around each vertex. Going around a vertex from face to face is a composition of gluings, each a
+    rotation by a multiple of 90 degrees, and it must come back to where it started, so the total is a multiple of 90:
+    the sum of the corners' angles, found in floats, is rounded to it, which is exact."""
+    totals: dict[VertexName, float] = {}
+    for face in faces.values():
+        n = len(face.corners)
+        for i, (corner, name) in enumerate(zip(face.corners, face.names, strict=True)):
+            to_next, to_prev = face.corners[(i + 1) % n] - corner, face.corners[i - 1] - corner
+            angle = math.atan2(float(to_next.cross(to_prev)), float(to_next.dot(to_prev))) % (2 * math.pi)
+            totals[name] = totals.get(name, 0.0) + math.degrees(angle)
+    angles = {}
+    for name, total in totals.items():
+        angles[name] = 90 * round(total / 90)
+        if abs(total - angles[name]) > 1e-6:
+            raise BodyError(f"the angles around vertex {name} add up to {total:.3f} degrees, not a multiple of 90")
+    return angles
 
 
 def _glue(faces: Mapping[Face, BodyFace]) -> tuple[tuple[BodyEdge, ...], Mapping[Side, BodyEdge]]:

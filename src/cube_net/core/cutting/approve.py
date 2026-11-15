@@ -64,8 +64,10 @@ def _dissolve_seams(net: Net) -> None:
 
 
 def _remove_inner_vertices(net: Net) -> None:
+    """Remove the points inside the net that aren't vertices of the body (a vertex of the body where the surface is
+    flat can end up inside the net; it stays)."""
     on_perimeter = {he.origin for he in net.half_edges if he.region is None}
-    for vertex in [v for v in net.vertices if v not in on_perimeter]:
+    for vertex in [v for v in net.vertices if v not in on_perimeter and v.point.vertex is None]:
         dissolve_vertex(net, vertex)
 
 

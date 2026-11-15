@@ -16,6 +16,10 @@ from cube_net.core.body import Body, BodyEdge, Face, SurfacePoint
 from cube_net.core.geometry import Box, Vec, polygon_contains
 from cube_net.core.net.elements import EdgeKind, HalfEdge, NetVertex, Region
 
+# A segment of the body, one way: a face number (or -1 - edge id, for a segment on an edge) and its two ends in that
+# face's (or edge's) frame.
+type SegmentKey = tuple[int, Vec, Vec]
+
 
 class NetInvariantError(RuntimeError):
     """The net's structure is inconsistent. Always a bug in the code that built or changed the net."""
@@ -41,7 +45,7 @@ class Net:
         self.half_edges: list[HalfEdge] = list(half_edges)
         self.regions: list[Region] = list(regions)
         self._images: dict[SurfacePoint, list[NetVertex]] = {}
-        self._boundary_by_points: dict[tuple[SurfacePoint, SurfacePoint], HalfEdge] = {}
+        self._boundary_by_segment: dict[SegmentKey, HalfEdge] = {}
         self.reindex()
 
     def reindex(self) -> None:
@@ -49,15 +53,35 @@ class Net:
         self._images = {}
         for v in self.vertices:
             self._images.setdefault(v.point, []).append(v)
-        self._boundary_by_points = {}
+        self._boundary_by_segment = {}
         for he in self.boundary_edges():
-            key = (he.origin.point, he.destination.point)
-            if key in self._boundary_by_points:
-                raise NetInvariantError(f"two boundary segments {key[0]} -> {key[1]} in the same direction")
-            self._boundary_by_points[key] = he
-        for (a, b), he in self._boundary_by_points.items():
-            if (b, a) not in self._boundary_by_points:
+            key = self._segment_key(he)
+            if key in self._boundary_by_segment:
+                raise NetInvariantError(
+                    f"two boundary segments {he.origin.point} -> {he.destination.point} in the same direction"
+                )
+            self._boundary_by_segment[key] = he
+        for (where, a, b), he in self._boundary_by_segment.items():
+            if (where, b, a) not in self._boundary_by_segment:
                 raise NetInvariantError(f"boundary segment {he} has no counterpart")
+
+    def _segment_key(self, he: HalfEdge) -> SegmentKey:
+        """Which segment of the body `he` is an image of, and which way it runs: its ends in the frame of the face it
+        lies in, or, if it lies on an edge, in the frame of the edge's first side (both images then give the same).
+        Its end points alone may not tell (two faces can share several edges, a face can be glued to itself)."""
+        region = he.region if he.region is not None else he.twin.region
+        if region is None:
+            raise NetInvariantError(f"{he} has no region on either side")
+        to_local = region.placement.inverse()
+        a, b = to_local.apply(he.origin.position), to_local.apply(he.destination.position)
+        side = self.body.side_through(region.face, a, b)
+        if side is None:
+            return (region.face, a, b)
+        edge = self.body.side_edge(side)
+        if side != edge.sides[0]:
+            to_first = edge.transition(side)
+            a, b = to_first.apply(a), to_first.apply(b)
+        return (-1 - edge.id, a, b)
 
     def copy(self) -> NetCopy:
         """An independent copy of the whole structure (same ids), with the maps from the originals to their copies."""
@@ -132,7 +156,8 @@ class Net:
 
     def counterpart(self, boundary_edge: HalfEdge) -> HalfEdge:
         """The other image of the same cut (as an inside half-edge, so it runs the opposite way on the cube)."""
-        return self._boundary_by_points[(boundary_edge.destination.point, boundary_edge.origin.point)]
+        where, a, b = self._segment_key(boundary_edge)
+        return self._boundary_by_segment[(where, b, a)]
 
     # --- vertices ---------------------------------------------------------------------------------------------------
 

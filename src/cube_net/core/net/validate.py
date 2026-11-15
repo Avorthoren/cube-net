@@ -70,7 +70,8 @@ def _check_perimeter(net: Net) -> None:
         _fail(f"the net has {len(cycles)} perimeter cycles, expected 1")
     on_perimeter = {he.origin for he in cycles[0]}
     for vertex in net.vertices:
-        if vertex not in on_perimeter:
+        name = vertex.point.vertex
+        if vertex not in on_perimeter and (name is None or net.body.vertex_angle(name) != 360):
             _fail(f"{vertex} is inside the net")
     for name in net.body.vertex_names:
         if not net.images(SurfacePoint.at_vertex(net.body, name)):

@@ -140,3 +140,16 @@ class TestValidation:
     def test_starting_net_must_place_every_face(self) -> None:
         with pytest.raises(BodyError, match=r"must place every face once, got faces \[1\]"):
             square_pillow(start=[(1, IDENTITY)])
+
+
+class TestVertexAngles:
+    def test_the_cubes_corners(self) -> None:
+        assert {CUBE.vertex_angle(v) for v in CUBE.vertex_names} == {270}
+
+    def test_flat_and_saddle_vertices(self, pinwheel_box: Body, l_prism: Body) -> None:
+        assert pinwheel_box.vertex_angle("M") == pinwheel_box.vertex_angle("S") == 360
+        assert pinwheel_box.vertex_angle("A") == 270
+        assert l_prism.vertex_angle("P3") == l_prism.vertex_angle("T3") == 450  # the inner corner's ends
+
+    def test_the_pillows_corners(self, pillow: Body) -> None:
+        assert {pillow.vertex_angle(v) for v in pillow.vertex_names} == {180}

@@ -113,7 +113,11 @@ def _vertex_on_cut(copy: NetCopy, edge: HalfEdge, position: Vec, point: SurfaceP
 
 
 def _inner_vertex(net: Net, position: Vec, point: SurfacePoint) -> NetVertex:
-    """The vertex for a stop inside the net: on a fold edge (dividing it), or a new free one."""
+    """The vertex for a stop inside the net: one already there (a vertex of the body where folds meet), on a fold
+    edge (dividing it), or a new free one."""
+    for vertex in net.vertices:
+        if vertex.position == position:
+            return vertex
     for fold in net.fold_edges():
         if on_segment(position, fold.origin.position, fold.destination.position):
             return split_edge(net, fold, position, point)

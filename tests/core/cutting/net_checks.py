@@ -31,8 +31,9 @@ def assert_consistent(net: Net) -> None:
         total += signed_area(polygon)
         for he in net.region_cycle(region):
             assert region.face in he.origin.point.faces
-            assert region.placement.apply(he.origin.point.local_in(region.face)) == he.origin.position
-    assert total == 6
+            positions = {region.placement.apply(local) for local in he.origin.point.locals_in(region.face)}
+            assert he.origin.position in positions
+    assert total == net.body.area
     assert {he for cycle in net.perimeters() for he in cycle} == {he for he in net.half_edges if he.region is None}
     net.reindex()  # every cut has exactly two images
     for he in net.boundary_edges():
