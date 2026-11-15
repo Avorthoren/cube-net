@@ -1,0 +1,73 @@
+In addition to working with cube user should be able to work with other bodies. But it will be limited to those, that have same property as the cube: pairs of cuts that can be glued are parallel/perpendicular, thus if there is a network of that body where all vertices have rational coordinates - every network will have vertices with only rational coordinates.
+But, application will not guarantee, that this is in fact, a network of some body. It will perform some obvious checks to reject some objects that are definitely not a network of a body, but there will be no complete proof during template (see below) validation, so this is on user.
+
+For that there should be a feature that allows user to create default nets. Default net for a cube is already implicitly embedded into the app. That's a new item in menu: "File -> New Template (Ctrl+T)". Should act similar to "File -> New" and be placed right below it:
+1. We are starting new "project", so if there are any unsaved chages user should be prompted about saving them.
+2. Finally, when new "project" (template) is started the app shouldn't be bound to previous file (i.e Ctrl+S should not override previous file, but promt user where to save current project).
+Files for templates should have `.nettemplate` extension. Obviously, application should open such files. From now on both types of files should have some mark on the very first line of the file, which would indicates, which one it is. But if first line is not one of those two marks - the app should assume that it's old `.cubenet` format, so that projects created by users in older version are not lost on version update.
+
+Highlevel overview of the "Template creation" feature:
+This application mode will have it's own help page, and we'll discuss it later, when the feature is implemented. So don't add any hotkeys related specifically to this mode to the list of the end of existing help.
+In this application mode bounding rectangle area features (on the instruments panel and in settings) should NOT be present. Instead there should be just "Net area" text with number below it: area of the network itself (not bounding rectangle). Again: floating point number, but hint should show real rational value, Ctrl+C should copy the value line of the hint.
+"Settings -> Show vertex labels" should be removed (in this mode we always show labels).
+"Settings -> Style -> Faces colors" section should also be removed in this mode.
+It goes in three steps:
+1. User creates closed loop.
+2. User assigns vertices of the body to vertices of the net, assigns colors to faces. Optionally: adds fold lines and adjusts the loop.
+
+User starts with empty sheet when new template is started (it should have fixed size 100x100 units, not dynamic, like for regular project type). Click on the sheet creates the first vertex of the loop. Then it's similar how cut is created, but loop should end where it was started. No intersections, not even touching (so vertex can't be put on the edge/another vertex, except if this is the starting vertex).
+Which means, edges should not be "active" (no hitbox, no snapping) like they were for first type projects. As for vertices: in the first step of template creation only the starting vertex should be active (and we should snap to it).
+All 3 actions from the context menu should be available here.
+In this step mouse cursor should be regular.
+
+When the loop is closed user should be able to:
+1. Drag vertices, create new (in the middle of any edge), delete any (but at least 6 should remain, so if there are only 6 of them instead of deleting the vertex the app should show a warning). Similar to CUT_EDITING.
+2. Add fold lines. For this vertices should be "active" (with hitbox). When user clicks on one it starts a fold line. Fold line should be strictly one segment, so it should end on another vertex immediately, no intermediate vertices inside the net. Inner points of the fold line should not touch outer perimeter or other fold lines. It should be respected when vertices are dragged/deleted as well.
+3. Delete fold line by Ctrl+click on it. So fold lines should be "active" (with hitbox).
+4. Assign color to the face. Click inside the net (not on the fold line, i.e. inside net face) should show the color picker window. It should show current color, which is white by default (so until we start assigning explicit colors to faces they are all white). When a face is divided into two with a fold line - both child faces should inherit the color of parent.
+5. Assignng body vertex to a net vertex. For this another item should be added to the context menu in template creation mode: "Assign the vertex". It should be active when user right-clicks on the vertex. When chosen window with this text and two input fields should appear:
+```
+Name (1|2 English letters) and index (1..99):
+<name_input> <index_input>
+```
+(Is proper term for those "Latin letters"?)
+This window (in addition to the small "cross" button in the header that acts as "Cancel") should have Cancel/Assign buttons.
+Initally, all vertices created without a name/index pair (no label shown near them).
+When user tries to assign name/index pair to the vertex that doesn't have it yet - name_input should be empty, <index_input> should have 1 in it.
+When user edits existing pair, obviously, he sees current values in those fields.
+User is allowed to save it with empty <name_input>, which returns/leaves vertex to/in "no label" state.
+If user tries to save vertex with name/index pair that is assigned to another vertex - another window pops up in top of the current: "Such label already exists. Assign first free index?" text and Yes/No buttons. If Yes was chosen - both windows are closed, and name with the smallest (starting from 1) unused index for that name assigned to the vertex. If No was chosen - just the second window is closed, but window in wich user edits the label stays.
+
+Same 1000 limit on undo/redo.
+Undoable actions:
+1. Creating/deleting new vertex of the loop.
+2. Moving a vertex of the loop.
+3. Adding/deleting fold line.
+4. Assigning a face color.
+5. Adding/changing name/index to the vertex.
+
+
+Validation (hotkey: V; working in the second step of template creation, when loop is closed):
+1. Each vertex has name/index pair assigned to it. If problems found, show message and stop the validation: "Some vertices don't have assigned labels. Name each vertex."
+2. Check there are no edges/folds that connect the same name, i.e. "Ai-Aj" is forbidden. If problems found - list them all, like "You have edge(s) that connect vertex to itself, which is impossible: A1-A3 and BV2-BV1", and stop the validation.
+3. Each edge has exactly one counterpart. If edge doesn't have (or has more than one) counterpart - list all such edges, but use only vertex names without indices (so, for example, "Segment(s) A-CT, AS-QC and Z-R do(es)n't have counterparts. Each segment should appear exactly twice, because that's what 'gluing' implies.", use proper wording depending on if it's 1 or more segments), and stop validation.
+4. Counterparts are parallel/perpendicular. If problems found - list them all, like "Counterpart(s) for A-CT, AS-QC and Z-R is/are neither parallel nor perpendicular. CubeNet accepts only networks with parallel/perpendicular counterparts to stay inside rational numbers.", and stop validation.
+5. Counterparts have exactly the same length. Here we still need just rationals, because we'll compare square of lengths, not taking the square root. If problems found - list them all, like "Counterpart(s) for A-CT, AS-QC and Z-R have different lengths, thus it would be impossible to glue them.", and stop validation.
+6. Check that counterparts run in opposite directions on the loop. For example, if we go in any direction and encounter edge "A-B" we should then encounter another edge "B-A" (not "A-B" again). If problems found - list them all, like “Counterpart(s) for A-CT, AS-QC and Z-R run(s) in the same direction along the loop, so one of them would have to be turned over to glue them. Counterparts must run in opposite directions.”, and stop validation.
+7. Check that there are no fold named like a glued pair. For example, a fold A–B when the loop also has the pair A–B. If problems found - list them all, like "You have cut(s) that also exist like fold(s), which is impossible: A1-B1 and A1-B3; S2-Q3 and S1-Q1, S3-Q5" (here we have cut A1-B1 and fold A1-B3, cut S2-Q3 and folds S1-Q1, S3-Q5), and stop the validation.
+8. Check that all instances of each name are glued together. Two instances of a name (say A1 and A2) are glued directly when there is another name (say C) adjacent to both of them along the loop, i.e. there are loop segments A1-C1 and A2-C2 (they are counterparts, see check 3). Folds don't count here: they glue nothing. Gluing is transitive: if A1 is glued to A2 (through C) and A2 to A3 (through E), then A1 is glued to A3 as well, even if no name is adjacent to both A1 and A3 (a vertex with 4 or more instances has such pairs: its instances are glued in a ring, A1-A2-A3-A4-A1, and A1, A3 have no common neighbour). So the check is: for each name, its instances, connected by the direct gluings, form one group. If problems found - list them all, like "Vertex A is not glued to itself, which is impossible." or "Some of your vertices are not glued to themselves, which is impossible: A, Q and GG.", and stop the validation.
+9. Check that the net has at least 4 faces. If not, show "Net should have at least 4 faces." and stop the validation.
+10. Indices for each name are consecutive and start from 1. I.e. "A1, A2, A4" and "HV2, HV3" are not allowed. If problems found - list them all, like "Indices for vertex/vertices A and HV have gaps. Reindex automatically?" (here we always use plural: Indices). This dialog will be slightly different (when validation triggered explicitly): it should have Yes/No buttons. "No" would stop the validation. "Yes" would reindex vertices: for each vertex name it "moves" indices "down" until they start from 1 and there are no gaps (without changing relative order). So, for example, for "A2, A4, A5, A10" it should do "A2->1, A4->2, A5->3, A10->4". When vertices reindexed "success" notification should be shown:
+```
+Vertices automatically reindexed.
+No other problems found.
+```
+If there were no errors during validation at all - "success" window with: "No problems found".
+
+Template can always be saved: validated and not validated.
+===
+
+"File -> New" should be adjusted:
+Instead of starting new project using implied default cube net it should show window that has dropdown with two options: Cube (selected by default) and Custom. Below the dropdown should be element for selecting `.nettemplate` file, it should be inactive when "Cube" option is selected in the dropdown. The rest is obvious.
+If custom template was used by the user to start the project, that template file should be validated before using it (same rules). If it's not valid - we don't show the detailed error message (and don't prompt for vertices reindexing), just "Template is not valid. Open template?" with Yes/No buttons. If user chose Yes - we just open the template for editing. Otherwise, the app should still have template selection window active, so that user can select another template.
+When valid custom template is chosen everything projects needs from the template (if any) should be saved in the project file, so the project doesn't rely on template file, i.e. template file can be changed later NOT affecting the project that was started of it.
