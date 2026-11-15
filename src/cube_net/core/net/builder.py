@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
-from cube_net.core.cube import Face, SurfacePoint
+from cube_net.core.body import Body, Face, SurfacePoint
 from cube_net.core.geometry import Rigid90, Vec, signed_area
 from cube_net.core.net.elements import EdgeKind, HalfEdge, NetVertex, Region
 from cube_net.core.net.net import Net
@@ -32,9 +32,9 @@ class RegionSpec:
     corners: Sequence[Vec]
 
 
-def build_net(specs: Iterable[RegionSpec]) -> Net:
-    """Build a net. Corners at the same sheet position become one vertex; sides shared by two regions become inner
-    edges (FOLD on a cube edge, SEAM otherwise); all other sides become the perimeter.
+def build_net(body: Body, specs: Iterable[RegionSpec]) -> Net:
+    """Build a net of `body`. Corners at the same sheet position become one vertex; sides shared by two regions become
+    inner edges (FOLD on an edge of the body, SEAM otherwise); all other sides become the perimeter.
 
     Limitation: no two perimeter segments may start at the same vertex (no touching parts), which is enough for the
     default net and for tests.
@@ -55,7 +55,7 @@ def build_net(specs: Iterable[RegionSpec]) -> Net:
         to_local = spec.placement.inverse()
         cycle: list[HalfEdge] = []
         for position in corners:
-            point = SurfacePoint(spec.face, to_local.apply(position))
+            point = SurfacePoint(body, spec.face, to_local.apply(position))
             vertex = vertices.get(position)
             if vertex is None:
                 vertex = vertices[position] = NetVertex(len(vertices), position, point)
@@ -82,8 +82,11 @@ def build_net(specs: Iterable[RegionSpec]) -> Net:
         mate = by_side.get((b, a))
         if mate is not None:
             paired.add(mate)
-            on_cube_edge = len(a.point.faces & b.point.faces) == 2
-            he.kind = mate.kind = EdgeKind.FOLD if on_cube_edge else EdgeKind.SEAM
+            inside = he.region
+            assert inside is not None  # every side in by_side belongs to a region
+            frame = inside.placement.inverse()
+            on_edge = body.edge_through(inside.face, frame.apply(a.position), frame.apply(b.position))
+            he.kind = mate.kind = EdgeKind.FOLD if on_edge is not None else EdgeKind.SEAM
             he.twin, mate.twin = mate, he
             continue
         out = HalfEdge(len(half_edges), b, EdgeKind.BOUNDARY, None)
@@ -99,7 +102,7 @@ def build_net(specs: Iterable[RegionSpec]) -> Net:
             raise NetBuildError(f"perimeter is broken at {out.destination.position}")
         out.next, nxt.prev = nxt, out
 
-    net = Net(vertices.values(), half_edges, regions)
+    net = Net(body, vertices.values(), half_edges, regions)
     if len(net.perimeter()) != len(outside_from):
         raise NetBuildError("the net's perimeter must be a single cycle (the net must be connected and have no holes)")
     return net

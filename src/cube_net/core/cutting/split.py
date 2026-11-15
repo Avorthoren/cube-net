@@ -14,7 +14,7 @@ Vertices are created in order along the line, so the names they get later are th
 from dataclasses import dataclass
 from itertools import pairwise
 
-from cube_net.core.cube import SurfacePoint
+from cube_net.core.body import SurfacePoint
 from cube_net.core.cutting.cut_line import CutLine, CutPoint
 from cube_net.core.cutting.images import counterpart_image
 from cube_net.core.cutting.pieces import pieces, region_at
@@ -90,15 +90,15 @@ def _endpoint_vertex(net: Net, copy: NetCopy, point: CutPoint) -> NetVertex:
     assert point.edge is not None
     region = point.edge.region
     assert region is not None
-    vertex = _vertex_on_cut(copy, point.edge, point.position, _surface_point(point.position, region))
+    vertex = _vertex_on_cut(copy, point.edge, point.position, _surface_point(net, point.position, region))
     image = counterpart_image(net, point)
     assert image is not None
     _vertex_on_cut(copy, image.edge, image.position, image.point)
     return vertex
 
 
-def _surface_point(position: Vec, region: Region) -> SurfacePoint:
-    return SurfacePoint(region.face, region.placement.inverse().apply(position))
+def _surface_point(net: Net, position: Vec, region: Region) -> SurfacePoint:
+    return SurfacePoint(net.body, region.face, region.placement.inverse().apply(position))
 
 
 def _vertex_on_cut(copy: NetCopy, edge: HalfEdge, position: Vec, point: SurfacePoint) -> NetVertex:

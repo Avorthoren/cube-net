@@ -8,7 +8,7 @@ from itertools import pairwise
 import pytest
 from net_checks import overlap_area
 
-from cube_net.core.cube import SurfacePoint
+from cube_net.core.body import CUBE, SurfacePoint
 from cube_net.core.cutting import CutLine, CutPoint, SplitNet, overlapping_cuts, rearrange, segment_valid, split_net
 from cube_net.core.geometry import Vec, on_segment
 from cube_net.core.net import EdgeKind, HalfEdge, Net, NetVertex, Region, default_net
@@ -20,7 +20,7 @@ def v(x: str, y: str) -> Vec:
 
 def outer_ring(*corners: tuple[int | F, int | F]) -> list[HalfEdge]:
     """The outside half-edges of a polygon given counter-clockwise (they run clockwise, each with its inner twin)."""
-    point = SurfacePoint(1, Vec(0, 0))
+    point = SurfacePoint(CUBE, 1, Vec(0, 0))
     region = Region(0, 1, None)  # type: ignore[arg-type]
     vertices = [NetVertex(i, Vec(x, y), point) for i, (x, y) in enumerate(corners)]
     n = len(vertices)

@@ -7,6 +7,7 @@ import json
 from collections.abc import Callable
 from fractions import Fraction as F
 
+from cube_net.core.body import CUBE
 from cube_net.core.cutting import CutPoint, Rearranged
 from cube_net.core.editor import Editor, EditorSnapshot, EditorState
 from cube_net.core.geometry import Vec
@@ -184,13 +185,13 @@ def project_of(editor: Editor, labels: PointLabels | None = None, settings: Proj
         editor.snapshot(),
         editor.history,
         ProjectSettings() if settings is None else settings,
-        PointLabels() if labels is None else labels,
+        PointLabels(CUBE) if labels is None else labels,
     )
 
 
 def named_labels(editor: Editor) -> PointLabels:
     """Names for the points of the net and of the closed line, as the app gives them once a line is applied."""
-    labels = PointLabels()
+    labels = PointLabels(CUBE)
     vertex_labels(editor.net, labels)
     if editor.state is EditorState.CUT_EDITING:
         for vertex in editor.split().net.vertices:

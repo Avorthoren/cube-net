@@ -7,6 +7,7 @@ from random import Random
 
 import pytest
 
+from cube_net.core.body import CUBE
 from cube_net.core.cutting import MAX_POINTS_AFTER_FIRST, CutLine, CutPoint
 from cube_net.core.editor import Editor, EditorState
 from cube_net.core.geometry import Vec, quantize
@@ -21,7 +22,7 @@ def net() -> Net:
 
 @pytest.fixture
 def cut(net: Net) -> Callable[[str], HalfEdge]:
-    labels = vertex_labels(net, PointLabels())
+    labels = vertex_labels(net, PointLabels(CUBE))
     by_name = {f"{labels[he.origin]}-{labels[he.destination]}": he for he in net.boundary_edges()}
     return lambda name: by_name[name]
 

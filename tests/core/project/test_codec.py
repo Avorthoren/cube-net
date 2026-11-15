@@ -24,6 +24,7 @@ from project_checks import (
     with_something_to_redo,
 )
 
+from cube_net.core.body import CUBE
 from cube_net.core.editor import Editor, EditorState
 from cube_net.core.labels import PointLabels
 from cube_net.core.net import validate_net
@@ -162,7 +163,7 @@ class TestTheRest:
         assert loaded.upcoming() == labels.upcoming()
 
     def test_a_new_point_gets_the_next_free_name(self) -> None:
-        labels = PointLabels()
+        labels = PointLabels(CUBE)
         editor = editing()
         points = [v_.point for v_ in editor.split().net.vertices]
         named = {labels.register(point) for point in points}

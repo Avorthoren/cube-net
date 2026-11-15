@@ -16,12 +16,12 @@ from __future__ import annotations
 
 from enum import Enum
 
-from cube_net.core.cube import Face, SurfacePoint
+from cube_net.core.body import Face, SurfacePoint
 from cube_net.core.geometry import Rigid90, Vec
 
 
 class EdgeKind(Enum):
-    # A cube edge inside the net (always drawn).
+    # An edge of the body inside the net (always drawn).
     FOLD = "fold"
 
     # A glued user cut inside the net (never drawn; exists only transiently, see docs/plan.md section 4.6).
@@ -32,7 +32,7 @@ class EdgeKind(Enum):
 
 
 class NetVertex:
-    """An image of a cube surface point on the sheet. Several vertices can be images of the same `point`."""
+    """An image of a surface point on the sheet. Several vertices can be images of the same `point`."""
 
     __slots__ = ("edge", "id", "point", "position")
 
@@ -88,7 +88,7 @@ class HalfEdge:
 
 
 class Region:
-    """A polygon of the net lying inside a single cube face."""
+    """A polygon of the net lying inside a single face of the body."""
 
     __slots__ = ("edge", "face", "id", "placement")
 

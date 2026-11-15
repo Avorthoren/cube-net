@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from cube_net.core.body import CUBE
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, VertexLabel, vertex_labels
 from cube_net.core.net import default_net
@@ -17,7 +18,7 @@ EXPECTED = {
 
 
 def test_default_net_labels_match_idea() -> None:
-    labels = vertex_labels(default_net(), PointLabels())
+    labels = vertex_labels(default_net(), PointLabels(CUBE))
     assert {str(label): vertex.position for vertex, label in labels.items()} == EXPECTED
 
 
@@ -26,5 +27,5 @@ def test_label_str() -> None:
 
 
 def test_numbering_is_stable() -> None:
-    net, names = default_net(), PointLabels()
+    net, names = default_net(), PointLabels(CUBE)
     assert vertex_labels(net, names) == vertex_labels(net, names)

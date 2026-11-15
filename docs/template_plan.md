@@ -296,6 +296,15 @@ Each one ends with the app working and all tests green.
 | T7 | File → New with Cube/Custom, projects from templates, the Style tab scrolling | The feature complete |
 | T8 | `idea.txt`/`plan.md` updated (once this plan is done), Russian texts | |
 
+Done in T1 beyond the table above: `Net.body_edge_of` / `Net.segment_faces` (a half-edge's body edge and colours,
+found in its region's frame) replace every "the ends share 2 faces" test; `PointLabels(body)`; `starting_net(body)`
+(`default_net()` is the cube's); dashes on an edge are still measured from its alphabetically first vertex, so the
+cube looks exactly as before.
+
+Known for T2: a cut's counterpart is looked up by its two end points (`Net.reindex`). On a body where two different
+segments join the same two points (in different faces, or twice in one face glued to itself), that pair is
+ambiguous; the lookup must also use the face (or edge) the segment lies in.
+
 T2 is where any cube assumption I've missed would show up: the test bodies aren't cubes, have faces that aren't
 squares (and one that isn't convex), vertices with 4 faces, and two faces sharing several edges.
 

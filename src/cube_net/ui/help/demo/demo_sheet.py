@@ -14,6 +14,7 @@ from PyQt6.QtCore import QEvent, QObject, QPointF, QSize, Qt
 from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QApplication, QFrame, QWidget
 
+from cube_net.core.body import CUBE
 from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.geometry import Box, Vec
 from cube_net.core.labels import PointLabels
@@ -82,7 +83,7 @@ class DemoSheet(QWidget):
         tool.approve_clicked.connect(tool.approve)  # what the main window's actions do for these buttons
         tool.undo_clicked.connect(tool.undo)
         # The names of the points made on the way (I, J, ...), as in a new project.
-        self._names = PointLabels()
+        self._names = PointLabels(CUBE)
         self._labels = labels
         tool.line_changed.connect(self._show_labels)
         self.workspace.net_changed.connect(self._show_labels)

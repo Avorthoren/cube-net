@@ -171,7 +171,7 @@ class CutLineItem(QGraphicsItem):
             self._paint_line(painter, world, (a, b), palette.RUBBER_BAND, net_style.RUBBER_BAND_PX)
             return
         for piece in parts:
-            paint_dashed(painter, world, piece.start, piece.end, piece.start_point, piece.end_point)
+            paint_dashed(painter, world, self._net.body, piece.region, piece.start, piece.end)
 
     def _outward_directions(self, world: QTransform) -> dict[Vec, QPointF]:
         """For points on the perimeter (endpoints and images): the unit device direction away from the net, so their

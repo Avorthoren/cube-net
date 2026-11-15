@@ -12,7 +12,7 @@ image is image 2 (like x_1 and x_2 in docs/idea.txt).
 Points at existing perimeter vertices are not listed: the net already labels them.
 """
 
-from cube_net.core.cube import SurfacePoint
+from cube_net.core.body import SurfacePoint
 from cube_net.core.cutting import CutLine, counterpart_image, crossings, endpoint_point, surface_point_at
 from cube_net.core.geometry import Vec
 from cube_net.core.labels.point_labels import PointLabels

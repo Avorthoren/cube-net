@@ -5,6 +5,7 @@
 
 from dataclasses import dataclass
 
+from cube_net.core.body import CUBE
 from cube_net.core.editor import EditorSnapshot
 from cube_net.core.history import History
 from cube_net.core.labels import PointLabels
@@ -41,4 +42,4 @@ class Project:
 
 def new_project() -> Project:
     """A new project starts with the default net (docs/idea.txt)."""
-    return Project(EditorSnapshot(default_net(), None, None, 0), History(), ProjectSettings(), PointLabels())
+    return Project(EditorSnapshot(default_net(), None, None, 0), History(), ProjectSettings(), PointLabels(CUBE))

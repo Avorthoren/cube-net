@@ -7,7 +7,7 @@ These are building blocks: they keep the half-edge links right, but the net as a
 (`Net.reindex()` has to be called when the whole change is done).
 """
 
-from cube_net.core.cube import SurfacePoint
+from cube_net.core.body import SurfacePoint
 from cube_net.core.geometry import Vec
 from cube_net.core.net.elements import EdgeKind, HalfEdge, NetVertex, Region
 from cube_net.core.net.net import Net, _cycle
@@ -129,8 +129,7 @@ def glue_cuts(
     if end_a is not None:
         _link(in_a, out_a)
 
-    on_cube_edge = len(a.point.faces & b.point.faces) == 2
-    kept.kind = moved.kind = EdgeKind.FOLD if on_cube_edge else EdgeKind.SEAM
+    kept.kind = moved.kind = EdgeKind.FOLD if net.body_edge_of(kept) is not None else EdgeKind.SEAM
     kept.twin, moved.twin = moved, kept
     net.half_edges.remove(outer_kept)
     net.half_edges.remove(outer_moved)

@@ -5,7 +5,7 @@ from fractions import Fraction as F
 
 import pytest
 
-from cube_net.core.cube import SurfacePoint
+from cube_net.core.body import CUBE, SurfacePoint
 from cube_net.core.geometry import Vec
 from cube_net.core.net import EdgeKind, HalfEdge, Net, default_net
 from cube_net.core.net.surgery import add_edge, corner, dissolve_vertex, new_vertex, outgoing, remove_edge, split_edge
@@ -23,7 +23,7 @@ def edge_between(net: Net, a: Vec, b: Vec) -> HalfEdge:
 def test_split_edge_on_both_sides(net: Net) -> None:
     he = edge_between(net, Vec(11, 13), Vec(12, 13))  # the fold C-D, seen from face 1
     mid = Vec(F(23, 2), 13)
-    w = split_edge(net, he, mid, SurfacePoint(1, Vec(F(1, 2), 0)))
+    w = split_edge(net, he, mid, SurfacePoint(CUBE, 1, Vec(F(1, 2), 0)))
     assert he.destination is w and he.next.origin is w and he.next.destination.position == Vec(12, 13)
     assert he.twin.origin is w and he.twin.destination.position == Vec(11, 13)
     assert he.next.twin.destination is w and he.next.twin.origin.position == Vec(12, 13)
@@ -42,7 +42,7 @@ def test_add_edge_dead_end_then_dividing_a_region(net: Net) -> None:
     region = next(r for r in net.regions if r.face == 1)
     a = next(v for v in net.vertices if v.position == Vec(11, 14))
     b = next(v for v in net.vertices if v.position == Vec(12, 13))
-    center = new_vertex(net, Vec(F(23, 2), F(27, 2)), SurfacePoint(1, Vec(F(1, 2), F(1, 2))))
+    center = new_vertex(net, Vec(F(23, 2), F(27, 2)), SurfacePoint(CUBE, 1, Vec(F(1, 2), F(1, 2))))
 
     first = add_edge(net, a, center, region, EdgeKind.BOUNDARY)
     assert first.twin.next is corner(a, region) or first.next is first.twin
@@ -65,7 +65,7 @@ def test_corner_of_a_vertex_not_on_the_region(net: Net) -> None:
 
 def test_dissolve_vertex_joins_two_edges(net: Net) -> None:
     he = edge_between(net, Vec(11, 13), Vec(12, 13))
-    w = split_edge(net, he, Vec(F(23, 2), 13), SurfacePoint(1, Vec(F(1, 2), 0)))
+    w = split_edge(net, he, Vec(F(23, 2), 13), SurfacePoint(CUBE, 1, Vec(F(1, 2), 0)))
     edges_before, vertices_before = len(net.half_edges), len(net.vertices)
     dissolve_vertex(net, w)
     assert len(net.half_edges) == edges_before - 2 and len(net.vertices) == vertices_before - 1
@@ -96,7 +96,7 @@ def test_remove_edge_merges_regions_of_one_face(net: Net) -> None:
 def test_remove_edge_of_a_dead_end_removes_the_loose_end(net: Net) -> None:
     region = next(r for r in net.regions if r.face == 1)
     a = next(v for v in net.vertices if v.position == Vec(11, 14))
-    tip = new_vertex(net, Vec(F(23, 2), F(27, 2)), SurfacePoint(1, Vec(F(1, 2), F(1, 2))))
+    tip = new_vertex(net, Vec(F(23, 2), F(27, 2)), SurfacePoint(CUBE, 1, Vec(F(1, 2), F(1, 2))))
     edge = add_edge(net, a, tip, region, EdgeKind.SEAM)
     remove_edge(net, edge)
     assert tip not in net.vertices

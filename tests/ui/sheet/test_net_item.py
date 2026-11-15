@@ -8,6 +8,7 @@ from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QColor, QImage, QPainter, QTransform
 from PyQt6.QtWidgets import QApplication
 
+from cube_net.core.body import CUBE
 from cube_net.core.cutting import CutLine, CutPoint, SplitNet, split_net
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, vertex_labels
@@ -31,7 +32,7 @@ def render(
     net = default_net()
     item = NetItem(net)
     if with_labels:
-        item.set_labels(vertex_labels(net, PointLabels()))
+        item.set_labels(vertex_labels(net, PointLabels(CUBE)))
     if highlight_left_of_face_4:
         cut = next(he for he in net.boundary_edges() if he.origin.position.x == he.destination.position.x == 10)
         item.set_highlight(cut)

@@ -1,9 +1,9 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""`Net`: the cube net on the sheet as a DCEL of `NetVertex`, `HalfEdge` and `Region` (docs/plan.md, section 3.3).
+"""`Net`: the net on the sheet as a DCEL of `NetVertex`, `HalfEdge` and `Region` (docs/plan.md, section 3.3).
 
-Build one with `build_net()` (or `default_net()`). Queries return fresh lists; lookup indices are rebuilt by
+Build one with `build_net()` (or `starting_net()`). Queries return fresh lists; lookup indices are rebuilt by
 `reindex()` after every structural change (cheap at this size).
 """
 
@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
-from cube_net.core.cube import SurfacePoint
+from cube_net.core.body import Body, BodyEdge, Face, SurfacePoint
 from cube_net.core.geometry import Box, Vec, polygon_contains
 from cube_net.core.net.elements import EdgeKind, HalfEdge, NetVertex, Region
 
@@ -33,8 +33,10 @@ class NetCopy:
 
 class Net:
     def __init__(
-        self, vertices: Iterable[NetVertex], half_edges: Iterable[HalfEdge], regions: Iterable[Region]
+        self, body: Body, vertices: Iterable[NetVertex], half_edges: Iterable[HalfEdge], regions: Iterable[Region]
     ) -> None:
+        # The surface the net folds into: what its vertices and regions are points and parts of.
+        self.body = body
         self.vertices: list[NetVertex] = list(vertices)
         self.half_edges: list[HalfEdge] = list(half_edges)
         self.regions: list[Region] = list(regions)
@@ -71,7 +73,7 @@ class Net:
             new_v.edge = edges[v.edge]
         for r, new_r in regions.items():
             new_r.edge = edges[r.edge]
-        return NetCopy(Net(vertices.values(), edges.values(), regions.values()), vertices, edges, regions)
+        return NetCopy(Net(self.body, vertices.values(), edges.values(), regions.values()), vertices, edges, regions)
 
     # --- regions ----------------------------------------------------------------------------------------------------
 
@@ -107,8 +109,26 @@ class Net:
         return [he for he in self.half_edges if he.region is not None and he.twin.region is None]
 
     def fold_edges(self) -> list[HalfEdge]:
-        """One half-edge for every cube edge lying inside the net."""
+        """One half-edge for every body edge lying inside the net."""
         return [he for he in self.half_edges if he.kind is EdgeKind.FOLD and he.id < he.twin.id]
+
+    def body_edge_of(self, he: HalfEdge) -> BodyEdge | None:
+        """The edge of the body that `he` lies on, if any (seen from a region on one of its sides)."""
+        region = he.region if he.region is not None else he.twin.region
+        if region is None:
+            raise NetInvariantError(f"{he} has no region on either side")
+        to_local = region.placement.inverse()
+        a, b = to_local.apply(he.origin.position), to_local.apply(he.destination.position)
+        return self.body.edge_through(region.face, a, b)
+
+    def segment_faces(self, he: HalfEdge) -> frozenset[Face]:
+        """The faces `he` belongs to, which give it its colours: the 2 of the body edge it lies on, or its region's."""
+        edge = self.body_edge_of(he)
+        if edge is not None:
+            return edge.faces
+        region = he.region if he.region is not None else he.twin.region
+        assert region is not None  # body_edge_of checked it
+        return frozenset((region.face,))
 
     def counterpart(self, boundary_edge: HalfEdge) -> HalfEdge:
         """The other image of the same cut (as an inside half-edge, so it runs the opposite way on the cube)."""

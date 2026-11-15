@@ -6,6 +6,7 @@ from collections.abc import Callable
 import pytest
 from net_checks import assert_consistent
 
+from cube_net.core.body import CUBE
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import HalfEdge, Net, default_net
 
@@ -18,7 +19,7 @@ def net() -> Net:
 @pytest.fixture
 def cut(net: Net) -> Callable[[str], HalfEdge]:
     """The cut named like in docs/idea.txt, e.g. cut("B_1-A_1") (inner half-edge, in its direction)."""
-    labels = vertex_labels(net, PointLabels())
+    labels = vertex_labels(net, PointLabels(CUBE))
     by_name = {f"{labels[he.origin]}-{labels[he.destination]}": he for he in net.boundary_edges()}
 
     def find(name: str) -> HalfEdge:

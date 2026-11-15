@@ -5,6 +5,7 @@ from fractions import Fraction as F
 
 import pytest
 
+from cube_net.core.body import CUBE
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import HalfEdge, Net, boundary_edge_at, default_net
@@ -21,7 +22,7 @@ def name(net: Net, he: HalfEdge | None) -> str | None:
     """E.g. "A_2-E_2" for the cut from A_2 to E_2 (labels as in docs/idea.txt)."""
     if he is None:
         return None
-    labels = vertex_labels(net, PointLabels())
+    labels = vertex_labels(net, PointLabels(CUBE))
     return f"{labels[he.origin]}-{labels[he.destination]}"
 
 

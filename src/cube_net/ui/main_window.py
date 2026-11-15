@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 )
 
 from cube_net import __version__
+from cube_net.core.body import CUBE
 from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.cutting import slope_of
 from cube_net.core.editor import EditorSnapshot
@@ -160,7 +161,7 @@ class MainWindow(QMainWindow):
         self.desktop_entry = desktop_entry if desktop_entry is not None else DesktopEntry(data_home())
         apply_style(self.settings.style)  # before anything gets drawn
         TRANSLATIONS.set_language(self.settings.language)  # before any text is set
-        self.point_labels = PointLabels()
+        self.point_labels = PointLabels(CUBE)
         self.project_settings = ProjectSettings()
 
         # The file of the project, once it has one.

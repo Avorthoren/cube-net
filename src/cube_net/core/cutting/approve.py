@@ -11,7 +11,7 @@
    at all their images the perimeter goes straight on, between cuts of the same colours.
 """
 
-from cube_net.core.cube import SurfacePoint
+from cube_net.core.body import SurfacePoint
 from cube_net.core.cutting.rearrange import Rearranged
 from cube_net.core.geometry import orient
 from cube_net.core.net import EdgeKind, HalfEdge, Net, NetVertex
@@ -74,12 +74,12 @@ def _remove_redundant_points(net: Net) -> None:
     for vertex in net.vertices:
         images.setdefault(vertex.point, []).append(vertex)
     for point, vertices in images.items():
-        if point.vertex is None and all(is_straight_through(v) for v in vertices):
+        if point.vertex is None and all(is_straight_through(net, v) for v in vertices):
             for vertex in vertices:
                 dissolve_vertex(net, vertex)
 
 
-def is_straight_through(vertex: NetVertex) -> bool:
+def is_straight_through(net: Net, vertex: NetVertex) -> bool:
     """Does the perimeter just pass through this vertex, in a straight line, with the same colours on both sides?"""
     edges = outgoing(vertex)
     if len(edges) != 2:
@@ -87,4 +87,4 @@ def is_straight_through(vertex: NetVertex) -> bool:
     u, w = edges[0].destination, edges[1].destination
     p = vertex.position
     straight = orient(u.position, p, w.position) == 0 and (u.position - p).dot(w.position - p) < 0
-    return straight and (u.point.faces & vertex.point.faces) == (w.point.faces & vertex.point.faces)
+    return straight and net.segment_faces(edges[0]) == net.segment_faces(edges[1])

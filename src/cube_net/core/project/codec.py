@@ -15,7 +15,7 @@ import sys
 from fractions import Fraction
 from typing import Any
 
-from cube_net.core.cube import SurfacePoint
+from cube_net.core.body import CUBE, Body, SurfacePoint
 from cube_net.core.cutting import CutPoint, Rearranged
 from cube_net.core.editor import EditorSnapshot
 from cube_net.core.geometry import Rigid90, Vec
@@ -101,8 +101,8 @@ def _write_point(point: SurfacePoint) -> dict[str, Any]:
     return {"face": point.face, "local": _write_vec(point.local)}
 
 
-def _read_point(data: dict[str, Any]) -> SurfacePoint:
-    return SurfacePoint(data["face"], _read_vec(data["local"]))
+def _read_point(body: Body, data: dict[str, Any]) -> SurfacePoint:
+    return SurfacePoint(body, data["face"], _read_vec(data["local"]))
 
 
 def _write_net(net: Net) -> dict[str, Any]:
@@ -133,9 +133,9 @@ def _write_net(net: Net) -> dict[str, Any]:
 class _LoadedNet:
     """A net read from the file, with its elements by id."""
 
-    def __init__(self, data: dict[str, Any]) -> None:
+    def __init__(self, body: Body, data: dict[str, Any]) -> None:
         self.vertices = {
-            v["id"]: NetVertex(v["id"], _read_vec(v["at"]), _read_point(v["point"])) for v in data["vertices"]
+            v["id"]: NetVertex(v["id"], _read_vec(v["at"]), _read_point(body, v["point"])) for v in data["vertices"]
         }
         self.regions = {r["id"]: Region(r["id"], r["face"], _read_motion(r["placement"])) for r in data["regions"]}
         self.edges = {
@@ -160,7 +160,7 @@ class _LoadedNet:
             self.vertices[v["id"]].edge = self.edges[v["edge"]]
         for r in data["regions"]:
             self.regions[r["id"]].edge = self.edges[r["edge"]]
-        self.net = Net(self.vertices.values(), self.edges.values(), self.regions.values())
+        self.net = Net(body, self.vertices.values(), self.edges.values(), self.regions.values())
 
 
 class _Encoder:
@@ -252,7 +252,9 @@ class _Encoder:
 class _Decoder:
     def __init__(self, data: dict[str, Any]) -> None:
         self._data = data
-        self._nets = [_LoadedNet(net) for net in data["nets"]]
+        # Every project is of the cube so far.
+        self._body = CUBE
+        self._nets = [_LoadedNet(self._body, net) for net in data["nets"]]
         self._rearranged = [self._rearrangement(r) for r in data["rearranged"]]
         self._states = [self._state(state) for state in data["states"]]
 
@@ -264,12 +266,12 @@ class _Decoder:
             [self._entry(entry) for entry in data["history"]["done"]],
             [self._entry(entry) for entry in data["history"]["undone"]],
         )
-        names = {_read_point(point): name for point, name in data["labels"]["names"]}
+        names = {_read_point(self._body, point): name for point, name in data["labels"]["names"]}
         return Project(
             self._states[data["state"]],
             history,
             ProjectSettings(_read_number(data["settings"]["area_threshold"])),
-            PointLabels.restored(names, data["labels"]["next"]),
+            PointLabels.restored(self._body, names, data["labels"]["next"]),
         )
 
     def _entry(self, data: dict[str, Any]) -> HistoryEntry[EditorSnapshot]:

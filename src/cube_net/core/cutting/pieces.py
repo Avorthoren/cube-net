@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Which cube faces a segment of the cut line passes through (for its colours, docs/idea.txt note 3).
+"""Which faces a segment of the cut line passes through (for its colours, docs/idea.txt note 3).
 
 A straight segment on the sheet can cross fold edges; on the cube it then goes from one face to another. Split at
 those crossings, every piece lies in a single region, so its ends can be expressed as cube surface points.
@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 
-from cube_net.core.cube import SurfacePoint
+from cube_net.core.body import SurfacePoint
 from cube_net.core.geometry import Vec, classify_segments, polygon_contains
 from cube_net.core.net import Net, Region
 
@@ -23,6 +23,9 @@ class Piece:
     start_point: SurfacePoint
     end_point: SurfacePoint
 
+    # The region the piece lies in (on a fold, either of the two).
+    region: Region
+
 
 def region_at(net: Net, p: Vec) -> Region | None:
     """A region containing sheet point `p` (on a fold, either of the two)."""
@@ -30,11 +33,11 @@ def region_at(net: Net, p: Vec) -> Region | None:
 
 
 def surface_point_at(net: Net, p: Vec, region: Region | None = None) -> SurfacePoint:
-    """The cube surface point at sheet point `p` (which must lie on the net)."""
+    """The surface point at sheet point `p` (which must lie on the net)."""
     region = region or region_at(net, p)
     if region is None:
         raise ValueError(f"{p} is not on the net")
-    return SurfacePoint(region.face, region.placement.inverse().apply(p))
+    return SurfacePoint(net.body, region.face, region.placement.inverse().apply(p))
 
 
 def pieces(net: Net, a: Vec, b: Vec) -> list[Piece]:
@@ -53,7 +56,9 @@ def pieces(net: Net, a: Vec, b: Vec) -> list[Piece]:
         region = region_at(net, (start + end) / 2)
         if region is None:
             raise ValueError(f"segment {a} - {b} leaves the net")
-        result.append(Piece(start, end, surface_point_at(net, start, region), surface_point_at(net, end, region)))
+        result.append(
+            Piece(start, end, surface_point_at(net, start, region), surface_point_at(net, end, region), region)
+        )
     return result
 
 

@@ -1,12 +1,12 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""`validate_net`: everything that must hold for a finished cube net (docs/plan.md, section 3.4). Raises
+"""`validate_net`: everything that must hold for a finished net (docs/plan.md, section 3.4). Raises
 `NetInvariantError` with a readable message. For use after a structural change, not in anything called often."""
 
 from fractions import Fraction
 
-from cube_net.core.cube import VERTICES, SurfacePoint
+from cube_net.core.body import SurfacePoint
 from cube_net.core.geometry import signed_area
 from cube_net.core.net.elements import EdgeKind
 from cube_net.core.net.net import Net, NetInvariantError
@@ -57,10 +57,11 @@ def _check_regions(net: Net) -> None:
         for he in net.region_cycle(region):
             if region.face not in he.origin.point.faces:
                 _fail(f"{he.origin} doesn't belong to the face of {region}")
-            if region.placement.apply(he.origin.point.local_in(region.face)) != he.origin.position:
+            positions = {region.placement.apply(local) for local in he.origin.point.locals_in(region.face)}
+            if he.origin.position not in positions:
                 _fail(f"{he.origin} isn't where the placement of {region} puts it")
-    if total != 6:
-        _fail(f"the net's area is {total}, expected 6")
+    if total != net.body.area:
+        _fail(f"the net's area is {total}, expected the body's {net.body.area}")
 
 
 def _check_perimeter(net: Net) -> None:
@@ -71,9 +72,9 @@ def _check_perimeter(net: Net) -> None:
     for vertex in net.vertices:
         if vertex not in on_perimeter:
             _fail(f"{vertex} is inside the net")
-    for label in VERTICES:
-        if not net.images(SurfacePoint.at_vertex(label)):
-            _fail(f"cube vertex {label} has no image on the perimeter")
+    for name in net.body.vertex_names:
+        if not net.images(SurfacePoint.at_vertex(net.body, name)):
+            _fail(f"vertex {name} has no image on the perimeter")
 
 
 def _check_cuts(net: Net) -> None:

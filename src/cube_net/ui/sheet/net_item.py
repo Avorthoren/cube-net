@@ -23,7 +23,7 @@ from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 
-from cube_net.core.cube import Face
+from cube_net.core.body import Face
 from cube_net.core.cutting import SplitNet
 from cube_net.core.labels import VertexLabel
 from cube_net.core.net import HalfEdge, Net, NetVertex, Region
@@ -240,8 +240,10 @@ class NetItem(QGraphicsItem):
         if he in self._dashes:
             segment = self._dashes[he]
         else:
-            a, b = he.origin, he.destination
-            segment = self._dashes[he] = prepare_dashed(a.position, b.position, a.point, b.point)
+            region = he.region if he.region is not None else he.twin.region
+            assert region is not None  # every edge has the net on at least one side
+            a, b = he.origin.position, he.destination.position
+            segment = self._dashes[he] = prepare_dashed(self._net.body, region, a, b)
         if segment is not None:
             paint_prepared(painter, world, segment, inset, width)
 

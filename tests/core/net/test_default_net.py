@@ -7,9 +7,9 @@ from collections import Counter
 
 import pytest
 
-from cube_net.core.cube import FACES, SurfacePoint
+from cube_net.core.body import CUBE, FACES, Body, SurfacePoint
 from cube_net.core.geometry import Box, Rigid90, Vec, signed_area
-from cube_net.core.net import EdgeKind, Net, default_net
+from cube_net.core.net import EdgeKind, Net, default_net, starting_net, validate_net
 
 
 @pytest.fixture
@@ -49,7 +49,11 @@ def test_vertex_images(net: Net) -> None:
     """14 images of 8 vertices: A, B 3 times; E, F twice; C, D, G, H once (docs/idea.txt)."""
     counts = Counter(label(v.point) for v in net.vertices)
     assert counts == {"A": 3, "B": 3, "E": 2, "F": 2, "C": 1, "D": 1, "G": 1, "H": 1}
-    assert {v.position for v in net.images(SurfacePoint.at_vertex("A"))} == {Vec(11, 14), Vec(10, 13), Vec(11, 10)}
+    assert {v.position for v in net.images(SurfacePoint.at_vertex(CUBE, "A"))} == {
+        Vec(11, 14),
+        Vec(10, 13),
+        Vec(11, 10),
+    }
     assert all(v.point.vertex is not None for v in net.boundary_vertices())
 
 
@@ -94,3 +98,20 @@ def test_contains(net: Net) -> None:
 
 def test_bounding_box(net: Net) -> None:
     assert net.bounding_box() == Box(Vec(10, 10), Vec(13, 14))
+
+
+class TestOtherBodies:
+    def test_the_pillows_starting_net(self, pillow: Body) -> None:
+        net = starting_net(pillow)
+        validate_net(net)
+        assert net.body is pillow
+        assert [(fold.origin.position, fold.destination.position) for fold in net.fold_edges()] == [
+            (Vec(1, 0), Vec(1, 1))
+        ]
+        assert len(net.boundary_edges()) == 6
+
+    def test_a_net_of_one_face_glued_to_itself(self, flat_pillow: Body) -> None:
+        net = starting_net(flat_pillow)
+        validate_net(net)
+        assert net.fold_edges() == []
+        assert len(net.images(SurfacePoint.at_vertex(flat_pillow, "P"))) == 2
