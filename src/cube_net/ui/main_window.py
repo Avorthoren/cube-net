@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMainWindow,
     QSizePolicy,
+    QStackedWidget,
     QToolBar,
     QWidget,
 )
@@ -32,11 +33,14 @@ from cube_net.core.geometry import Vec
 from cube_net.core.history import ActionKind, HistoryEntry
 from cube_net.core.labels import PointLabels
 from cube_net.core.net import Net, default_net
+from cube_net.core.origin import Origin
 from cube_net.core.project import (
     PROJECT_SUFFIX,
+    TEMPLATE_SUFFIX,
     Project,
     ProjectFileError,
-    load_project,
+    TemplateDocument,
+    load_document,
     new_project,
     save_project,
 )
@@ -79,6 +83,8 @@ from cube_net.ui.sheet.coordinates_text import copied_text
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.sheet.workspace import Workspace
 from cube_net.ui.style import Style, apply_style
+from cube_net.ui.template.net_area import NetArea
+from cube_net.ui.template.template_mode import TemplateMode
 from cube_net.ui.updates.appimage_update import install_appimage, start_appimage
 from cube_net.ui.updates.installation import (
     Installation,
@@ -124,6 +130,19 @@ def format_point(p: Vec) -> str:
 def project_files() -> str:
     """The file dialogs' filter for project files, in the current language."""
     return tr("Cube Net projects (*{suffix})", suffix=PROJECT_SUFFIX)
+
+
+def template_files() -> str:
+    """The file dialogs' filter for template files, in the current language."""
+    return tr("Cube Net templates (*{suffix})", suffix=TEMPLATE_SUFFIX)
+
+
+def any_files() -> str:
+    """Open's filter: projects and templates (and each kind on its own)."""
+    both = tr(
+        "Cube Net projects and templates (*{project} *{template})", project=PROJECT_SUFFIX, template=TEMPLATE_SUFFIX
+    )
+    return ";;".join((both, project_files(), template_files()))
 
 
 def format_style(style: Style) -> str:
@@ -209,7 +228,13 @@ class MainWindow(QMainWindow):
         assert self.workspace.sheet_cursor is not None
         self.sheet_cursor = self.workspace.sheet_cursor
         self.sheet_view.show_initial_view(net_box)
-        self.setCentralWidget(self.sheet_view)
+        # A template is made on its own sheet: the window shows one view or the other (`in_template_mode`).
+        self.template_mode = TemplateMode(self, self._note)
+        self.template_mode.view.set_max_zoom(self.settings.max_zoom)
+        self.stack = QStackedWidget(self)
+        self.stack.addWidget(self.sheet_view)
+        self.stack.addWidget(self.template_mode.view)
+        self.setCentralWidget(self.stack)
         self.sheet_view.setFocus()  # it wants to know about SHIFT even before the first click
 
         self.coords_label = QLabel(NO_COORDINATES, self)
@@ -221,8 +246,9 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.save_state)
         # Where the mouse is over the sheet (sheet coordinates; None: it's elsewhere), for the footer.
         self._mouse: tuple[float, float] | None = None
-        self.sheet_view.mouse_moved.connect(self._on_mouse_moved)
-        self.sheet_view.mouse_left.connect(self._on_mouse_left)
+        for view in (self.sheet_view, self.template_mode.view):
+            view.mouse_moved.connect(self._on_mouse_moved)
+            view.mouse_left.connect(self._on_mouse_left)
         self.cut_tool.origin_changed.connect(self._on_origin_changed)
         assert self.workspace.context_menu is not None
         self.workspace.context_menu.point_name = lambda p: self.workspace.point_name(p, self.point_labels)
@@ -234,9 +260,14 @@ class MainWindow(QMainWindow):
         self.unlock_slope_action = QAction(self)
         self.unlock_slope_action.setShortcut(QKeySequence(Qt.Key.Key_Escape))
         self.unlock_slope_action.setEnabled(False)  # Escape means nothing else then
-        self.unlock_slope_action.triggered.connect(self.cut_tool.unlock_slope)
+        self.unlock_slope_action.triggered.connect(self._on_escape)
         self.addAction(self.unlock_slope_action)
         self.cut_tool.slope_changed.connect(self._on_slope_changed)
+        template_tool = self.template_mode.tool
+        template_tool.slope_changed.connect(self._on_slope_changed)
+        template_tool.origin_changed.connect(self._on_origin_changed)
+        template_tool.line_changed.connect(self._update_edit_actions)
+        self.template_mode.changed.connect(self._on_template_changed)
 
         self._create_instruments()
         self._create_menus()
@@ -285,6 +316,9 @@ class MainWindow(QMainWindow):
     def _record_state(self, recorder: SessionRecorder, snapshot: bool = True) -> None:
         """Everything needed to reproduce the session from this point on: the whole project in its snapshot, and what
         isn't part of a project. The rest is there to be read by a person."""
+        if self.in_template_mode:
+            self._record_template_state(recorder, snapshot)
+            return
         recorder.note("state", "project", self.project_path if self.project_path is not None else "untitled")
         recorder.note("state", "threshold", format_threshold(self.project_settings.area_threshold))
         if snapshot:
@@ -311,8 +345,24 @@ class MainWindow(QMainWindow):
             recorder.note("state", "glue", format_point(kept.origin.position), format_point(kept.destination.position))
         recorder.schedule_view_record()  # zoom and position, once the view has been laid out
 
+    def _record_template_state(self, recorder: SessionRecorder, snapshot: bool) -> None:
+        """What's needed to reproduce a session of making a template from here on (its snapshot), and the rest."""
+        path = self.template_mode.path
+        recorder.note("state", "template", path if path is not None else "untitled")
+        if snapshot:
+            self._record_snapshot(recorder)
+        editor = self.template_mode.editor
+        recorder.note("state", "looping", editor.state.value, len(editor.template.vertices))
+        recorder.note("state", "coordinates", "on" if self.settings.show_vertex_coordinates else "off")
+        recorder.note("state", "language", self.settings.language.value)
+        recorder.note("state", "max_zoom", self.settings.max_zoom)
+        recorder.note("state", "style", format_style(self.settings.style))
+        recorder.note("state", "window", f"{self.width()}x{self.height()}")
+        recorder.note("state", "history", editor.history.done_count, editor.history.undone_count)
+
     def _record_snapshot(self, recorder: SessionRecorder) -> None:
-        recorder.note("state", "snapshot", snapshot_text(self._project()))
+        document = self.template_mode.document() if self.in_template_mode else self._project()
+        recorder.note("state", "snapshot", snapshot_text(document))
 
     def _record_net_state(self, recorder: SessionRecorder) -> None:
         cuts = self.editor.approved_cuts
@@ -355,6 +405,8 @@ class MainWindow(QMainWindow):
         # The rectangle's corners have the coordinates hint too, while it's shown (an empty list while it isn't).
         self.cut_tool.hint_points = self.bounding_item.corners
         self._update_bounding()
+        self.net_area = NetArea(toolbar)  # in their place while a template is made
+        self.net_area.action.setVisible(False)
 
         spacer = QWidget(toolbar)  # pushes what follows to the bottom of the panel
         spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
@@ -381,7 +433,61 @@ class MainWindow(QMainWindow):
         if self.recorder is not None:
             self.recorder.note("cut", "approve")
 
+    @property
+    def in_template_mode(self) -> bool:
+        """Is a template shown (made), not a project?"""
+        return self.stack.currentWidget() is self.template_mode.view
+
+    def _set_template_mode(self, template: bool) -> None:
+        """Show the template's view and what goes with it, or the project's."""
+        if template:
+            self.ruler_action.setChecked(False)  # the ruler is the project view's
+            self.cut_tool.unlock_slope()
+        else:
+            self.template_mode.tool.cancel()
+        self.stack.setCurrentWidget(self.template_mode.view if template else self.sheet_view)
+        (self.template_mode.view if template else self.sheet_view).setFocus()
+        self.ruler_action.setVisible(not template)
+        self.bounding.set_shown(not template)
+        self.net_area.action.setVisible(template)
+        self.validate_action.setVisible(template)
+        self.approve_action.setVisible(not template)
+        self.settings_panel.set_template_mode(template)
+        self._mouse = None
+        self._show_mouse_coordinates()
+        self._update_net_area()
+        self._update_edit_actions()
+
+    def _note(self, *fields: object) -> None:
+        """A line in the session log, if one is being recorded."""
+        if self.recorder is not None:
+            self.recorder.note(*fields)
+
+    def _on_template_changed(self) -> None:
+        self._update_net_area()
+        self._update_title()
+        self._update_edit_actions()
+
+    def _update_net_area(self) -> None:
+        self.net_area.set_area(self.template_mode.area())
+
+    def _on_escape(self) -> None:
+        """Escape: a template drops a fold line being drawn or a drag, and unlocks a locked slope; a project unlocks a
+        locked slope."""
+        if self.in_template_mode:
+            self.template_mode.tool.cancel()
+        else:
+            self.cut_tool.unlock_slope()
+
+    def _on_validate(self) -> None:
+        if self.in_template_mode:
+            self.template_mode.validate()
+
     def _on_undo(self) -> None:
+        if self.in_template_mode:
+            self.template_mode.tool.undo()
+            self._note("template", "undo")
+            return
         entry = self.editor.history.next_undo()
         revision = self.editor.history.revision
         self.cut_tool.undo()
@@ -391,6 +497,10 @@ class MainWindow(QMainWindow):
             self._tell_if_origin_moved(entry)
 
     def _on_redo(self) -> None:
+        if self.in_template_mode:
+            self.template_mode.tool.redo()
+            self._note("template", "redo")
+            return
         entry = self.editor.history.next_redo()
         revision = self.editor.history.revision
         self.cut_tool.redo()
@@ -418,25 +528,40 @@ class MainWindow(QMainWindow):
         if self._mouse is None:
             self.coords_label.setText(NO_COORDINATES)
             return
-        at = self.editor.origin.position
+        at = self._origin().position
         self.coords_label.setText(format_coordinates(self._mouse[0] - float(at.x), self._mouse[1] - float(at.y)))
+
+    def _origin(self) -> Origin:
+        return self.template_mode.editor.origin if self.in_template_mode else self.editor.origin
 
     def _on_origin_changed(self) -> None:
         self._show_mouse_coordinates()
         self._update_edit_actions()  # an action: undo, and the project has changes
         if self.recorder is not None:
-            self.recorder.note("origin", format_point(self.editor.origin.position))
+            self.recorder.note("origin", format_point(self._origin().position))
 
     def _update_edit_actions(self) -> None:
         """Undo and redo need something to undo or redo and no point being dragged; approving needs a valid
         rearrangement."""
-        dragging = self.cut_tool.busy  # a point is being dragged, or a button of the line is pressed
-        self.undo_action.setEnabled(self.editor.history.can_undo and not dragging)
-        self.redo_action.setEnabled(self.editor.history.can_redo and not dragging)
-        rearranged = self.editor.rearranged
-        self.approve_action.setEnabled(rearranged is not None and rearranged.valid)
+        if self.in_template_mode:
+            tool = self.template_mode.tool
+            dragging = tool.busy()
+            history = self.template_mode.editor.history
+            self.approve_action.setEnabled(False)
+            self.validate_action.setEnabled(self.template_mode.can_validate())
+            self.unlock_slope_action.setEnabled(True)  # Escape always means something while making a template
+        else:
+            dragging = self.cut_tool.busy  # a point is being dragged, or a button of the line is pressed
+            history = self.editor.history
+            rearranged = self.editor.rearranged
+            self.approve_action.setEnabled(rearranged is not None and rearranged.valid)
+            self.validate_action.setEnabled(False)
+            self.unlock_slope_action.setEnabled(self.cut_tool.slope is not None)
+        self.undo_action.setEnabled(history.can_undo and not dragging)
+        self.redo_action.setEnabled(history.can_redo and not dragging)
         for action in (
             self.new_action,
+            self.new_template_action,
             self.open_action,
             self.save_action,
             self.save_as_action,
@@ -484,11 +609,19 @@ class MainWindow(QMainWindow):
 
     @property
     def is_dirty(self) -> bool:
-        """Are there changes that aren't saved? Undo and redo count too: the history is saved with the project."""
+        """Are there changes that aren't saved? Undo and redo count too: the history is saved with the project (or the
+        template)."""
+        if self.in_template_mode:
+            return self.template_mode.is_dirty
         return self.editor.history.revision != self._saved_revision or self.project_settings != self._saved_settings
 
+    def _document_path(self) -> Path | None:
+        """The file of what's shown: the project's or the template's."""
+        return self.template_mode.path if self.in_template_mode else self.project_path
+
     def _project_name(self) -> str:
-        return tr(UNTITLED) if self.project_path is None else self.project_path.name
+        path = self._document_path()
+        return tr(UNTITLED) if path is None else path.name
 
     def _update_title(self) -> None:
         # "[*]": a "*" before the name while there are unsaved changes (on macOS a dot in the close button instead).
@@ -498,7 +631,7 @@ class MainWindow(QMainWindow):
         """The title's "*" and the status bar's word: whether there are unsaved changes."""
         dirty = self.is_dirty
         self.setWindowModified(dirty)
-        self.save_state.set_state(dirty, self.project_path is not None)
+        self.save_state.set_state(dirty, self._document_path() is not None)
 
     def _project(self) -> Project:
         return Project(self.editor.snapshot(), self.editor.history, self.project_settings, self.point_labels)
@@ -521,8 +654,23 @@ class MainWindow(QMainWindow):
             self.recorder.note("project", "saved", path)
         return True
 
+    def save_template_to(self, path: Path) -> bool:
+        """Save the template to `path`; from now on that's its file. Tells the user if it fails."""
+        try:
+            self.template_mode.save_to(path)
+        except ProjectFileError as e:
+            tell(self, APP_TITLE, error_text(e), icon=MessageIcon.ERROR)
+            return False
+        self.settings.last_project = path
+        self._update_title()
+        self._update_saved_state()
+        self.statusBar().showMessage(tr("Saved to {path}", path=path), SAVED_MESSAGE_MS)
+        self._note("template", "saved", path)
+        return True
+
     def open_project_from(self, path: Path) -> bool:
-        """Show the project from `path` instead of the current one. If it fails, tells the user and nothing changes."""
+        """Show the project (or the template) from `path` instead of what's shown. If it fails, tells the user and
+        nothing changes."""
         try:
             self._load_and_show(path)
         except ProjectFileError as e:
@@ -531,11 +679,14 @@ class MainWindow(QMainWindow):
         return True
 
     def _load_and_show(self, path: Path) -> None:
-        project = load_project(path)
-        self._show_project(project, path)
+        document = load_document(path)
+        if isinstance(document, TemplateDocument):
+            self._show_template(document, path)
+        else:
+            self._show_project(document, path)
         self.settings.last_project = path
         if self.recorder is not None:
-            self.recorder.note("project", "opened", path)
+            self.recorder.note("template" if isinstance(document, TemplateDocument) else "project", "opened", path)
             self._record_state(self.recorder)
 
     def reopen_last_project(self) -> None:
@@ -760,7 +911,21 @@ class MainWindow(QMainWindow):
             self.recorder.note("project", "new")
             self._record_state(self.recorder)
 
+    def start_new_template(self) -> None:
+        """Show a new, empty template instead of what's shown (File -> New Template)."""
+        self._show_template(None, None)
+        self._note("template", "new")
+        if self.recorder is not None:
+            self._record_state(self.recorder)
+
+    def _show_template(self, document: TemplateDocument | None, path: Path | None) -> None:
+        self._set_template_mode(True)
+        self.template_mode.show(document, path)
+        self._update_title()
+        self._update_saved_state()
+
     def _show_project(self, project: Project, path: Path | None) -> None:
+        self._set_template_mode(False)
         self.editor.load(project.state, project.history)
         self.point_labels = project.labels
         # Colours filled in aren't a change: the project looks as it did (or as a new one should).
@@ -788,29 +953,42 @@ class MainWindow(QMainWindow):
         return choice is SaveChoice.DISCARD
 
     def _dialog_folder(self) -> str:
-        return "" if self.project_path is None else str(self.project_path.parent)
+        path = self._document_path()
+        return "" if path is None else str(path.parent)
 
     def _on_new(self) -> None:
         if self._confirm_leaving_project():
             self.start_new_project()
 
+    def _on_new_template(self) -> None:
+        if self._confirm_leaving_project():
+            self.start_new_template()
+
     def _on_open(self) -> None:
         if not self._confirm_leaving_project():
             return
-        name, _ = QFileDialog.getOpenFileName(self, tr("Open project"), self._dialog_folder(), project_files())
+        name, _ = QFileDialog.getOpenFileName(self, tr("Open project"), self._dialog_folder(), any_files())
         if name:
             self.open_project_from(Path(name))
 
     def _save(self) -> bool:
-        """Save to the project's file; a project without one needs a name first. False if it wasn't saved."""
-        return self._save_as() if self.project_path is None else self.save_project_to(self.project_path)
+        """Save to the file of what's shown; without one, it needs a name first. False if it wasn't saved."""
+        path = self._document_path()
+        if path is None:
+            return self._save_as()
+        return self.save_template_to(path) if self.in_template_mode else self.save_project_to(path)
 
     def _save_as(self) -> bool:
-        name, _ = QFileDialog.getSaveFileName(self, tr("Save project as"), self._dialog_folder(), project_files())
+        if self.in_template_mode:
+            title, files, suffix = tr("Save template as"), template_files(), TEMPLATE_SUFFIX
+        else:
+            title, files, suffix = tr("Save project as"), project_files(), PROJECT_SUFFIX
+        name, _ = QFileDialog.getSaveFileName(self, title, self._dialog_folder(), files)
         if not name:
             return False
         path = Path(name)
-        return self.save_project_to(path if path.suffix else path.with_suffix(PROJECT_SUFFIX))
+        path = path if path.suffix else path.with_suffix(suffix)
+        return self.save_template_to(path) if self.in_template_mode else self.save_project_to(path)
 
     def _on_settings_tab_changed(self) -> None:
         self.settings.settings_tab = self.settings_panel.tab_name()
@@ -830,6 +1008,7 @@ class MainWindow(QMainWindow):
     def _on_max_zoom_changed(self, max_zoom: int) -> None:
         self.settings.max_zoom = max_zoom
         self.sheet_view.set_max_zoom(max_zoom)
+        self.template_mode.view.set_max_zoom(max_zoom)
         if self.recorder is not None:
             self.recorder.note("settings", "max_zoom", max_zoom)
 
@@ -891,6 +1070,7 @@ class MainWindow(QMainWindow):
         item = self.sheet_view.net_item()
         if item is not None:
             item.restyle()
+        self.template_mode.tool.restyle()
         if self.help_window is not None:
             self.help_window.restyle()
         scene = self.sheet_view.scene()
@@ -954,6 +1134,11 @@ class MainWindow(QMainWindow):
         self.new_action.setShortcut("Ctrl+N")
         self.new_action.triggered.connect(self._on_new)
         file_menu.addAction(self.new_action)
+        self.new_template_action = QAction(self)
+        bind(self.new_template_action, self.new_template_action.setText, "New &Template")
+        self.new_template_action.setShortcut("Ctrl+T")
+        self.new_template_action.triggered.connect(self._on_new_template)
+        file_menu.addAction(self.new_template_action)
         self.open_action = QAction(self)
         bind(self.open_action, self.open_action.setText, "&Open...")
         self.open_action.setShortcut("Ctrl+O")
@@ -1027,6 +1212,12 @@ class MainWindow(QMainWindow):
         self.redo_action.setShortcut("Ctrl+Y")
         self.redo_action.triggered.connect(self._on_redo)
         edit_menu.addAction(self.redo_action)
+        self.validate_action = QAction(self)
+        bind(self.validate_action, self.validate_action.setText, "&Validate")
+        self.validate_action.setShortcut("V")
+        self.validate_action.triggered.connect(self._on_validate)
+        self.validate_action.setVisible(False)  # only while a template is made
+        edit_menu.addAction(self.validate_action)
 
         # The applications menu's entry: only for an AppImage (the installers of the other systems make their own).
         self.menu_entry_action: QAction | None = None
@@ -1083,6 +1274,7 @@ class MainWindow(QMainWindow):
         # Open as the user left it. It gets its place when the window is laid out (the view's first resize).
         self.settings_action.setChecked(self.settings.settings_open)
         self.cut_tool.line_changed.connect(self._update_edit_actions)
+        self.template_mode.cursor.set_coordinates_shown(self.settings.show_vertex_coordinates)
         self._update_edit_actions()
 
     def _on_net_changed(self) -> None:
@@ -1102,11 +1294,12 @@ class MainWindow(QMainWindow):
     def _on_show_coordinates_toggled(self, checked: bool) -> None:
         self.settings.show_vertex_coordinates = checked
         self.sheet_cursor.set_coordinates_shown(checked)
+        self.template_mode.cursor.set_coordinates_shown(checked)
         if self.recorder is not None:
             self.recorder.note("coordinates", "on" if checked else "off")
 
     def _on_slope_changed(self, direction: Vec | None) -> None:
-        self.unlock_slope_action.setEnabled(direction is not None)
+        self.unlock_slope_action.setEnabled(direction is not None or self.in_template_mode)
         if direction is None:
             self.slope_label.hide()
         else:
@@ -1121,9 +1314,13 @@ class MainWindow(QMainWindow):
     def copy_coordinates(self) -> None:
         """Ctrl+C: the area's hint while it's shown; otherwise the coordinates hint's two lines; with every number in
         full (nothing if neither is shown)."""
-        point = self.sheet_cursor.coordinates()
+        cursor = self.template_mode.cursor if self.in_template_mode else self.sheet_cursor
+        point = cursor.coordinates()
         clipboard = QApplication.clipboard()
-        if self.bounding.hint_shown() and clipboard is not None:
+        if self.in_template_mode and self.net_area.hint_shown() and clipboard is not None:
+            clipboard.setText(self.net_area.copied_hint())
+            self._note("area", "copied")
+        elif self.bounding.hint_shown() and clipboard is not None:
             clipboard.setText(self.bounding.copied_hint())
             if self.recorder is not None:
                 self.recorder.note("area", "copied")

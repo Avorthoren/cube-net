@@ -63,11 +63,11 @@ class PlaceVertexWindow(SmallWindow):
     def __init__(
         self,
         placement: Placement,
-        place: Callable[[Vec], Problem | None],
+        place: Callable[[Vec], Problem | str | None],
         parent: QWidget | None = None,
         origin: Origin = DEFAULT_ORIGIN,
     ) -> None:
-        """`place`: puts the point at a sheet point, or tells why it can't."""
+        """`place`: puts the point at a sheet point, or tells why it can't (a `Problem`, or what to say)."""
         super().__init__(tr("Place a vertex"), parent)
         self._placement = placement
         self._place = place
@@ -145,7 +145,7 @@ class PlaceVertexWindow(SmallWindow):
             return
         problem = self._place(point)
         if problem is not None:
-            self._say(problem_text(problem))
+            self._say(problem if isinstance(problem, str) else problem_text(problem))
             return
         self.accept()
 

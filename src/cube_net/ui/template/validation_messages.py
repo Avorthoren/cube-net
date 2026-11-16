@@ -1,0 +1,111 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""What validating a template says (docs/template_idea.txt, Validation): a `ValidationFailure` in words, in the user's
+language. Lists read like "A-CT, AS-QC and Z-R"; cuts and their folds like "A1-B1 and A1-B3; S2-Q3 and S1-Q1, S3-Q5";
+folds named the same like "A1-B1 and A2-B2; S1-Q1, S2-Q3 and S3-Q2"."""
+
+from collections.abc import Sequence
+
+from cube_net.core.template import ValidationFailure, ValidationProblem
+from cube_net.ui.i18n import tr
+
+# After reindexing, when nothing else was wrong.
+REINDEXED = "Vertices automatically reindexed.\nNo other problems found."
+
+# When nothing was wrong.
+NO_PROBLEMS = "No problems found."
+
+
+def no_problems_text() -> str:
+    return tr(NO_PROBLEMS)
+
+
+def reindexed_text() -> str:
+    return tr(REINDEXED)
+
+
+def listed(items: Sequence[str]) -> str:
+    """ "A", "A and B", "A, B and C"."""
+    if len(items) == 1:
+        return items[0]
+    return tr("{items} and {last}", items=", ".join(items[:-1]), last=items[-1])
+
+
+def groups_listed(groups: Sequence[Sequence[str]]) -> str:
+    """Groups of 2: "A1-B1 and A1-B3"; of more: "S2-Q3 and S1-Q1, S3-Q5" (the first one, and the others listed);
+    separated by semicolons."""
+    return "; ".join(tr("{first} and {others}", first=g[0], others=", ".join(g[1:])) for g in groups)
+
+
+def failure_text(failure: ValidationFailure) -> str:
+    """The message for a failed check (the last one's is a question: see `REINDEX`)."""
+    names, many = failure.names, len(failure.names) > 1 or len(failure.groups) > 1
+    match failure.problem:
+        case ValidationProblem.UNLABELLED:
+            return tr("Some vertices don't have assigned labels. Name each vertex.")
+        case ValidationProblem.SELF_EDGE:
+            if many:
+                return tr(
+                    "You have edges that connect a vertex to itself, which is impossible: {list}.", list=listed(names)
+                )
+            return tr(
+                "You have an edge that connects a vertex to itself, which is impossible: {list}.", list=listed(names)
+            )
+        case ValidationProblem.NO_COUNTERPART:
+            if many:
+                return tr(
+                    "Segments {list} don't have counterparts. Each segment should appear exactly twice, because "
+                    "that's what gluing implies.",
+                    list=listed(names),
+                )
+            return tr(
+                "Segment {list} doesn't have a counterpart. Each segment should appear exactly twice, because that's "
+                "what gluing implies.",
+                list=listed(names),
+            )
+        case ValidationProblem.NOT_PARALLEL:
+            return tr(
+                "Counterparts for {list} are neither parallel nor perpendicular. Cube Net accepts only nets with "
+                "parallel or perpendicular counterparts, to stay within rational numbers.",
+                list=listed(names),
+            )
+        case ValidationProblem.DIFFERENT_LENGTHS:
+            return tr(
+                "Counterparts for {list} have different lengths, thus it would be impossible to glue them.",
+                list=listed(names),
+            )
+        case ValidationProblem.SAME_DIRECTION:
+            return tr(
+                "Counterparts for {list} run in the same direction along the loop, so one of them would have to be "
+                "turned over to glue them. Counterparts must run in opposite directions.",
+                list=listed(names),
+            )
+        case ValidationProblem.CUT_AND_FOLD:
+            if many or len(failure.groups[0]) > 2:
+                return tr(
+                    "You have cuts that also exist as folds, which is impossible: {list}.",
+                    list=groups_listed(failure.groups),
+                )
+            return tr(
+                "You have a cut that also exists as a fold, which is impossible: {list}.",
+                list=groups_listed(failure.groups),
+            )
+        case ValidationProblem.SAME_FOLDS:
+            return tr(
+                "You have folds that connect the same vertices, which is impossible: {list}.",
+                list="; ".join(listed(group) for group in failure.groups),
+            )
+        case ValidationProblem.NOT_GLUED:
+            if many:
+                return tr(
+                    "Some of your vertices are not glued to themselves, which is impossible: {list}.",
+                    list=listed(names),
+                )
+            return tr("Vertex {name} is not glued to itself, which is impossible.", name=names[0])
+        case ValidationProblem.TOO_FEW_FACES:
+            return tr("Net should have at least 4 faces.")
+        case ValidationProblem.INDEX_GAPS:
+            if many:
+                return tr("Indices for vertices {list} have gaps. Reindex automatically?", list=listed(names))
+            return tr("Indices for vertex {list} have gaps. Reindex automatically?", list=listed(names))

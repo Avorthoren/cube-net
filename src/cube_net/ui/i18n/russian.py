@@ -325,4 +325,83 @@ RUSSIAN: dict[str, str] = {
         "Масштаб меняется колёсиком мыши, а лист можно двигать, перетаскивая его."
     ),
     "Ctrl": "Ctrl",
+    # Templates (docs/template_idea.txt).
+    "New &Template": "Новый &шаблон",
+    "&Validate": "&Проверить",
+    "Save template as": "Сохранить шаблон как",
+    "Cube Net templates (*{suffix})": "Шаблоны Cube Net (*{suffix})",
+    "Cube Net projects and templates (*{project} *{template})": "Проекты и шаблоны Cube Net (*{project} *{template})",
+    "Net area": "Площадь развёртки",
+    "Area of the net the loop draws": "Площадь развёртки, которую очерчивает контур",
+    "Face color": "Цвет грани",
+    "Assign the vertex": "Назначить вершину",
+    "Name (1-2 Latin letters) and index (1-99):": "Имя (1-2 латинские буквы) и индекс (1-99):",
+    "Assign": "Назначить",
+    "Such label already exists. Assign first free index?": "Такая метка уже есть. Назначить первый свободный индекс?",
+    "The point is off the sheet.": "Точка за пределами листа.",
+    "The loop needs 3 segments at least.": "В контуре должно быть хотя бы 3 отрезка.",
+    "The loop would turn inside out.": "Контур вывернулся бы наизнанку.",
+    "A fold would be outside the loop.": "Линия сгиба оказалась бы снаружи контура.",
+    "The loop would touch or cross itself, or a fold.": "Контур коснулся бы себя или линии сгиба либо пересёк бы их.",
+    "A loop keeps 6 vertices at least: this one can't be deleted.": (
+        "В контуре должно остаться хотя бы 6 вершин: эту удалить нельзя."
+    ),
+    "{items} and {last}": "{items} и {last}",
+    "{first} and {others}": "{first} и {others}",
+    "Some vertices don't have assigned labels. Name each vertex.": (
+        "У некоторых вершин нет меток. Назначьте метку каждой вершине."
+    ),
+    "You have edges that connect a vertex to itself, which is impossible: {list}.": (
+        "Есть рёбра, соединяющие вершину саму с собой, а так не бывает: {list}."
+    ),
+    "You have an edge that connects a vertex to itself, which is impossible: {list}.": (
+        "Есть ребро, соединяющее вершину саму с собой, а так не бывает: {list}."
+    ),
+    "Segments {list} don't have counterparts. Each segment should appear exactly twice, because that's what gluing "
+    "implies.": (
+        "У отрезков {list} нет пары. Каждый отрезок должен встречаться ровно дважды: так получается при склейке."
+    ),
+    "Segment {list} doesn't have a counterpart. Each segment should appear exactly twice, because that's what gluing "
+    "implies.": (
+        "У отрезка {list} нет пары. Каждый отрезок должен встречаться ровно дважды: так получается при склейке."
+    ),
+    "Counterparts for {list} are neither parallel nor perpendicular. Cube Net accepts only nets with parallel or "
+    "perpendicular counterparts, to stay within rational numbers.": (
+        "Пары для {list} ни параллельны, ни перпендикулярны. Cube Net принимает только развёртки с параллельными или "
+        "перпендикулярными парами, чтобы оставаться в рациональных числах."
+    ),
+    "Counterparts for {list} have different lengths, thus it would be impossible to glue them.": (
+        "Пары для {list} разной длины, поэтому склеить их невозможно."
+    ),
+    "Counterparts for {list} run in the same direction along the loop, so one of them would have to be turned over to "
+    "glue them. Counterparts must run in opposite directions.": (
+        "Пары для {list} идут по контуру в одном направлении, поэтому для склейки одну из них пришлось бы перевернуть. "
+        "Пары должны идти в противоположных направлениях."
+    ),
+    "You have cuts that also exist as folds, which is impossible: {list}.": (
+        "Есть разрезы, которые встречаются и как линии сгиба, а так не бывает: {list}."
+    ),
+    "You have a cut that also exists as a fold, which is impossible: {list}.": (
+        "Есть разрез, который встречается и как линия сгиба, а так не бывает: {list}."
+    ),
+    "You have folds that connect the same vertices, which is impossible: {list}.": (
+        "Есть линии сгиба, соединяющие одни и те же вершины, а так не бывает: {list}."
+    ),
+    "Some of your vertices are not glued to themselves, which is impossible: {list}.": (
+        "Некоторые вершины не склеены сами с собой, а так не бывает: {list}."
+    ),
+    "Vertex {name} is not glued to itself, which is impossible.": (
+        "Вершина {name} не склеена сама с собой, а так не бывает."
+    ),
+    "Net should have at least 4 faces.": "В развёртке должно быть хотя бы 4 грани.",
+    "Indices for vertices {list} have gaps. Reindex automatically?": (
+        "В индексах вершин {list} есть пропуски. Перенумеровать автоматически?"
+    ),
+    "Indices for vertex {list} have gaps. Reindex automatically?": (
+        "В индексах вершины {list} есть пропуски. Перенумеровать автоматически?"
+    ),
+    "Vertices automatically reindexed.\nNo other problems found.": (
+        "Вершины перенумерованы автоматически.\nДругих проблем не найдено."
+    ),
+    "No problems found.": "Проблем не найдено.",
 }

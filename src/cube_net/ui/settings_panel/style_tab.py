@@ -130,6 +130,12 @@ class StyleTab(QWidget):
     def style(self) -> Style:
         return self._style
 
+    def set_face_colors_shown(self, shown: bool) -> None:
+        """Faces colors, and the line under it, shown or not (not while a template is made: its faces have their own
+        colours, given on the sheet)."""
+        self.sections[FACE_COLORS].setVisible(shown)
+        self.separators[0].setVisible(shown)
+
     def face_colors(self) -> tuple[str, ...]:
         return self._face_colors
 

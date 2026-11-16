@@ -34,6 +34,7 @@ from cube_net.core.template.rules import (
     on_the_sheet,
 )
 from cube_net.core.template.template import Fold, Label, Template
+from cube_net.core.template.validation import reindexed
 
 
 class TemplateState(Enum):
@@ -154,6 +155,12 @@ class TemplateEditor:
         if self.template.vertex(vertex_id).label != label:
             self._record(ActionKind.SET_LABEL, self.template.with_label(vertex_id, label))
         return None
+
+    def reindex(self) -> None:
+        """Every name's indices made 1, 2, 3, ... in their order (validation's offer): one action."""
+        after = reindexed(self.template)
+        if after != self.template:
+            self._record(ActionKind.SET_LABEL, after)
 
     # --- the origin, undo and redo ------------------------------------------------------------------------------------
 

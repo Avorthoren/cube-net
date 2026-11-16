@@ -32,6 +32,10 @@ SWATCH_OUTLINE = QColor("#000000")
 # Second colour of the hatch pattern and of dashes of cuts inside a face.
 WHITE = QColor("#FFFFFF")
 
+# A template's loop, and its fold lines (dashed).
+TEMPLATE_LOOP = QColor("#3C4043")
+TEMPLATE_FOLD = QColor("#5F6368")
+
 # Thin outline of vertex circles, so that sectors stand out on similar colours.
 VERTEX_OUTLINE = QColor("#3C4043")
 

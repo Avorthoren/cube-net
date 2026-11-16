@@ -20,6 +20,7 @@ from cube_net.ui.main_window import (
     format_ruler_total,
     format_style,
 )
+from cube_net.ui.save_changes_dialog import SaveChoice
 from cube_net.ui.session.snapshots import snapshots_in
 from cube_net.ui.style import DEFAULT_STYLE
 
@@ -37,7 +38,8 @@ def test_main_window_opens(qtbot: QtBot) -> None:
     window.show()
     assert window.isVisible()
     assert window.windowTitle() == f"[*]Untitled — {APP_TITLE}"
-    assert window.centralWidget() is window.sheet_view
+    assert window.centralWidget() is window.stack and window.stack.currentWidget() is window.sheet_view
+    assert not window.in_template_mode
 
 
 def test_default_sheet(qtbot: QtBot) -> None:
@@ -335,13 +337,13 @@ def test_sheet_does_not_move_when_ruler_total_widens_the_panel(qtbot: QtBot, tmp
     def h1_in_window() -> object:
         return view.viewport().mapTo(window, view.from_sheet(QPointF(11, 12)).toPoint())
 
-    before, x = h1_in_window(), view.x()
+    before, x = h1_in_window(), window.stack.x()  # the view is in the stack of the project's and template's views
     window.ruler_action.setChecked(True)
     window.ruler_total_label.setText("Σ 123456789.123")  # a long total: the panel gets wider
-    qtbot.waitUntil(lambda: view.x() > x)
+    qtbot.waitUntil(lambda: window.stack.x() > x)
     assert h1_in_window() == before
     window.ruler_action.setChecked(False)
-    qtbot.waitUntil(lambda: view.x() == x)
+    qtbot.waitUntil(lambda: window.stack.x() == x)
     assert h1_in_window() == before
 
 
@@ -2160,7 +2162,8 @@ class TestUnsavedChanges:
         assert window.quit_action.shortcut().toString() == "Ctrl+Q"
         menu = window.new_action.associatedObjects()[0]
         texts = [a.text() for a in menu.actions() if not a.isSeparator()]  # type: ignore[union-attr]
-        assert texts == ["&New", "&Open...", "&Save", "Save &As...", "&Quit"]
+        assert texts == ["&New", "New &Template", "&Open...", "&Save", "Save &As...", "&Quit"]
+        assert window.new_template_action.shortcut().toString() == "Ctrl+T"
 
     def test_recorded(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         from cube_net.ui.save_changes_dialog import SaveChoice
@@ -4074,3 +4077,93 @@ class TestUpdating:
         monkeypatch.setattr("cube_net.ui.main_window.current_installation", lambda: None)
         self.check(qtbot, window)
         assert self.done == ["asked, can update: False", "open https://example.com/release"]
+
+
+class TestTemplates:
+    """File -> New Template: making a template in the same window, on its own sheet."""
+
+    PILLOW = ((10, 10), (11, 10), (12, 10), (12, 11), (11, 11), (10, 11))
+
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def draw(self, window: MainWindow) -> None:
+        view = window.template_mode.view
+        for x, y in [*self.PILLOW, self.PILLOW[0]]:
+            view.left_pressed.emit(float(x), float(y))
+
+    def test_new_template_shows_the_template_sheet_and_its_instruments(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.new_template_action.trigger()
+        assert window.in_template_mode
+        assert window.stack.currentWidget() is window.template_mode.view
+        assert window.windowTitle() == f"[*]Untitled — {APP_TITLE}"
+        assert window.net_area.action.isVisible() and window.validate_action.isVisible()
+        assert not window.ruler_action.isVisible() and not window.approve_action.isVisible()
+        assert not window.bounding.action.isVisible()
+        assert window.settings_panel.preferences.show_labels.isHidden()
+        assert window.validate_action.shortcut().toString() == "V"
+        self.draw(window)
+        assert window.net_area.label.text() == "Net area\n2.000"
+        assert window.is_dirty and window.undo_action.isEnabled()
+        window.undo_action.trigger()
+        assert window.net_area.label.text() == "Net area\n—"
+
+    def test_saved_opened_and_back_to_a_project(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.core.project import load_document
+
+        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", lambda *_: SaveChoice.DISCARD)
+        window = self.make(qtbot, tmp_path)
+        window.new_template_action.trigger()
+        self.draw(window)
+        path = tmp_path / "pillow.nettemplate"
+        assert window.save_template_to(path)
+        assert not window.is_dirty and window.windowTitle() == f"[*]pillow.nettemplate — {APP_TITLE}"
+        assert len(load_document(path).state.template.vertices) == 6  # type: ignore[union-attr]
+        window.new_action.trigger()
+        assert not window.in_template_mode and not window.net_area.action.isVisible()
+        assert window.open_project_from(path)
+        assert window.in_template_mode and not window.is_dirty
+        assert window.template_mode.editor.state.value == "finalization"
+        assert window.template_mode.editor.history.can_undo  # the history came along
+
+    def test_leaving_an_unsaved_template_asks(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        asked: list[str] = []
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.ask_save_changes", lambda _parent, name: asked.append(name) or SaveChoice.CANCEL
+        )
+        window = self.make(qtbot, tmp_path)
+        window.new_template_action.trigger()
+        self.draw(window)
+        window.new_action.trigger()
+        assert asked == ["Untitled"] and window.in_template_mode
+
+    def test_validate(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        told: list[str] = []
+        monkeypatch.setattr("cube_net.ui.template.template_mode.tell", lambda _p, _t, text, **_: told.append(text))
+        window = self.make(qtbot, tmp_path)
+        window.new_template_action.trigger()
+        assert not window.validate_action.isEnabled()  # the loop isn't closed
+        self.draw(window)
+        assert window.validate_action.isEnabled()
+        window.validate_action.trigger()
+        assert told == ["Some vertices don't have assigned labels. Name each vertex."]
+
+    def test_recorded(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, record=True)
+        window.new_template_action.trigger()
+        self.draw(window)
+        assert window.recorder is not None
+        lines = session_lines(window.recorder.log.path)
+        assert "template new" in lines
+        assert "template add 10.000,10.000" in lines and "template close 10.000,10.000" in lines
+        assert any(line.startswith("state template untitled") for line in lines)
+        window.stop_recording("test over")

@@ -13,6 +13,8 @@ is being dragged in CUT_EDITING, and in any state over a drawn point (a vertex, 
 - "Move the origin" opens `MoveOriginWindow` for the drawn point under the mouse (the one the coordinates hint is
   about): the origin moves so that the point has the typed coordinates (`Origin`). Disabled where there's no such
   point, and while a point is dragged.
+- In a template (with `TemplateTool`), "Assign the vertex" too, for the vertex under the mouse: what to do is the
+  window's (`assign`). Disabled where there's no vertex.
 
 The menu is the application's own (`ContextMenu`), drawn in the window: on Wayland, a system popup can't open while the
 drag's button is held. The menu and the window take the mouse, so a drag can't go on after them: placing the point ends
@@ -41,18 +43,24 @@ from cube_net.ui.sheet.move_origin_window import MoveOriginWindow
 from cube_net.ui.sheet.place_vertex_window import PlaceVertexWindow
 from cube_net.ui.sheet.set_slope_window import SetSlopeWindow
 from cube_net.ui.sheet.sheet_view import SheetView
+from cube_net.ui.template.template_tool import TemplateTool
 
 # The menu's items, in their order.
 PLACE_VERTEX = 0
 SET_SLOPE = 1
 MOVE_ORIGIN = 2
+ASSIGN_VERTEX = 3
 
 
 class SheetContextMenu(QObject):
-    def __init__(self, view: SheetView, cut_tool: CutTool) -> None:
+    def __init__(
+        self, view: SheetView, cut_tool: CutTool | TemplateTool, assign: Callable[[Vec], None] | None = None
+    ) -> None:
+        """`assign`: a template's Assign the vertex, for the vertex at a sheet point (None: not offered)."""
         super().__init__(view)
         self._view = view
         self._cut_tool = cut_tool
+        self._assign = assign
 
         # The name of a drawn point (sheet coordinates), if it has one: what undoing a move of the origin tells.
         self.point_name: Callable[[Vec], str | None] = lambda _point: None
@@ -62,6 +70,8 @@ class SheetContextMenu(QObject):
     def offered(self, vertex: Vec | None = None) -> bool:
         """Is there a menu now (DEFAULT, CUTTING, dragging a point in CUT_EDITING, or the mouse over `vertex`, a drawn
         point)?"""
+        if isinstance(self._cut_tool, TemplateTool):
+            return self._cut_tool.menu_offered(vertex)
         state = self._cut_tool.editor.state
         return state in (EditorState.DEFAULT, EditorState.CUTTING) or self._cut_tool.dragging or vertex is not None
 
@@ -76,6 +86,8 @@ class SheetContextMenu(QObject):
             MenuItem(tr("Set slope"), slope is not None),
             MenuItem(tr("Move the origin"), vertex is not None),
         ]
+        if self._assign is not None:
+            items.append(MenuItem(tr("Assign the vertex"), vertex is not None and not self._cut_tool.dragging))
         return ContextMenu(window, items)
 
     def _on_right_pressed(self, x: float, y: float) -> None:
@@ -101,6 +113,8 @@ class SheetContextMenu(QObject):
             self.open_slope_window(slope)
         elif chosen == MOVE_ORIGIN and vertex is not None:
             self.open_origin_window(vertex)
+        elif chosen == ASSIGN_VERTEX and vertex is not None and self._assign is not None:
+            self._assign(vertex)
         elif self._cut_tool.dragging:
             self._cut_tool.cancel_drag()
 

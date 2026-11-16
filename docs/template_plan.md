@@ -343,6 +343,25 @@ Done in T5:
 - Template files: `project/template_codec.py` (the template, its origin and its history; kind "template", format 1),
   read and written by `project/file.py` like projects; `load_document` gives whichever the file holds, by its kind.
 
+Done in T6 (`ui/template/`):
+- `TemplateMode`: the template's own sheet view (fixed 100 x 100), editor, tool, cursor and right click menu, file and
+  validation. The main window keeps one stack of two views and shows the project's or the template's
+  (`in_template_mode`); New, New Template (Ctrl+T), Open, Save, Save As, Undo, Redo, Escape and Ctrl+C go to the
+  one shown. Open reads either kind (by the file's "kind").
+- `TemplateTool`: a click draws the loop (the usual arrow; SHIFT and a locked slope as for cuts); the first vertex closes
+  it. Then: a vertex dragged moves; a vertex clicked (no drag) starts a fold, a click on another vertex ends it (anywhere
+  else, or Escape, gives it up); a middle circle inserts a vertex; Ctrl+click deletes a vertex (with its folds) or a
+  fold; a click in a face opens the colour picker. Refusals flash in black.
+- `TemplateItem`: faces hatched in their colour, tied to the grid (`tiled_hatch`, per unit), folds dashed, the loop
+  solid, all labels always.
+- The right click menu (shared with projects) has Assign the vertex too (`AssignVertexWindow`, the "label taken"
+  question). Validate (V) words the 11 checks (`validation_messages.py`), and offers to reindex.
+- The instrument panel shows Net area (with its exact value in the hint; Ctrl+C copies it) instead of the bounding
+  controls; the ruler, Approve and the labels' switch are hidden; so is Faces colors in Settings -> Style.
+- Session logs: template actions ("template add 10.000,10.000", "close", "move", "fold", "label", "color",
+  "validate", ...) and snapshots of the template (`snapshots.py` extracts them as .nettemplate files).
+- Not in template mode for now: the ruler. Ctrl+T and V are left out of Help's hotkeys (a page of their own later).
+
 - Still to do for other bodies: Help's animation of the cube paints with the open project's colours (it must use the
   cube's, T7); the Style tab's scroll bar (T7).
 

@@ -167,3 +167,13 @@ def tell(
     window.set_default(ok)
     window.set_escape(ok)
     window.ask()
+
+
+def ask_yes_no(parent: QWidget | None, text: str, details: str = "") -> bool:
+    """A question with Yes (the default) and No (also Escape and the close button)."""
+    window = MessageWindow("Cube Net", text, details, MessageIcon.QUESTION, parent)
+    yes = window.add_standard(QDialogButtonBox.StandardButton.Yes)
+    no = window.add_standard(QDialogButtonBox.StandardButton.No)
+    window.set_default(yes)
+    window.set_escape(no)
+    return window.ask() is yes

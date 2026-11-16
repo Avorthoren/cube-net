@@ -64,16 +64,17 @@ class BoundingControls(QObject):
         self._blink_on = False
         self._blink_enabled = True
 
-        toolbar.addSeparator()
+        # What it put on the toolbar, to show or hide together.
+        self._toolbar_actions = [toolbar.addSeparator()]
         self.label = QLabel(toolbar)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.tooltips = InstantTooltips(self.label)  # at once: no waiting over the area
         self._show_tooltip()  # and again with every area, and in another language
-        toolbar.addWidget(self.label)
+        self._toolbar_actions.append(toolbar.addWidget(self.label))
         self.target_label = QLabel(toolbar)
         bind(self.target_label, self.target_label.setText, "Target area")
         self.target_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        toolbar.addWidget(self.target_label)
+        self._toolbar_actions.append(toolbar.addWidget(self.target_label))
         self.target = QDoubleSpinBox(toolbar)
         self.target.setLocale(QLocale.c())  # always 7.100, never 7,100
         self.target.setDecimals(TARGET_DECIMALS)
@@ -82,7 +83,7 @@ class BoundingControls(QObject):
         self.target.setKeyboardTracking(False)  # a value is taken when it's entered, not at every digit typed
         bind(self.target, self.target.setToolTip, "The project's goal: an area below this is a success")
         self.target.valueChanged.connect(self._on_target)
-        toolbar.addWidget(self.target)
+        self._toolbar_actions.append(toolbar.addWidget(self.target))
         app = QApplication.instance()
         assert app is not None
         app.installEventFilter(self)  # see `eventFilter`
@@ -93,6 +94,7 @@ class BoundingControls(QObject):
         bind(self.action, self.action.setToolTip, "Show the smallest bounding rectangle (B)")
         self.action.toggled.connect(self._on_toggled)
         toolbar.addAction(self.action)
+        self._toolbar_actions.append(self.action)
         self.button: QWidget | None = toolbar.widgetForAction(self.action)
 
         TRANSLATIONS.changed.connect(self._show_area)
@@ -166,6 +168,13 @@ class BoundingControls(QObject):
         if self._rectangle is not None:
             text += "\n" + exact_area_text(self._rectangle.area, limit)
         return text
+
+    def set_shown(self, shown: bool) -> None:
+        """Show or hide all of it (hidden while a template is made, which has no target and no rectangle)."""
+        for action in self._toolbar_actions:
+            action.setVisible(shown)
+        if not shown:
+            self.action.setChecked(False)
 
     def hint_shown(self) -> bool:
         """Is the area's hint shown now?"""
