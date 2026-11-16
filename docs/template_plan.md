@@ -323,6 +323,17 @@ Done in T3:
   per face of the open project's body, a change marks the project unsaved, Restore default brings back the body's
   colours. The application's style no longer has them; the colours 1.2.0 kept there (`AppSettings.legacy_face_colors`)
   are only read: a project without colours opens with them, a new cube project starts with them.
+Done in T4 (`core/template/`):
+- `Template` (immutable): the loop's vertices with optional labels, folds (as drawn: from `start` to `end`), and the
+  faces with their colours, kept up to date by every change instead of being worked out again: a fold divides its face
+  (both parts in its colour), deleting one merges the two (in the colour of the face on its left, seen from where it
+  starts), a vertex inserted or deleted goes into or out of its face, and deleting a vertex deletes its folds.
+- `rules.check`: segments meet only at a shared vertex; the loop stays counter-clockwise; folds stay strictly inside;
+  everything on the 100 x 100 sheet. A rejection says what's wrong and which segments to flash.
+- `TemplateEditor`: INITIAL / LOOPING / FINALIZATION, every action in the history (new `ActionKind`s), the origin as
+  in projects. A loop drawn clockwise is turned round when it closes.
+- Saving templates waits for T5 (with their validation and `body_from_template`), so it's all there at once.
+
 - Still to do for other bodies: Help's animation of the cube paints with the open project's colours (it must use the
   cube's, T7); the Style tab's scroll bar (T7).
 
