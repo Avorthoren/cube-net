@@ -14,7 +14,7 @@ is being dragged in CUT_EDITING, and in any state over a drawn point (a vertex, 
   about): the origin moves so that the point has the typed coordinates (`Origin`). Disabled where there's no such
   point, and while a point is dragged.
 - In a template (with `TemplateTool`), "Assign the vertex" too, for the vertex under the mouse: what to do is the
-  window's (`assign`). Disabled where there's no vertex.
+  window's (`assign`). Disabled where there's no vertex, while the loop isn't closed yet, and while a vertex is dragged.
 
 The menu is the application's own (`ContextMenu`), drawn in the window: on Wayland, a system popup can't open while the
 drag's button is held. The menu and the window take the mouse, so a drag can't go on after them: placing the point ends
@@ -87,7 +87,8 @@ class SheetContextMenu(QObject):
             MenuItem(tr("Move the origin"), vertex is not None),
         ]
         if self._assign is not None:
-            items.append(MenuItem(tr("Assign the vertex"), vertex is not None and not self._cut_tool.dragging))
+            assignable = isinstance(self._cut_tool, TemplateTool) and self._cut_tool.can_assign()
+            items.append(MenuItem(tr("Assign the vertex"), assignable and vertex is not None))
         return ContextMenu(window, items)
 
     def _on_right_pressed(self, x: float, y: float) -> None:

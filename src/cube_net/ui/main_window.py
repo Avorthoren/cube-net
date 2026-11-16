@@ -64,6 +64,7 @@ from cube_net.ui.load_failed_dialog import AfterLoadFailed, ask_after_load_faile
 from cube_net.ui.menu_entry_dialog import ask_menu_entry, confirm_menu_entry_removal
 from cube_net.ui.no_wheel import ignore_wheel
 from cube_net.ui.origin_moved_message import tell_origin_moved
+from cube_net.ui.path_label import PathLabel
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.save_state_label import SaveStateLabel
 from cube_net.ui.session.session_recorder import SessionRecorder
@@ -244,6 +245,9 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.coords_label)
         self.save_state = SaveStateLabel(self)
         self.statusBar().addPermanentWidget(self.save_state)
+        # The file being edited, on the left (taking what room the rest leaves).
+        self.path_label = PathLabel(self)
+        self.statusBar().addWidget(self.path_label, 1)
         # Where the mouse is over the sheet (sheet coordinates; None: it's elsewhere), for the footer.
         self._mouse: tuple[float, float] | None = None
         for view in (self.sheet_view, self.template_mode.view):
@@ -626,6 +630,7 @@ class MainWindow(QMainWindow):
     def _update_title(self) -> None:
         # "[*]": a "*" before the name while there are unsaved changes (on macOS a dot in the close button instead).
         self.setWindowTitle(f"[*]{self._project_name()} — {APP_TITLE}")
+        self.path_label.set_path(self._document_path())
 
     def _update_saved_state(self) -> None:
         """The title's "*" and the status bar's word: whether there are unsaved changes."""
@@ -1089,7 +1094,7 @@ class MainWindow(QMainWindow):
     def _place_settings_panel(self) -> None:
         screen = self.screen()
         width = screen.geometry().width() if screen is not None else 1920
-        self.settings_panel.place_over(self.sheet_view.geometry(), width)
+        self.settings_panel.place_over(self.stack.geometry(), width)  # the sheet's area, whichever view is shown
 
     def _on_texts_changed(self) -> None:
         """Texts of another length: the settings panel takes the width it needs now (still at most its share)."""
@@ -1103,9 +1108,9 @@ class MainWindow(QMainWindow):
         self.settings.settings_open = shown
 
     def eventFilter(self, watched: QObject | None, event: QEvent | None) -> bool:
-        """The settings panel follows the sheet view when it moves or changes its size."""
+        """The settings panel follows the sheet's area when it moves or changes its size."""
         if (
-            watched is self.sheet_view
+            watched is self.stack
             and event is not None
             and event.type() in (QEvent.Type.Resize, QEvent.Type.Move)
             and not self.settings_panel.isHidden()  # switched on (not yet visible while the window is being shown)
@@ -1247,7 +1252,7 @@ class MainWindow(QMainWindow):
         self.settings_panel.style_tab.style_changed.connect(self._on_style_changed)
         self.settings_panel.style_tab.set_face_colors(self._face_colors(), CUBE.colors)
         self.settings_panel.style_tab.face_colors_changed.connect(self._on_face_colors_changed)
-        self.sheet_view.installEventFilter(self)
+        self.stack.installEventFilter(self)
         self.settings_action = QAction(self)
         bind(self.settings_action, self.settings_action.setText, "&Settings")
         self.settings_action.setCheckable(True)

@@ -5,8 +5,8 @@ from fractions import Fraction as F
 from pathlib import Path
 
 import pytest
-from PyQt6.QtCore import QSettings, Qt
-from PyQt6.QtWidgets import QToolBar
+from PyQt6.QtCore import QPoint, QRect, QSettings, Qt
+from PyQt6.QtWidgets import QToolBar, QWidget
 from pytestqt.qtbot import QtBot
 
 from cube_net.core.geometry import Vec
@@ -188,6 +188,13 @@ def test_labels_off_at_start_when_disabled_in_settings(qtbot: QtBot, tmp_path: P
     item = window.sheet_view.net_item()
     assert item is not None and item.labels() is None
     assert not window.show_labels_action.isChecked()
+
+
+def in_window(widget: QWidget) -> QRect:
+    """Where `widget` is in the main window (the settings panel is placed in the window's own coordinates)."""
+    window = widget.window()
+    assert window is not None
+    return QRect(widget.mapTo(window, QPoint(0, 0)), widget.size())
 
 
 def settings_in(tmp_path: Path, record: bool) -> AppSettings:
@@ -2882,9 +2889,10 @@ class TestSettingsPanel:
         before = view.from_sheet(QPointF(11, 12))
         window.settings_action.trigger()
         panel = window.settings_panel
-        assert panel.geometry().right() == view.geometry().right()
-        assert panel.geometry().top() == view.geometry().top()
-        assert panel.geometry().height() == view.geometry().height()
+        area = in_window(view)
+        assert panel.geometry().right() == area.right()
+        assert panel.geometry().top() == area.top()
+        assert panel.geometry().height() == area.height()
         screen = window.screen()
         assert screen is not None
         assert panel.width() <= screen.geometry().width() / 3
@@ -2894,8 +2902,17 @@ class TestSettingsPanel:
         window = self.make(qtbot, tmp_path)
         window.settings_action.trigger()
         window.resize(1000, 700)
-        qtbot.waitUntil(lambda: window.settings_panel.geometry().right() == window.sheet_view.geometry().right())
+        qtbot.waitUntil(lambda: window.settings_panel.geometry().right() == in_window(window.sheet_view).right())
+        assert window.settings_panel.geometry().top() == in_window(window.sheet_view).top()
         assert window.settings_panel.height() == window.sheet_view.height()
+
+    def test_over_the_template_sheet_too(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.settings_action.trigger()
+        window.new_template_action.trigger()
+        area = in_window(window.template_mode.view)
+        assert window.settings_panel.geometry().topRight() == area.topRight()
+        assert window.settings_panel.height() == area.height()
 
     def test_the_sheet_works_while_it_is_open(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
@@ -3192,7 +3209,7 @@ class TestSettingsPanelOpenAtStart:
         window = self.make(qtbot, tmp_path)
         assert window.settings_action.isChecked()
         assert window.settings_panel.isVisible()
-        view = window.sheet_view.geometry()
+        view = in_window(window.sheet_view)
         qtbot.waitUntil(lambda: window.settings_panel.geometry().right() == view.right())
         assert window.settings_panel.height() == window.sheet_view.height()
 
@@ -4167,3 +4184,21 @@ class TestTemplates:
         assert "template add 10.000,10.000" in lines and "template close 10.000,10.000" in lines
         assert any(line.startswith("state template untitled") for line in lines)
         window.stop_recording("test over")
+
+
+def test_the_footer_shows_the_files_path(qtbot: QtBot, tmp_path: Path) -> None:
+    window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    assert window.path_label.path() == ""  # a new project: no file yet
+    project = tmp_path / "cube.cubenet"
+    assert window.save_project_to(project)
+    assert window.path_label.path() == str(project)
+    window.new_template_action.trigger()
+    assert window.path_label.path() == ""
+    template = tmp_path / "pillow.nettemplate"
+    assert window.save_template_to(template)
+    assert window.path_label.path() == str(template)
+    assert window.open_project_from(project)
+    assert window.path_label.path() == str(project)

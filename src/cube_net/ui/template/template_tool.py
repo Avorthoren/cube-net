@@ -180,7 +180,7 @@ class TemplateTool(QObject):
         """The exact point under the mouse, or the one a click or the drag would make."""
         if self._drag is not None:
             return self._drag[1]
-        vertex = self._vertex_at(x, y)
+        vertex = self._drawn_vertex_at(x, y)
         if vertex is not None:
             return self._editor.template.position(vertex)
         side = self._midpoint_at(x, y)
@@ -190,12 +190,18 @@ class TemplateTool(QObject):
         return self._next_point(x, y)
 
     def vertex_at(self, x: float, y: float) -> Vec | None:
-        """The vertex under the mouse (its position), if any."""
-        vertex = self._vertex_at(x, y)
+        """The vertex under the mouse (its position), if any, while the loop is drawn too: for the right click's menu
+        (Move the origin; Assign the vertex, once the loop is closed) and the coordinates hint."""
+        vertex = self._drawn_vertex_at(x, y)
         return None if vertex is None else self._editor.template.position(vertex)
 
     def vertex_id_at(self, x: float, y: float) -> int | None:
-        return self._vertex_at(x, y)
+        return self._drawn_vertex_at(x, y)
+
+    def can_assign(self) -> bool:
+        """Can a vertex get a label now (Assign the vertex)? Once the loop is closed (docs/template_idea.txt: the
+        second step), and not while a vertex is dragged."""
+        return self._editor.state is TemplateState.FINALIZATION and self._drag is None
 
     def menu_offered(self, vertex: Vec | None) -> bool:
         """Is there a right click menu here (while drawing the loop, dragging, or over a vertex)?"""
@@ -508,9 +514,14 @@ class TemplateTool(QObject):
         return self._within(x, y, vertices[0].position, net_style.VERTEX_RADIUS_PX)
 
     def _vertex_at(self, x: float, y: float) -> int | None:
-        """The closed loop's vertex whose circle the mouse is in (the nearest one)."""
+        """The closed loop's vertex whose circle the mouse is in (the nearest one): what a click acts on. (While the
+        loop is drawn, a click there doesn't use a vertex: it puts a point, refused unless it closes the loop.)"""
         if self._editor.state is not TemplateState.FINALIZATION:
             return None
+        return self._drawn_vertex_at(x, y)
+
+    def _drawn_vertex_at(self, x: float, y: float) -> int | None:
+        """The vertex whose circle the mouse is in (the nearest one), whether the loop is closed or not."""
         best: tuple[float, int] | None = None
         for v in self._editor.template.vertices:
             d = self._distance_px(x, y, v.position)

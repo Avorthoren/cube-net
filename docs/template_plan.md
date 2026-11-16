@@ -373,3 +373,35 @@ squares (and one that isn't convex), vertices with 4 faces, and two faces sharin
 ## 9. Not decided yet
 
 - Marking templates saved without validation: not for now, maybe later.
+
+---
+
+## 10. Extras (after the main plan)
+
+### 10.1 Templates and nets with holes
+To consider: a template whose net isn't a disk, but has holes: an outer loop and inner loops inside it, each hole's
+sides glued like the outer loop's (to sides of the same hole, of another hole, or of the outer loop). Nets with holes
+would also be what cutting can make in a project (today a cut must keep the net in one piece without holes).
+
+What it would touch, as far as known now:
+- Template: several loops (one outer, counter-clockwise; holes clockwise), drawn one after another; the rules for
+  loops and folds (`rules.py`) apply to every loop, and no loop may touch another; faces may then have holes too, or
+  folds must cut them so that every face stays a simple polygon (to decide).
+- Validation: counterparts may be on different loops; directions are counted along each loop's own way round.
+- The engine: the DCEL already allows several perimeter cycles, but a finished net is checked to have exactly one
+  (`validate_net`), and cutting, rearranging and the overlap check assume one; the "halves" after a cut may not be two
+  then. The bounding rectangle and the area are fine as they are (holes don't count in the area).
+- The UI: drawing a second loop, and which loop a click is about.
+
+### 10.2 Coarser hatching for large faces
+Settings -> Style -> Faces tiling is the number of hatch cells per unit (columns x rows), at least 1 each. A template
+drawn large (the cube's net with faces of 4 x 4 units, say) is looked at zoomed out, and at least one cell per unit
+is a mess there. To consider: tiling below 1 per unit, so that one cell spans several units (e.g. 1/4: a cell 4 units
+wide). Hatching is tied to the grid (`tiled_hatch`), so a cell of k units would start at multiples of k.
+
+What it would touch, as far as known now:
+- The setting's values and its fields: fractions or "one cell per N units" (whichever reads better), and the range
+  (`TILING_RANGE`, saved styles still valid).
+- `tiled_hatch` and `hatch_path` (projects: a face's local frame), and the cache of hatch paths.
+- Whether it's one setting for everything, or the template's / the project's own (a large template wants it, a cube
+  project doesn't).

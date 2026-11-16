@@ -199,3 +199,39 @@ def test_the_menu_and_the_coordinates(setup: tuple[SheetView, TemplateTool]) -> 
     assert tool.vertex_at(11.0, 10.0) == Vec(11, 10)
     assert tool.menu_offered(Vec(11, 10))
     assert tool.coordinates_at(11.5, 11.0) == Vec(F(23, 2), 11)  # a middle circle: where the new vertex would be
+
+
+def test_while_drawing_a_vertex_is_one_for_the_menu(setup: tuple[SheetView, TemplateTool]) -> None:
+    """Move the origin on the loop's vertices before it's closed; Assign the vertex only after."""
+    from cube_net.ui.sheet.sheet_context_menu import ASSIGN_VERTEX, MOVE_ORIGIN, SheetContextMenu
+
+    view, tool = setup
+    view.left_pressed.emit(10.0, 10.0)
+    assert tool.vertex_at(10.0, 10.0) == Vec(10, 10)
+    assert tool.coordinates_at(10.0, 10.0) == Vec(10, 10)
+    menu = SheetContextMenu(view, tool, assign=lambda _p: None)
+    shown = menu.menu(tool.placement_at(10.0, 10.0), None, tool.vertex_at(10.0, 10.0))
+    assert shown.items[MOVE_ORIGIN].enabled and not shown.items[ASSIGN_VERTEX].enabled
+    shown.deleteLater()
+    tool.move_origin(tool.editor.origin.moved(Vec(10, 10), Vec(0, 0), None))
+    assert tool.editor.origin.shown(Vec(10, 10)) == Vec(0, 0)
+    assert tool.editor.state is TemplateState.LOOPING
+    tool.undo()
+    assert tool.editor.origin.shown(Vec(10, 10)) == Vec(10, 10)
+    assert len(tool.editor.template.vertices) == 1  # only the move was undone
+
+
+def test_assign_the_vertex_once_the_loop_is_closed(setup: tuple[SheetView, TemplateTool]) -> None:
+    from cube_net.ui.sheet.sheet_context_menu import ASSIGN_VERTEX, SheetContextMenu
+
+    view, tool = setup
+    assert not tool.can_assign()
+    drawn(view, tool)
+    assert tool.can_assign()
+    menu = SheetContextMenu(view, tool, assign=lambda _p: None)
+    shown = menu.menu(None, None, tool.vertex_at(11.0, 10.0))
+    assert shown.items[ASSIGN_VERTEX].enabled
+    shown.deleteLater()
+    view.left_pressed.emit(11.0, 10.0)
+    view.mouse_moved.emit(11.0, 9.5)  # dragging it
+    assert not tool.can_assign()
