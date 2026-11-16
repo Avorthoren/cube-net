@@ -11,9 +11,12 @@ from cube_net.core.template.rules import (
     on_the_sheet,
 )
 from cube_net.core.template.template import Fold, Label, LoopVertex, Template, TemplateFace, template_area
+from cube_net.core.template.template_body import body_from_template
 from cube_net.core.template.template_editor import TemplateEditor, TemplateSnapshot, TemplateState
+from cube_net.core.template.validation import MIN_FACES, ValidationFailure, ValidationProblem, reindexed, validate
 
 __all__ = [
+    "MIN_FACES",
     "MIN_VERTICES",
     "MIN_VERTICES_TO_CLOSE",
     "Fold",
@@ -26,6 +29,11 @@ __all__ = [
     "TemplateRejection",
     "TemplateSnapshot",
     "TemplateState",
+    "ValidationFailure",
+    "ValidationProblem",
+    "body_from_template",
     "on_the_sheet",
+    "reindexed",
     "template_area",
+    "validate",
 ]

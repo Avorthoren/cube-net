@@ -7,6 +7,7 @@ import pytest
 
 from cube_net.core.body import Body
 from cube_net.core.geometry import Rigid90, Vec
+from cube_net.core.template import Label, Template, TemplateEditor
 
 IDENTITY = Rigid90.identity()
 
@@ -93,3 +94,111 @@ def pinwheel_box() -> Body:
             9: [(-2, 0, "S"), (-1, 0, "A"), (-1, 1, "W"), (-2, 1, "M")],
         }
     )
+
+
+# The cube's cross (docs/idea.txt) as a template: its perimeter counter-clockwise from A_3, labelled as there.
+CROSS_LOOP = [
+    (11, 10, "A", 3),
+    (12, 10, "B", 3),
+    (12, 11, "F", 1),
+    (12, 12, "G", 1),
+    (13, 12, "F", 2),
+    (13, 13, "B", 2),
+    (12, 13, "D", 1),
+    (12, 14, "B", 1),
+    (11, 14, "A", 1),
+    (11, 13, "C", 1),
+    (10, 13, "A", 2),
+    (10, 12, "E", 2),
+    (11, 12, "H", 1),
+    (11, 11, "E", 1),
+]
+
+# Its 5 folds, by their ends' labels.
+CROSS_FOLDS = [("C1", "D1"), ("H1", "G1"), ("E1", "F1"), ("C1", "H1"), ("D1", "G1")]
+
+# Its faces' colours: the cube's.
+CROSS_COLORS = ("#0057B8", "#F28E00", "#008A4B", "#8B45B5", "#E50055", "#00A6D6")
+
+
+def drawn_template(loop: list[tuple[int, int, str, int]], folds: list[tuple[str, str]]) -> TemplateEditor:
+    """A template drawn in the editor: the loop, closed, its labels, then its folds."""
+    editor = TemplateEditor()
+    for x, y, *_ in [*loop, loop[0]]:
+        assert editor.add_point(Vec(x, y)) is None
+    by_position = {v.position: v.id for v in editor.template.vertices}
+    for x, y, name, index in loop:
+        assert editor.set_label(by_position[Vec(x, y)], Label(name, index)) is None
+    by_label = {str(v.label): v.id for v in editor.template.vertices}
+    for start, end in folds:
+        assert editor.add_fold(by_label[start], by_label[end]) is None
+    return editor
+
+
+@pytest.fixture
+def cross_template() -> Template:
+    """The cross, its faces coloured like the cube's (face k of the cube where its colour is)."""
+    template = drawn_template(CROSS_LOOP, CROSS_FOLDS).template
+    centres = {1: Vec(23, 27), 2: Vec(23, 25), 3: Vec(25, 25), 4: Vec(21, 25), 5: Vec(23, 21), 6: Vec(23, 23)}
+    for face, centre in centres.items():
+        index = template.face_at(centre / 2)
+        assert index is not None
+        template = template.with_face_color(index, CROSS_COLORS[face - 1])
+    return template
+
+
+@pytest.fixture
+def draw() -> object:
+    """`drawn_template`, for tests that draw their own templates."""
+    return drawn_template
+
+
+@pytest.fixture
+def cross_drawing() -> tuple[list[tuple[int, int, str, int]], list[tuple[str, str]]]:
+    """The cross's loop and folds, to draw again (with changes)."""
+    return list(CROSS_LOOP), list(CROSS_FOLDS)
+
+
+# The pinwheel box (`pinwheel_box`) as a template, 10 units further right and up: M has 4 instances glued in a ring.
+PINWHEEL_LOOP = [
+    (10, 10, "P", 1),
+    (10, 9, "A", 1),
+    (11, 9, "S", 1),
+    (11, 8, "M", 1),
+    (12, 8, "E", 1),
+    (12, 9, "B", 1),
+    (12, 10, "Q", 1),
+    (13, 10, "B", 2),
+    (13, 11, "E", 2),
+    (14, 11, "M", 2),
+    (14, 12, "N", 1),
+    (13, 12, "C", 1),
+    (12, 12, "R", 1),
+    (12, 13, "C", 2),
+    (11, 13, "N", 2),
+    (11, 14, "M", 3),
+    (10, 14, "W", 1),
+    (10, 13, "D", 1),
+    (10, 12, "T", 1),
+    (9, 12, "D", 2),
+    (9, 11, "W", 2),
+    (8, 11, "M", 4),
+    (8, 10, "S", 2),
+    (9, 10, "A", 2),
+]
+
+PINWHEEL_FOLDS = [
+    ("P1", "Q1"),
+    ("Q1", "R1"),
+    ("R1", "T1"),
+    ("T1", "P1"),
+    ("S1", "B1"),
+    ("E2", "C1"),
+    ("N2", "D1"),
+    ("W2", "A2"),
+]
+
+
+@pytest.fixture
+def pinwheel_template() -> Template:
+    return drawn_template(PINWHEEL_LOOP, PINWHEEL_FOLDS).template

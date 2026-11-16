@@ -5,16 +5,26 @@
 docs/idea.txt."""
 
 from cube_net.core.body import CUBE, Body
-from cube_net.core.net.builder import RegionSpec, build_net
+from cube_net.core.net.builder import NetBuildError, RegionSpec, build_net
 from cube_net.core.net.net import Net
 
 
 def starting_net(body: Body) -> Net:
-    """Every face placed as the body's `start` says, in that order (which numbers the images of each vertex)."""
+    """Every face placed as the body's `start` says. The vertices get their ids (which number the images of each
+    vertex) in the body's `vertex_order`, or else in the order the faces reach them."""
     specs = []
     for face, placement in body.start:
         specs.append(RegionSpec(face, placement, [placement.apply(c) for c in body.face(face).corners]))
-    return build_net(body, specs)
+    net = build_net(body, specs)
+    if body.vertex_order is not None:
+        rank = {position: i for i, position in enumerate(body.vertex_order)}
+        if set(rank) != {v.position for v in net.vertices}:
+            raise NetBuildError("the body's order of the starting net's vertices doesn't name exactly its vertices")
+        for v in net.vertices:
+            v.id = rank[v.position]
+        net.vertices.sort(key=lambda v: v.id)
+        net.reindex()
+    return net
 
 
 def default_net() -> Net:

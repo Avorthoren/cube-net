@@ -66,45 +66,45 @@ def decode_project(data: object) -> Project:
         raise ProjectFileError("It is damaged ({detail}).", detail=f"{type(e).__name__}: {e}") from e
 
 
-def _write_vec(v: Vec) -> list[str]:
+def write_vec(v: Vec) -> list[str]:
     return [str(v.x), str(v.y)]
 
 
-def _read_number(text: object) -> Fraction:
+def read_number(text: object) -> Fraction:
     if not isinstance(text, str):
         raise TypeError(f"expected a number as a string, got {text!r}")
     return Fraction(text)
 
 
-def _read_vec(data: list[object]) -> Vec:
+def read_vec(data: list[object]) -> Vec:
     x, y = data
-    return Vec(_read_number(x), _read_number(y))
+    return Vec(read_number(x), read_number(y))
 
 
-def _write_origin(origin: Origin) -> dict[str, Any]:
+def write_origin(origin: Origin) -> dict[str, Any]:
     return {
-        "at": _write_vec(origin.position),
-        "point": None if origin.point is None else _write_vec(origin.point),
+        "at": write_vec(origin.position),
+        "point": None if origin.point is None else write_vec(origin.point),
         "name": origin.name,
     }
 
 
-def _read_origin(data: dict[str, Any] | None) -> Origin:
+def read_origin(data: dict[str, Any] | None) -> Origin:
     """The origin of a state (None: a state of format version 1, which had none)."""
     if data is None:
         return Origin()
     point, name = data["point"], data["name"]
     if name is not None and not isinstance(name, str):
         raise TypeError(f"expected a point's name, got {name!r}")
-    return Origin(_read_vec(data["at"]), None if point is None else _read_vec(point), name)
+    return Origin(read_vec(data["at"]), None if point is None else read_vec(point), name)
 
 
 def _write_motion(motion: Rigid90) -> dict[str, Any]:
-    return {"k": motion.k, "t": _write_vec(motion.t)}
+    return {"k": motion.k, "t": write_vec(motion.t)}
 
 
 def _read_motion(data: dict[str, Any]) -> Rigid90:
-    return Rigid90(data["k"], _read_vec(data["t"]))
+    return Rigid90(data["k"], read_vec(data["t"]))
 
 
 def _write_body(body: Body) -> str | dict[str, Any]:
@@ -112,11 +112,12 @@ def _write_body(body: Body) -> str | dict[str, Any]:
         return CUBE_BODY
     return {
         "faces": [
-            {"corners": [_write_vec(c) for c in body.face(n).corners], "names": list(body.face(n).names)}
+            {"corners": [write_vec(c) for c in body.face(n).corners], "names": list(body.face(n).names)}
             for n in body.face_numbers
         ],
         "start": [{"face": face, "placement": _write_motion(placement)} for face, placement in body.start],
         "colors": list(body.colors),
+        "vertex_order": None if body.vertex_order is None else [write_vec(p) for p in body.vertex_order],
     }
 
 
@@ -126,11 +127,13 @@ def _read_body(data: object) -> Body:
     if not isinstance(data, dict):
         raise TypeError(f"expected a body, got {data!r}")
     faces = {
-        n: ([_read_vec(c) for c in face["corners"]], [_read_name(name) for name in face["names"]])
+        n: ([read_vec(c) for c in face["corners"]], [_read_name(name) for name in face["names"]])
         for n, face in enumerate(data["faces"], start=1)
     }
     start = [(s["face"], _read_motion(s["placement"])) for s in data["start"]]
-    return Body(faces, start, [str(c) for c in data["colors"]])
+    order = data.get("vertex_order")
+    vertex_order = None if order is None else [read_vec(p) for p in order]
+    return Body(faces, start, [str(c) for c in data["colors"]], vertex_order)
 
 
 def _read_name(name: object) -> str:
@@ -140,17 +143,17 @@ def _read_name(name: object) -> str:
 
 
 def _write_point(point: SurfacePoint) -> dict[str, Any]:
-    return {"face": point.face, "local": _write_vec(point.local)}
+    return {"face": point.face, "local": write_vec(point.local)}
 
 
 def _read_point(body: Body, data: dict[str, Any]) -> SurfacePoint:
-    return SurfacePoint(body, data["face"], _read_vec(data["local"]))
+    return SurfacePoint(body, data["face"], read_vec(data["local"]))
 
 
 def _write_net(net: Net) -> dict[str, Any]:
     return {
         "vertices": [
-            {"id": v.id, "at": _write_vec(v.position), "point": _write_point(v.point), "edge": v.edge.id}
+            {"id": v.id, "at": write_vec(v.position), "point": _write_point(v.point), "edge": v.edge.id}
             for v in net.vertices
         ],
         "edges": [
@@ -177,7 +180,7 @@ class _LoadedNet:
 
     def __init__(self, body: Body, data: dict[str, Any]) -> None:
         self.vertices = {
-            v["id"]: NetVertex(v["id"], _read_vec(v["at"]), _read_point(body, v["point"])) for v in data["vertices"]
+            v["id"]: NetVertex(v["id"], read_vec(v["at"]), _read_point(body, v["point"])) for v in data["vertices"]
         }
         self.regions = {r["id"]: Region(r["id"], r["face"], _read_motion(r["placement"])) for r in data["regions"]}
         self.edges = {
@@ -256,7 +259,7 @@ class _Encoder:
                     "points": None if state.points is None else [self._cut_point(p) for p in state.points],
                     "rearranged": None if state.rearranged is None else self._rearrangement(state.rearranged),
                     "approved_cuts": state.approved_cuts,
-                    "origin": _write_origin(state.origin),
+                    "origin": write_origin(state.origin),
                 }
             )
         return index
@@ -287,7 +290,7 @@ class _Encoder:
 
     @staticmethod
     def _cut_point(point: CutPoint) -> dict[str, Any]:
-        data: dict[str, Any] = {"at": _write_vec(point.position)}
+        data: dict[str, Any] = {"at": write_vec(point.position)}
         if point.edge is not None:
             data["edge"] = point.edge.id
         if point.vertex is not None:
@@ -317,7 +320,7 @@ class _Decoder:
         return Project(
             self._states[data["state"]],
             history,
-            ProjectSettings(_read_number(data["settings"]["area_threshold"]), self._face_colors()),
+            ProjectSettings(read_number(data["settings"]["area_threshold"]), self._face_colors()),
             PointLabels.restored(self._body, names, data["labels"]["next"]),
         )
 
@@ -338,7 +341,7 @@ class _Decoder:
         loaded = self._nets[data["net"]]
         points = None if data["points"] is None else tuple(self._cut_point(loaded, p) for p in data["points"])
         rearranged = None if data["rearranged"] is None else self._rearranged[data["rearranged"]]
-        origin = _read_origin(data.get("origin"))
+        origin = read_origin(data.get("origin"))
         return EditorSnapshot(loaded.net, points, rearranged, data["approved_cuts"], origin)
 
     def _rearrangement(self, data: dict[str, Any]) -> Rearranged:
@@ -354,7 +357,7 @@ class _Decoder:
     @staticmethod
     def _cut_point(loaded: _LoadedNet, data: dict[str, Any]) -> CutPoint:
         return CutPoint(
-            _read_vec(data["at"]),
+            read_vec(data["at"]),
             loaded.edges[data["edge"]] if "edge" in data else None,
             loaded.vertices[data["vertex"]] if "vertex" in data else None,
             loaded.edges[data["fold"]] if "fold" in data else None,

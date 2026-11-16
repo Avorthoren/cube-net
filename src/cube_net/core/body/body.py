@@ -105,10 +105,13 @@ class Body:
         faces: Mapping[Face, tuple[Sequence[Vec], Sequence[VertexName]]],
         start: Sequence[tuple[Face, Rigid90]],
         colors: Sequence[str] | None = None,
+        vertex_order: Sequence[Vec] | None = None,
     ) -> None:
         """`faces`: for each face number (1, 2, ...), its corners, counter-clockwise in its own frame, and their names.
         `start`: where each face goes in the starting net (local -> sheet), in the order its vertices get their ids.
         `colors`: each face's default colour ("#RRGGBB"; face k: colors[k - 1]), white if not given.
+        `vertex_order`: the starting net's vertices (their sheet positions) in the order they get their ids, which
+        numbers the images of each vertex; if not given, the order `start` reaches them in.
         """
         self._faces = {n: BodyFace(n, tuple(corners), tuple(names)) for n, (corners, names) in faces.items()}
         _check_faces(self._faces)
@@ -129,6 +132,9 @@ class Body:
         for color in self._colors:
             if not COLOR_PATTERN.fullmatch(color):
                 raise BodyError(f"a colour must be #RRGGBB with capital letters, got {color!r}")
+        self._vertex_order = None if vertex_order is None else tuple(vertex_order)
+        if self._vertex_order is not None and len(set(self._vertex_order)) != len(self._vertex_order):
+            raise BodyError("the order of the starting net's vertices has a position twice")
 
     # --- faces --------------------------------------------------------------------------------------------------------
 
@@ -146,6 +152,11 @@ class Body:
     def area(self) -> Fraction:
         """The area of the whole surface: the sum of its faces' areas."""
         return self._area
+
+    @property
+    def vertex_order(self) -> tuple[Vec, ...] | None:
+        """The starting net's vertex positions in the order of their ids, if the body says (see `__init__`)."""
+        return self._vertex_order
 
     @property
     def colors(self) -> tuple[str, ...]:

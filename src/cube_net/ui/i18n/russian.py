@@ -56,6 +56,8 @@ RUSSIAN: dict[str, str] = {
     "New project": "Новый проект",
     # Why a project can't be saved or opened (from core.project; values are as the system or the file has them).
     "It isn't a Cube Net project.": "Это не проект Cube Net.",
+    "It isn't a Cube Net template.": "Это не шаблон Cube Net.",
+    "It's a template, not a project.": "Это шаблон, а не проект.",
     "It is damaged.": "Файл повреждён.",
     "It is damaged ({detail}).": "Файл повреждён ({detail}).",
     "It was saved by a newer version of the application.": "Он сохранён более новой версией приложения.",

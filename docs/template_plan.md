@@ -334,6 +334,15 @@ Done in T4 (`core/template/`):
   in projects. A loop drawn clockwise is turned round when it closes.
 - Saving templates waits for T5 (with their validation and `body_from_template`), so it's all there at once.
 
+Done in T5:
+- `template/validation.py`: the 11 checks of template_idea.txt in order; a failure says what to list (names, name
+  pairs, segments, or groups for 7 and 8), the UI words it. `reindexed` closes the gaps in indices, keeping the order.
+- `template/template_body.py`: `body_from_template` (faces in the template's order and frame, the starting net in
+  place). `Body.vertex_order` numbers the starting net's vertices so that each name's images keep the template's
+  indices: the cross drawn as a template gives exactly the cube's default net, A_1 where A_1 is.
+- Template files: `project/template_codec.py` (the template, its origin and its history; kind "template", format 1),
+  read and written by `project/file.py` like projects; `load_document` gives whichever the file holds, by its kind.
+
 - Still to do for other bodies: Help's animation of the cube paints with the open project's colours (it must use the
   cube's, T7); the Style tab's scroll bar (T7).
 
