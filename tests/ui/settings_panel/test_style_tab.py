@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import pytest
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 
 from cube_net.core.body import CUBE
@@ -14,7 +16,7 @@ from cube_net.ui.settings_panel.style_tab import (
     StyleTab,
 )
 from cube_net.ui.style import DEFAULT_STYLE, Style
-from cube_net.ui.style.style import least_vertex_radius
+from cube_net.ui.style.default_style import least_vertex_radius
 
 
 def make(qtbot: QtBot) -> StyleTab:
@@ -104,6 +106,24 @@ def test_a_row_per_face_of_the_projects_body(qtbot: QtBot) -> None:
     assert changed == []  # shown, not changed by the user
     tab.set_face_colors(CUBE.colors, CUBE.colors)
     assert len(tab.face_fields) == 6
+
+
+def test_face_numbers_are_aligned_by_their_last_digit(qtbot: QtBot) -> None:
+    from PyQt6.QtCore import QPoint
+
+    tab = make(qtbot)
+    tab.set_face_colors(("#111111",) * 12, ("#FFFFFF",) * 12)
+    tab.show()
+    qtbot.waitExposed(tab)
+
+    def left(widget: QWidget) -> int:
+        return widget.mapTo(tab, QPoint(0, 0)).x()
+
+    assert len({left(swatch) for swatch in tab.face_swatches}) == 1
+    assert len({left(field) for field in tab.face_fields}) == 1
+    numbers = tab.face_numbers
+    assert {n.alignment() & Qt.AlignmentFlag.AlignRight for n in numbers} == {Qt.AlignmentFlag.AlignRight}
+    assert {left(n) + n.width() for n in numbers} == {left(numbers[0]) + numbers[0].width()}
 
 
 def test_units_are_outside_the_fields(qtbot: QtBot) -> None:

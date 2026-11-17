@@ -242,15 +242,14 @@ class CutLineItem(QGraphicsItem):
         painter.setBrush(colour)
         painter.drawEllipse(world.map(to_qpointf(p)), r, r)
 
-    @staticmethod
-    def _paint_circle(painter: QPainter, world: QTransform, p: Vec, faces: frozenset[int]) -> None:
+    def _paint_circle(self, painter: QPainter, world: QTransform, p: Vec, faces: frozenset[int]) -> None:
         center = world.map(to_qpointf(p))
         r = net_style.VERTEX_RADIUS_PX
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(palette.CUT_LINE_HALO)
         halo = r + net_style.CUT_LINE_HALO_PX
         painter.drawEllipse(center, halo, halo)
-        paint_vertex(painter, center, faces, r)
+        paint_vertex(painter, self._net.body, center, faces, r)
 
     @staticmethod
     def _paint_line(

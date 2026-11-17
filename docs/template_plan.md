@@ -438,6 +438,30 @@ few more checks (pieces of one colour meeting only at a point, ...), to work out
   or the template's; how the Style tab says that it's the document's (the Settings button's tooltip says "of the
   application").
 
+Done (T6c and T7):
+- `core/style.py`: `Style` (its values and ranges) moved to the core; `ui/style` keeps the style files' defaults
+  (`DEFAULT_STYLE`) and the least vertex radius (`fitted`). `ProjectSettings.style` and `TemplateDocument.style` are
+  saved in the file as `"style"` (projects under `settings`); a file without it (saved before) opens with
+  `AppSettings.legacy_style`, what Settings -> Style was then (read, never written), or the defaults. Filled in, it's
+  not a change. No format version changes: format 3 was never released, and a template without a style is still read.
+- A change in Settings -> Style is the open document's: it marks it unsaved (not undoable, like the face colours) and
+  is saved with it. A new template and a new Cube start with the style files' style. "Restore default" brings back the
+  style files' values (and the body's colours for Faces colors). The Settings button's tooltip says that Style is the
+  open project's or template's.
+- `core/project/from_template.py`: `project_from_template` — the body, its starting net where the template has it,
+  the template's colours, style and origin.
+- Built-in templates: `core/project/builtin/cube_with_a_hole.nettemplate`, read by `builtin_templates.py`, made from
+  the author's projects/torus.nettemplate by `python -m scripts.embed_template projects/torus.nettemplate` (only the
+  template, its origin and its style; it must be valid and have a style). Tests check the built-in one is valid.
+- File -> New (`NewProjectWindow`): Cube / Cube with a hole / Custom template, the file field and Browse... for
+  Custom. A custom template that can't be read or is a project is said so; one that isn't valid (or not closed) asks
+  "Template is not valid. Open template?". The window comes first, then the unsaved-changes question.
+- Help's cube is painted in the cube's colours while a project of another body is open (`palette.face_color`).
+- The net builder: at the tip of a slit whose sides have different lengths (the torus's O2), the perimeter goes back
+  down the slit (two half-edges leaving the same way).
+- Still as before: faces in pieces are separate faces of the body until T6b (the torus's two purple pieces are two
+  faces, with the fold between them).
+
 ---
 
 ## 9. Not decided yet

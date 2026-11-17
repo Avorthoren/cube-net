@@ -1,14 +1,12 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from PyQt6.QtCore import QRectF
 from PyQt6.QtGui import QColor, QImage, QPainter, QTransform
 from pytestqt.qtbot import QtBot
 
 from cube_net.core.geometry import Vec
 from cube_net.core.template import Template
-from cube_net.ui.sheet import net_style
-from cube_net.ui.template.template_item import TemplateItem, tiled_hatch
+from cube_net.ui.template.template_item import TemplateItem
 
 SQUARE = [Vec(10, 10), Vec(12, 10), Vec(12, 12), Vec(10, 12)]
 
@@ -30,12 +28,6 @@ def render(item: TemplateItem) -> QImage:
     item.paint(painter, None)
     painter.end()
     return image
-
-
-def test_the_hatch_is_tiled_over_whole_units() -> None:
-    path = tiled_hatch(0, 0, 2, 1)
-    assert path.boundingRect() == QRectF(0, 0, 2, 1)
-    assert path.elementCount() == 2 * net_style.HATCH_COLUMNS * net_style.HATCH_ROWS * 4  # 3 corners, closed
 
 
 def test_a_face_shows_its_colour_and_white(qtbot: QtBot) -> None:

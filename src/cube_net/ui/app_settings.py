@@ -13,7 +13,7 @@ from cube_net.core.body import CUBE
 from cube_net.core.body.body import COLOR_PATTERN
 from cube_net.ui.i18n.language import Language
 from cube_net.ui.sheet.zoom import DEFAULT_MAX_ZOOM, MAX_ZOOM_RANGE
-from cube_net.ui.style import DEFAULT_STYLE, Style, StyleError
+from cube_net.ui.style import DEFAULT_STYLE, Style, StyleError, fitted
 
 # Labels (A_1, x_2, ...) next to all vertices: they stay in the app (they tell apart vertices on the same face).
 # ON while the app is being developed; False for releases.
@@ -199,9 +199,12 @@ class AppSettings:
         self._settings.setValue(_MAX_ZOOM, value)
 
     @property
-    def style(self) -> Style:
-        """Settings -> Style. A stored value that's missing, out of range or not what it should be gives that value's
-        default (the others stay)."""
+    def legacy_style(self) -> Style | None:
+        """Settings -> Style from before it belonged to documents (projects and templates saved before then open with
+        it), if one was stored. Never written any more. A stored value that's missing, out of range or not what it
+        should be gives that value's default (the others stay)."""
+        if not any(self._settings.contains(_STYLE + field.name) for field in fields(Style)):
+            return None
         values = {
             field.name: _read_style_value(
                 field.name, self._settings.value(_STYLE + field.name), getattr(DEFAULT_STYLE, field.name)
@@ -209,15 +212,9 @@ class AppSettings:
             for field in fields(Style)
         }
         try:
-            return Style(**values).fitted()  # type: ignore[arg-type]  # saved before vertices had their least size
+            return fitted(Style(**values))  # type: ignore[arg-type]  # saved before vertices had their least size
         except StyleError:
             return DEFAULT_STYLE
-
-    @style.setter
-    def style(self, style: Style) -> None:
-        for field in fields(Style):
-            value = getattr(style, field.name)
-            self._settings.setValue(_STYLE + field.name, ",".join(value) if isinstance(value, tuple) else value)
 
     @property
     def legacy_face_colors(self) -> tuple[str, ...] | None:

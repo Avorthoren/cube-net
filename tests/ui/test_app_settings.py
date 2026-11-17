@@ -71,16 +71,33 @@ def test_max_zoom_nonsense_in_the_file_gives_the_default(tmp_path: Path, stored:
     assert settings_at(tmp_path / "s.ini").max_zoom == DEFAULT_MAX_ZOOM
 
 
-def test_style_default_and_persisted(tmp_path: Path) -> None:
+def store_style(path: Path, **values: object) -> None:
+    """What an older version wrote for Settings -> Style."""
+    stored = QSettings(str(path), QSettings.Format.IniFormat)
+    for key, value in values.items():
+        stored.setValue(f"style/{key}", value)
+    stored.sync()
+
+
+def test_the_style_of_an_older_version(tmp_path: Path) -> None:
+    """Up to now the application kept Settings -> Style; documents saved then open with it. It's never written."""
+    from dataclasses import fields, replace
+
+    from cube_net.ui.style import DEFAULT_STYLE
+
+    assert settings_at(tmp_path / "s.ini").legacy_style is None
+    changed = replace(DEFAULT_STYLE, edge_width=7.5, hatch_columns=3)
+    store_style(tmp_path / "s.ini", **{field.name: getattr(changed, field.name) for field in fields(changed)})
+    assert settings_at(tmp_path / "s.ini").legacy_style == changed
+
+
+def test_a_style_of_an_older_version_without_some_values(tmp_path: Path) -> None:
     from dataclasses import replace
 
     from cube_net.ui.style import DEFAULT_STYLE
 
-    s = settings_at(tmp_path / "s.ini")
-    assert s.style == DEFAULT_STYLE
-    changed = replace(DEFAULT_STYLE, edge_width=7.5, hatch_columns=3)
-    s.style = changed
-    assert settings_at(tmp_path / "s.ini").style == changed
+    store_style(tmp_path / "s.ini", hatch_columns=3)
+    assert settings_at(tmp_path / "s.ini").legacy_style == replace(DEFAULT_STYLE, hatch_columns=3)
 
 
 @pytest.mark.parametrize(
@@ -88,14 +105,12 @@ def test_style_default_and_persisted(tmp_path: Path) -> None:
     [("edge_width", "99"), ("edge_width", "abc"), ("hatch_rows", "0"), ("grid_color", "#xyz")],
 )
 def test_a_bad_style_value_gives_just_its_default(tmp_path: Path, key: str, stored: str) -> None:
-    from dataclasses import replace
-
     from cube_net.ui.style import DEFAULT_STYLE
 
-    s = settings_at(tmp_path / "s.ini")
-    s.style = replace(DEFAULT_STYLE, vertex_radius=20.0)
-    QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat).setValue(f"style/{key}", stored)
-    style = settings_at(tmp_path / "s.ini").style
+    store_style(tmp_path / "s.ini", vertex_radius=20.0)
+    store_style(tmp_path / "s.ini", **{key: stored})
+    style = settings_at(tmp_path / "s.ini").legacy_style
+    assert style is not None
     assert getattr(style, key) == getattr(DEFAULT_STYLE, key)
     assert style.vertex_radius == 20.0
 
@@ -133,13 +148,9 @@ def test_language_default_and_persisted(tmp_path: Path) -> None:
 
 
 def test_a_style_saved_with_too_small_vertices_gets_them_large_enough(tmp_path: Path) -> None:
-    from dataclasses import replace
-
-    from cube_net.ui.style import DEFAULT_STYLE
-
-    s = settings_at(tmp_path / "s.ini")
-    s.style = replace(DEFAULT_STYLE, edge_width=5.0, vertex_radius=3.0)  # before vertices had their least size
-    assert settings_at(tmp_path / "s.ini").style.vertex_radius == 3.5
+    store_style(tmp_path / "s.ini", edge_width=5.0, vertex_radius=3.0)  # before vertices had their least size
+    style = settings_at(tmp_path / "s.ini").legacy_style
+    assert style is not None and style.vertex_radius == 3.5
 
 
 def test_menu_entry_not_asked_yet_then_remembered(tmp_path: Path) -> None:
@@ -183,18 +194,12 @@ def test_help_not_shown_at_a_start_yet_then_remembered(tmp_path: Path) -> None:
 
 def test_the_face_colours_of_an_older_version(tmp_path: Path) -> None:
     """Version 1.2.0 kept the face colours in Settings -> Style; they are read, never written."""
-    from dataclasses import replace
-
-    from cube_net.ui.style import DEFAULT_STYLE
-
     assert settings_at(tmp_path / "s.ini").legacy_face_colors is None
     stored = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
     stored.setValue("style/face_colors", "#111111,#222222,#333333,#444444,#555555,#66660a")
     stored.sync()
     s = settings_at(tmp_path / "s.ini")
     assert s.legacy_face_colors == ("#111111", "#222222", "#333333", "#444444", "#555555", "#66660A")
-    s.style = replace(DEFAULT_STYLE, edge_width=7.5)  # saving the style leaves them as they are
-    assert settings_at(tmp_path / "s.ini").legacy_face_colors == s.legacy_face_colors
 
 
 @pytest.mark.parametrize("stored", ["#111111", "#111111,#222222,#333333,#444444,#555555,red", ""])

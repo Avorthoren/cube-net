@@ -34,6 +34,7 @@ from cube_net.ui.i18n import tr
 from cube_net.ui.sheet.sheet_context_menu import SheetContextMenu
 from cube_net.ui.sheet.sheet_cursor import SheetCursor
 from cube_net.ui.sheet.sheet_view import SheetView
+from cube_net.ui.style import DEFAULT_STYLE, Style
 from cube_net.ui.template.assign_vertex_window import AssignVertexWindow
 from cube_net.ui.template.template_tool import TemplateTool
 from cube_net.ui.template.validation_messages import failure_text, no_problems_text, reindexed_text
@@ -64,6 +65,10 @@ class TemplateMode(QObject):
         # The template's file, once it has one; the history's revision when it was last saved (or opened).
         self.path: Path | None = None
         self._saved_revision = 0
+
+        # Settings -> Style while this template is shown (saved with it), and as it was when last saved (or opened).
+        self.style: Style = DEFAULT_STYLE
+        self._saved_style = self.style
         self.tool.changed.connect(self.changed)
         self.tool.acted.connect(lambda action, p: self._note("template", action, _point(p)))
         self.tool.rejected.connect(lambda p, problem: self._note("template", "rejected", problem.value, _point(p)))
@@ -74,16 +79,18 @@ class TemplateMode(QObject):
     # --- the document -------------------------------------------------------------------------------------------------
 
     def document(self) -> TemplateDocument:
-        return TemplateDocument(self.editor.snapshot(), self.editor.history)
+        return TemplateDocument(self.editor.snapshot(), self.editor.history, self.style)
 
-    def show(self, document: TemplateDocument | None, path: Path | None) -> None:
-        """Make `document` (None: a new, empty template) the one shown, from the file `path` (None: none yet)."""
+    def show(self, document: TemplateDocument | None, path: Path | None, style: Style) -> None:
+        """Make `document` (None: a new, empty template) the one shown, from the file `path` (None: none yet), with
+        `style` (the document's own, or the one filled in where it has none: not a change)."""
         if document is None:
             document = TemplateDocument(TemplateSnapshot(TemplateEditor().template), History())
         self.tool.cancel()
         self.editor.load(document.state, document.history)
         self.path = path
         self._saved_revision = document.history.revision
+        self.style = self._saved_style = style
         self.tool.refresh()
         self.tool.origin_changed.emit()
         vertices = self.editor.template.vertices
@@ -92,13 +99,19 @@ class TemplateMode(QObject):
 
     @property
     def is_dirty(self) -> bool:
-        return self.editor.history.revision != self._saved_revision
+        return self.editor.history.revision != self._saved_revision or self.style != self._saved_style
+
+    def set_style(self, style: Style) -> None:
+        """Settings -> Style changed while the template is shown (not undoable, like a project's style)."""
+        self.style = style
+        self.changed.emit()
 
     def save_to(self, path: Path) -> None:
         """Save to `path` (raises `ProjectFileError` if it can't be): from now on that's the template's file."""
         save_template(self.document(), path)
         self.path = path
         self._saved_revision = self.editor.history.revision
+        self._saved_style = self.style
         self.changed.emit()
 
     def area(self) -> Fraction | None:

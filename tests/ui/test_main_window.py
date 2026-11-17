@@ -22,7 +22,7 @@ from cube_net.ui.main_window import (
 )
 from cube_net.ui.save_changes_dialog import SaveChoice
 from cube_net.ui.session.snapshots import snapshots_in
-from cube_net.ui.style import DEFAULT_STYLE
+from cube_net.ui.style import DEFAULT_STYLE, Style
 
 
 @pytest.fixture(autouse=True)
@@ -2007,6 +2007,57 @@ class TestUnsavedChanges:
         window.undo_action.trigger()
         assert window.editor.state.value == "cutting"
 
+    def test_new_cube_with_a_hole(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.core.project.builtin_templates import cube_with_a_hole
+        from cube_net.ui import palette
+        from cube_net.ui.dialogs.new_project_window import NewProjectChoice, Start, builtin_project
+        from cube_net.ui.sheet import net_style
+
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.choose_new_project",
+            lambda *_: NewProjectChoice(Start.CUBE_WITH_A_HOLE, None, builtin_project(Start.CUBE_WITH_A_HOLE)),
+        )
+        window = self.make(qtbot, tmp_path)
+        window.new_action.trigger()
+        body = window.net.body
+        template = cube_with_a_hole()
+        assert len(body.face_numbers) == len(template.state.template.faces)
+        assert window.editor.origin == template.state.origin
+        assert window.project_settings.style == template.style
+        assert template.style is not None and template.style.hatch_rows == net_style.HATCH_ROWS
+        assert len(window.settings_panel.style_tab.face_fields) == len(body.face_numbers)
+        assert palette.face_color(body, 1).name().upper() == template.state.template.faces[0].color
+        assert window.project_path is None and not window.is_dirty
+        self.close_line(window)  # the tools work on it
+
+    def test_new_cancelled_in_its_window(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("cube_net.ui.main_window.choose_new_project", lambda *_: None)
+        window = self.make(qtbot, tmp_path)
+        asked = self.answer(monkeypatch)
+        self.close_line(window)
+        window.new_action.trigger()
+        assert asked == []  # nothing to leave
+        assert window.editor.state.value == "cut_editing"
+
+    def test_new_with_a_template_that_is_not_valid_opens_it(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.core.history import History
+        from cube_net.core.project import TemplateDocument
+        from cube_net.core.template import TemplateEditor, TemplateSnapshot
+        from cube_net.ui.dialogs.new_project_window import NewProjectChoice, Start
+
+        path = tmp_path / "unfinished.nettemplate"
+        document = TemplateDocument(TemplateSnapshot(TemplateEditor().template), History())
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.choose_new_project",
+            lambda *_: NewProjectChoice(Start.CUSTOM, path, template=document),
+        )
+        window = self.make(qtbot, tmp_path)
+        window.new_action.trigger()
+        assert window.in_template_mode and window.template_mode.path == path
+        assert window.settings.last_project == path
+
     # --- Open --------------------------------------------------------------------------------------------------------
 
     def test_open_cancel_shows_no_file_dialog(
@@ -2185,8 +2236,8 @@ class TestUnsavedChanges:
         assert window.recorder is not None
         lines = session_lines(window.recorder.log.path)
         assert "project unsaved changes discard" in lines
-        assert "project new" in lines
-        assert "state project untitled" in lines[lines.index("project new") :]
+        assert "project new cube" in lines
+        assert "state project untitled" in lines[lines.index("project new cube") :]
         window.stop_recording("test over")
 
 
@@ -3007,7 +3058,12 @@ class TestStyle:
         qtbot.waitExposed(window)
         return window
 
-    def test_a_change_is_saved_and_used_at_once(self, qtbot: QtBot, tmp_path: Path) -> None:
+    def style(self, window: MainWindow) -> Style:
+        style = window.project_settings.style
+        assert style is not None
+        return style
+
+    def test_a_change_is_the_projects_and_used_at_once(self, qtbot: QtBot, tmp_path: Path) -> None:
         from cube_net.ui.sheet import net_style
 
         window = self.make(qtbot, tmp_path, record=True)
@@ -3015,11 +3071,76 @@ class TestStyle:
         tab.edge_width.setValue(8)
         assert net_style.EDGE_WIDTH_PX == 8
         assert net_style.CUT_HITBOX_PX == 12  # still 1.5 times as wide: a hovered cut is drawn this wide too
-        assert window.settings.style.edge_width == 8
+        assert self.style(window).edge_width == 8
         assert window.recorder is not None
-        assert session_lines(window.recorder.log.path)[-1].startswith("settings style tiling=")
-        assert not window.is_dirty  # the style is the application's
+        assert session_lines(window.recorder.log.path)[-1].startswith("project style tiling=")
+        assert window.is_dirty  # the style is the project's
+        assert window.settings.legacy_style is None  # never written to the application's settings
         window.stop_recording("test over")
+
+    def test_the_style_is_saved_with_the_project(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.core.project import load_project
+        from cube_net.ui.sheet import net_style
+        from cube_net.ui.style import DEFAULT_STYLE
+
+        window = self.make(qtbot, tmp_path)
+        window.settings_panel.style_tab.hatch_columns.setValue(3)
+        path = tmp_path / "style.cubenet"
+        assert window.save_project_to(path)
+        assert not window.is_dirty
+        saved = load_project(path).settings.style
+        assert saved is not None and saved.hatch_columns == 3
+        window.start_new_project()
+        assert self.style(window) == DEFAULT_STYLE and DEFAULT_STYLE.hatch_columns == net_style.HATCH_COLUMNS
+        assert window.settings_panel.style_tab.hatch_columns.value() == DEFAULT_STYLE.hatch_columns
+        assert window.open_project_from(path)
+        assert net_style.HATCH_COLUMNS == 3 and window.settings_panel.style_tab.hatch_columns.value() == 3
+        assert not window.is_dirty
+
+    def test_a_template_has_its_own_style(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.core.project import load_document
+        from cube_net.ui.sheet import net_style
+        from cube_net.ui.style import DEFAULT_STYLE
+
+        window = self.make(qtbot, tmp_path)
+        window.settings_panel.style_tab.hatch_columns.setValue(3)  # the project's
+        window.new_template_action.trigger()
+        assert window.template_mode.style == DEFAULT_STYLE and DEFAULT_STYLE.hatch_columns == net_style.HATCH_COLUMNS
+        assert not window.is_dirty
+        window.settings_panel.style_tab.hatch_rows.setValue(7)
+        assert window.template_mode.style.hatch_rows == 7 and window.is_dirty and window.isWindowModified()
+        path = tmp_path / "t.nettemplate"
+        assert window.save_template_to(path)
+        assert not window.is_dirty
+        document = load_document(path)
+        assert document.style is not None and document.style.hatch_rows == 7  # type: ignore[union-attr]
+        window.start_new_template()
+        assert window.template_mode.style == DEFAULT_STYLE
+        assert window.open_project_from(path)
+        assert net_style.HATCH_ROWS == 7 and not window.is_dirty
+
+    def test_documents_of_an_older_version_get_its_style(self, qtbot: QtBot, tmp_path: Path) -> None:
+        """Up to now Settings -> Style was the application's: what it was then is the style of what was saved then."""
+        from dataclasses import replace
+
+        from cube_net.core.history import History
+        from cube_net.core.project import TemplateDocument, new_project, save_project, save_template
+        from cube_net.core.template import TemplateEditor, TemplateSnapshot
+        from cube_net.ui.sheet import net_style
+
+        stored = QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat)
+        stored.setValue("style/hatch_columns", 4)
+        stored.sync()
+        project, template = tmp_path / "old.cubenet", tmp_path / "old.nettemplate"
+        save_project(new_project(), project)  # no style, as one saved before would have
+        save_template(TemplateDocument(TemplateSnapshot(TemplateEditor().template), History()), template)
+        window = self.make(qtbot, tmp_path)
+        assert self.style(window).hatch_columns != 4  # a new project: the built-in Cube's
+        assert window.open_project_from(project)
+        assert self.style(window) == replace(DEFAULT_STYLE, hatch_columns=4) and net_style.HATCH_COLUMNS == 4
+        assert not window.is_dirty  # filled in, not changed
+        assert window.open_project_from(template)
+        assert window.template_mode.style.hatch_columns == 4 and not window.is_dirty
 
     def test_face_colours_are_the_projects(self, qtbot: QtBot, tmp_path: Path) -> None:
         from cube_net.core.body import CUBE
@@ -3065,16 +3186,14 @@ class TestStyle:
         assert palette.FACE_COLORS[6].name().upper() == "#666666"
         assert not window.is_dirty  # filled in, not changed
 
-    def test_it_comes_back_next_time(self, qtbot: QtBot, tmp_path: Path) -> None:
+    def test_a_new_window_has_the_built_in_cubes_style(self, qtbot: QtBot, tmp_path: Path) -> None:
         from cube_net.ui.sheet import net_style
+        from cube_net.ui.style import DEFAULT_STYLE
 
-        window = self.make(qtbot, tmp_path)
-        window.settings_panel.style_tab.vertex_radius.setValue(15)
-        window.close()
         net_style.set_sizes(5.0, 10.0, 10, 5, 10, 1.0)
-        other = self.make(qtbot, tmp_path)
-        assert net_style.VERTEX_RADIUS_PX == 15
-        assert other.settings_panel.style_tab.vertex_radius.value() == 15
+        window = self.make(qtbot, tmp_path)
+        assert self.style(window) == DEFAULT_STYLE and DEFAULT_STYLE.vertex_radius == net_style.VERTEX_RADIUS_PX
+        assert window.settings_panel.style_tab.vertex_radius.value() == DEFAULT_STYLE.vertex_radius
 
     def test_the_hitbox_follows_the_thickness(self, qtbot: QtBot, tmp_path: Path) -> None:
         from cube_net.ui.sheet import net_style
@@ -3105,12 +3224,12 @@ class TestStyle:
         monkeypatch.setattr("cube_net.ui.settings_panel.section.confirm_restore", lambda _p, name: asked.append(name))
         tab.sections[tabs.FACE_TILING].restore_button.click()
         assert asked == ["Faces tiling"]
-        assert window.settings.style.hatch_columns == 3  # said no
+        assert self.style(window).hatch_columns == 3  # said no
         monkeypatch.setattr("cube_net.ui.settings_panel.section.confirm_restore", lambda *_: True)
         tab.sections[tabs.FACE_TILING].restore_button.click()
-        assert window.settings.style.hatch_columns == DEFAULT_STYLE.hatch_columns
+        assert self.style(window).hatch_columns == DEFAULT_STYLE.hatch_columns
         assert tab.hatch_columns.value() == DEFAULT_STYLE.hatch_columns
-        assert window.settings.style.edge_width == 9  # only that section
+        assert self.style(window).edge_width == 9  # only that section
 
 
 class TestBlinkSetting:

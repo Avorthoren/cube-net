@@ -41,7 +41,6 @@ from cube_net.core.project import (
     ProjectFileError,
     TemplateDocument,
     load_document,
-    new_project,
     save_project,
 )
 from cube_net.core.project_settings import ProjectSettings, format_threshold
@@ -52,6 +51,7 @@ from cube_net.ui import palette
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.desktop_integration import AppImage, DesktopEntry, data_home
 from cube_net.ui.dialogs.message_window import MessageIcon, tell
+from cube_net.ui.dialogs.new_project_window import Start, builtin_project, choose_new_project
 from cube_net.ui.help.about_dialog import AboutDialog
 from cube_net.ui.help.help_window import HelpWindow
 from cube_net.ui.i18n import TRANSLATIONS, Language, bind, tr
@@ -83,7 +83,7 @@ from cube_net.ui.sheet.bounding_item import BoundingItem
 from cube_net.ui.sheet.coordinates_text import copied_text
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.sheet.workspace import Workspace
-from cube_net.ui.style import Style, apply_style
+from cube_net.ui.style import DEFAULT_STYLE, Style, apply_style
 from cube_net.ui.template.net_area import NetArea
 from cube_net.ui.template.template_mode import TemplateMode
 from cube_net.ui.updates.appimage_update import install_appimage, start_appimage
@@ -181,10 +181,10 @@ class MainWindow(QMainWindow):
         self.settings = AppSettings() if settings is None else settings
         self.appimage = appimage
         self.desktop_entry = desktop_entry if desktop_entry is not None else DesktopEntry(data_home())
-        apply_style(self.settings.style)  # before anything gets drawn
         TRANSLATIONS.set_language(self.settings.language)  # before any text is set
         self.point_labels = PointLabels(CUBE)
-        self.project_settings = self._with_face_colors(ProjectSettings(), CUBE)
+        self.project_settings = self._filled_in(ProjectSettings(style=DEFAULT_STYLE), CUBE)
+        apply_style(self._project_style())  # before anything gets drawn
         palette.set_face_colors(self._face_colors())
 
         # The file of the project, once it has one.
@@ -333,7 +333,7 @@ class MainWindow(QMainWindow):
         recorder.note("state", "language", self.settings.language.value)
         recorder.note("state", "blink", "on" if self.settings.blink_on_success else "off")
         recorder.note("state", "max_zoom", self.settings.max_zoom)
-        recorder.note("state", "style", format_style(self.settings.style))
+        recorder.note("state", "style", format_style(self._project_style()))
         recorder.note("state", "face_colors", "/".join(self._face_colors()))
         recorder.note("state", "window", f"{self.width()}x{self.height()}")
         recorder.note("state", "bounds", "on" if self.bounding.action.isChecked() else "off")
@@ -360,7 +360,7 @@ class MainWindow(QMainWindow):
         recorder.note("state", "coordinates", "on" if self.settings.show_vertex_coordinates else "off")
         recorder.note("state", "language", self.settings.language.value)
         recorder.note("state", "max_zoom", self.settings.max_zoom)
-        recorder.note("state", "style", format_style(self.settings.style))
+        recorder.note("state", "style", format_style(self.template_mode.style))
         recorder.note("state", "window", f"{self.width()}x{self.height()}")
         recorder.note("state", "history", editor.history.done_count, editor.history.undone_count)
 
@@ -909,11 +909,11 @@ class MainWindow(QMainWindow):
             else:
                 return
 
-    def start_new_project(self) -> None:
-        """Show a new project instead of the current one."""
-        self._show_project(new_project(), None)
+    def start_new_project(self, project: Project | None = None, start: str = Start.CUBE.value) -> None:
+        """Show a new project (None: the cube's, File -> New's Cube) instead of the current one."""
+        self._show_project(builtin_project(Start.CUBE) if project is None else project, None)
         if self.recorder is not None:
-            self.recorder.note("project", "new")
+            self.recorder.note("project", "new", start)
             self._record_state(self.recorder)
 
     def start_new_template(self) -> None:
@@ -925,7 +925,11 @@ class MainWindow(QMainWindow):
 
     def _show_template(self, document: TemplateDocument | None, path: Path | None) -> None:
         self._set_template_mode(True)
-        self.template_mode.show(document, path)
+        # A new template starts with the style files' style; one saved before the style belonged to documents gets
+        # what Settings -> Style was then. Filled in, it isn't a change.
+        style = DEFAULT_STYLE if document is None else document.style or self.settings.legacy_style or DEFAULT_STYLE
+        self.template_mode.show(document, path, style)
+        self._show_style(style)
         self._update_title()
         self._update_saved_state()
 
@@ -934,9 +938,10 @@ class MainWindow(QMainWindow):
         self.editor.load(project.state, project.history)
         self.point_labels = project.labels
         # Colours filled in aren't a change: the project looks as it did (or as a new one should).
-        settings = self._with_face_colors(project.settings, project.state.net.body)
+        settings = self._filled_in(project.settings, project.state.net.body)
         self.project_settings = settings
         self._show_face_colors()
+        self._show_style(self._project_style())
         self.bounding.set_target(settings.area_threshold)
         self.project_path = path
         self._saved_revision = project.history.revision
@@ -962,8 +967,20 @@ class MainWindow(QMainWindow):
         return "" if path is None else str(path.parent)
 
     def _on_new(self) -> None:
-        if self._confirm_leaving_project():
-            self.start_new_project()
+        """File -> New: the user chooses what the project starts from (or a template that isn't valid, to open)."""
+        choice = choose_new_project(self, template_files(), self._dialog_folder())
+        if choice is None or not self._confirm_leaving_project():
+            return
+        if choice.template is not None:
+            assert choice.path is not None
+            self._show_template(choice.template, choice.path)
+            self.settings.last_project = choice.path
+            self._note("template", "opened", choice.path, "not valid")
+            if self.recorder is not None:
+                self._record_state(self.recorder)
+            return
+        start = choice.start.value if choice.path is None else f"{choice.start.value} {choice.path}"
+        self.start_new_project(choice.project, start)
 
     def _on_new_template(self) -> None:
         if self._confirm_leaving_project():
@@ -1036,39 +1053,57 @@ class MainWindow(QMainWindow):
         self.help_window.raise_()
         self.help_window.activateWindow()
 
-    def _with_face_colors(self, settings: ProjectSettings, body: Body) -> ProjectSettings:
-        """`settings` with face colours, if it has none: the cube's from Settings -> Style of an older version, if
-        there are any, or else the body's own."""
-        if settings.face_colors is not None:
-            return settings
-        legacy = self.settings.legacy_face_colors if body is CUBE else None
-        return replace(settings, face_colors=legacy if legacy is not None else body.colors)
+    def _filled_in(self, settings: ProjectSettings, body: Body) -> ProjectSettings:
+        """`settings` with face colours and a style, where it has none (saved by an older version): the face colours
+        of the cube from Settings -> Style of an older version, if there are any, or else the body's own; the style
+        from Settings -> Style of an older version, if there is one, or else the style files' one."""
+        if settings.face_colors is None:
+            legacy = self.settings.legacy_face_colors if body is CUBE else None
+            settings = replace(settings, face_colors=legacy if legacy is not None else body.colors)
+        if settings.style is None:
+            settings = replace(settings, style=self.settings.legacy_style or DEFAULT_STYLE)
+        return settings
+
+    def _project_style(self) -> Style:
+        style = self.project_settings.style
+        assert style is not None  # `_filled_in` filled it in
+        return style
 
     def _face_colors(self) -> tuple[str, ...]:
         colors = self.project_settings.face_colors
-        assert colors is not None  # `_with_face_colors` filled them in
+        assert colors is not None  # `_filled_in` filled them in
         return colors
 
     def _show_face_colors(self) -> None:
         """Put the project's face colours in place: on the sheet and in Settings -> Style."""
-        palette.set_face_colors(self._face_colors())
+        palette.set_face_colors(self._face_colors(), self.editor.net.body)
         self.settings_panel.style_tab.set_face_colors(self._face_colors(), self.editor.net.body.colors)
         self._repaint_net()
 
     def _on_face_colors_changed(self, colors: tuple[str, ...]) -> None:
         self.project_settings = replace(self.project_settings, face_colors=colors)
-        palette.set_face_colors(colors)
+        palette.set_face_colors(colors, self.editor.net.body)
         self._repaint_net()
         self._update_saved_state()
         if self.recorder is not None:
             self.recorder.note("project", "face_colors", "/".join(colors))
 
+    def _show_style(self, style: Style) -> None:
+        """Put the open document's style in place: on the sheet and in Settings -> Style."""
+        apply_style(style)
+        self.settings_panel.style_tab.set_style(style)
+        self._repaint_net()
+
     def _on_style_changed(self, style: Style) -> None:
-        self.settings.style = style
+        """Settings -> Style changed: it's the open document's (a change to save, like its face colours)."""
+        if self.in_template_mode:
+            self.template_mode.set_style(style)
+        else:
+            self.project_settings = replace(self.project_settings, style=style)
         apply_style(style)
         self._repaint_net()
-        if self.recorder is not None:
-            self.recorder.note("settings", "style", format_style(style))
+        self._update_saved_state()
+        self._note("template" if self.in_template_mode else "project", "style", format_style(style))
 
     def _repaint_net(self) -> None:
         """Paint the net and Help's animation again, in the colours and sizes in place now."""
@@ -1236,7 +1271,7 @@ class MainWindow(QMainWindow):
             self.auto_log_action,
             self.settings.blink_on_success,
             self.settings.max_zoom,
-            self.settings.style,
+            self._project_style(),
             self,
             self.settings.language,
             self.menu_entry_action,
@@ -1256,7 +1291,11 @@ class MainWindow(QMainWindow):
         self.settings_action = QAction(self)
         bind(self.settings_action, self.settings_action.setText, "&Settings")
         self.settings_action.setCheckable(True)
-        bind(self.settings_action, self.settings_action.setToolTip, "Settings of the application (not of the project)")
+        bind(
+            self.settings_action,
+            self.settings_action.setToolTip,
+            "Settings: Style is the open project's or template's, the rest the application's",
+        )
         self.settings_action.toggled.connect(self._on_settings_toggled)
         menu_bar.addAction(self.settings_action)
         help_menu = menu_bar.addMenu("")

@@ -8,8 +8,10 @@ from typing import Any
 import pytest
 
 from cube_net.core.geometry import Vec
+from cube_net.core.history import History
 from cube_net.core.origin import Origin
 from cube_net.core.project import ProjectFileError, TemplateDocument, decode_template, encode_template
+from cube_net.core.style import Style
 from cube_net.core.template import Template, TemplateEditor, TemplateSnapshot
 
 
@@ -48,6 +50,18 @@ def test_the_history_goes_on(cross_template: Template) -> None:
     assert again.template.faces[0].color != "#123456" and again.origin == Origin()
 
 
+def test_the_style(cross_template: Template) -> None:
+    style = Style(3, 4, 7, 2.5, 5.0, "#ABCDEF", 0.5)
+    document = TemplateDocument(TemplateSnapshot(cross_template), History(), style)
+    assert round_trip(document).style == style
+
+
+def test_a_template_saved_without_a_style_has_none(cross_template: Template) -> None:
+    data = json.loads(json.dumps(encode_template(document_of(edited(cross_template)))))
+    assert data.pop("style") is None
+    assert decode_template(data).style is None
+
+
 def test_a_template_while_drawing() -> None:
     editor = TemplateEditor()
     for p in (Vec(10, 10), Vec(12, 10)):
@@ -81,6 +95,8 @@ def test_it_is_plain_json(cross_template: Template) -> None:
         lambda d: d["states"][0].__setitem__("template", 5),
         lambda d: d["history"]["done"][0].__setitem__("kind", "jump"),
         lambda d: d.pop("history"),
+        lambda d: d.__setitem__("style", {"edge_width": 4.0}),
+        lambda d: d.__setitem__("style", "bold"),
     ],
 )
 def test_damaged(cross_template: Template, change: Callable[[dict[str, Any]], None]) -> None:

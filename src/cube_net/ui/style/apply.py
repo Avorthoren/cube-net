@@ -5,9 +5,9 @@
 
 from PyQt6.QtGui import QColor
 
+from cube_net.core.style import Style
 from cube_net.ui import palette
 from cube_net.ui.sheet import net_style
-from cube_net.ui.style.style import Style
 
 
 def apply_style(style: Style) -> None:

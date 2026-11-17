@@ -55,7 +55,7 @@ def prepare_dashed(body: Body, region: Region, a: Vec, b: Vec) -> DashedSegment 
     to_local = region.placement.inverse()
     local_a = to_local.apply(a)
     layout = dash_layout(body, region.face, local_a, to_local.apply(b))
-    colours = [palette.FACE_COLORS[f] if f is not None else palette.WHITE for f in layout.faces]
+    colours = [palette.face_color(body, f) if f is not None else palette.WHITE for f in layout.faces]
     start, end = (qa, qb) if layout.start == SurfacePoint(body, region.face, local_a) else (qb, qa)
     pieces = dash_pieces(length, layout.offset, 1 / (2 * net_style.DASHES_PER_EDGE))
     return DashedSegment(start, end, QPointF(-d.y(), d.x()) / length, length, pieces, (colours[0], colours[1]))
@@ -98,18 +98,18 @@ def paint_dashed(
         paint_prepared(painter, world, segment, inset, width)
 
 
-def paint_vertex(painter: QPainter, center: QPointF, faces: Iterable[Face], radius: float) -> None:
-    """A vertex circle at device position `center`: one equal sector per face, starting at the top."""
+def paint_vertex(painter: QPainter, body: Body, center: QPointF, faces: Iterable[Face], radius: float) -> None:
+    """A vertex circle at device position `center`: one equal sector per face of `body`, starting at the top."""
     rect = QRectF(center.x() - radius, center.y() - radius, 2 * radius, 2 * radius)
     ordered = sorted(faces)
     painter.setPen(QPen(palette.VERTEX_OUTLINE, 1))
     if len(ordered) == 1:  # a whole circle: a 360-degree pie would draw a radius line from the center
-        painter.setBrush(palette.FACE_COLORS[ordered[0]])
+        painter.setBrush(palette.face_color(body, ordered[0]))
         painter.drawEllipse(rect)
         return
     span = 360 / len(ordered)
     for i, face in enumerate(ordered):
-        painter.setBrush(palette.FACE_COLORS[face])
+        painter.setBrush(palette.face_color(body, face))
         painter.drawPie(rect, round((90 + i * span) * 16), round(span * 16))
 
 

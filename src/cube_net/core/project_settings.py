@@ -8,6 +8,7 @@ from fractions import Fraction
 
 from cube_net.core.body.body import COLOR_PATTERN
 from cube_net.core.sheet import TEMPLATE_SHEET_HEIGHT, TEMPLATE_SHEET_WIDTH
+from cube_net.core.style import Style
 
 # The goal of the application: a net that fits into a rectangle of less than this area (docs/idea.txt).
 DEFAULT_AREA_THRESHOLD = Fraction(71, 10)
@@ -32,7 +33,13 @@ class ProjectSettings:
     # (a new project, or one saved before colours belonged to projects); the application fills them in.
     face_colors: tuple[str, ...] | None = None
 
+    # Settings -> Style (docs/template_plan.md, §8.3). None: not chosen yet (a project saved before the style belonged
+    # to projects); the application fills it in.
+    style: Style | None = None
+
     def __post_init__(self) -> None:
+        if self.style is not None and not isinstance(self.style, Style):
+            raise ProjectSettingsError(f"a style must be a Style, got {type(self.style).__name__}")
         if self.face_colors is not None:
             for color in self.face_colors:
                 if not isinstance(color, str) or not COLOR_PATTERN.fullmatch(color):

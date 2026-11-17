@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from pytestqt.qtbot import QtBot
 from cube_net.core.geometry import Vec
 from cube_net.core.project import load_document
 from cube_net.core.template import Label, TemplateState
+from cube_net.ui.style import DEFAULT_STYLE
 from cube_net.ui.template.template_mode import TemplateMode
 
 # A cross (the cube's net), its labels, and its folds (docs/idea.txt).
@@ -66,12 +68,19 @@ def test_gaps_in_indices(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch, an
         assert texts == [] and str(mode.editor.template.vertex(a3).label) == "A7"
 
 
+# A style, not the default one.
+STYLE = replace(DEFAULT_STYLE, hatch_rows=7)
+
+
 def test_save_and_show_again(mode: TemplateMode, tmp_path: Path, qtbot: QtBot) -> None:
     path = tmp_path / "cross.nettemplate"
+    mode.set_style(STYLE)
+    assert mode.is_dirty
     mode.save_to(path)
     assert mode.path == path and not mode.is_dirty
     document = load_document(path)
-    mode.show(None, None)
-    assert mode.editor.state is TemplateState.INITIAL and mode.area() is None
-    mode.show(document, path)  # type: ignore[arg-type]
-    assert mode.area() == 6
+    assert document.style == STYLE  # type: ignore[union-attr]
+    mode.show(None, None, DEFAULT_STYLE)
+    assert mode.editor.state is TemplateState.INITIAL and mode.area() is None and mode.style == DEFAULT_STYLE
+    mode.show(document, path, STYLE)  # type: ignore[arg-type]
+    assert mode.area() == 6 and mode.style == STYLE and not mode.is_dirty

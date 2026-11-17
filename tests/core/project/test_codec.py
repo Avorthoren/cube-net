@@ -31,6 +31,10 @@ from cube_net.core.labels import PointLabels
 from cube_net.core.net import starting_net, validate_net
 from cube_net.core.project import FORMAT_VERSION, ProjectFileError, decode_project, encode_project
 from cube_net.core.project_settings import ProjectSettings
+from cube_net.core.style import Style
+
+# A style, not the default one.
+STYLE = Style(3, 4, 7, 2.5, 5.0, "#ABCDEF", 0.5)
 
 ALL_EDITORS = pytest.mark.parametrize("make", EDITORS.values(), ids=EDITORS.keys())
 
@@ -151,8 +155,36 @@ class TestTheRest:
         project = project_of(editing(), settings=ProjectSettings(F(6789, 1000)))
         assert round_trip(project).settings.area_threshold == F(6789, 1000)
 
+    def test_the_style(self) -> None:
+        project = project_of(editing(), settings=ProjectSettings(style=STYLE))
+        assert round_trip(project).settings.style == STYLE
+        assert encode_project(project)["settings"]["style"]["hatch_rows"] == STYLE.hatch_rows
+
+    def test_a_project_saved_without_a_style_has_none(self) -> None:
+        data = json.loads(json.dumps(encode_project(project_of(editing(), settings=ProjectSettings(style=STYLE)))))
+        del data["settings"]["style"]
+        assert decode_project(data).settings.style is None
+
+    @pytest.mark.parametrize(
+        "damage",
+        [
+            lambda style: style.__setitem__("edge_width", 99.0),
+            lambda style: style.__setitem__("hatch_rows", "2"),
+            lambda style: style.pop("grid_color"),
+        ],
+    )
+    def test_a_damaged_style(self, damage: Callable[[dict[str, Any]], None]) -> None:
+        data = json.loads(json.dumps(encode_project(project_of(editing(), settings=ProjectSettings(style=STYLE)))))
+        damage(data["settings"]["style"])
+        with pytest.raises(ProjectFileError, match="damaged"):
+            decode_project(data)
+
     def test_the_threshold_is_a_decimal_string(self) -> None:
-        assert encode_project(project_of(editing()))["settings"] == {"area_threshold": "7.100", "face_colors": None}
+        assert encode_project(project_of(editing()))["settings"] == {
+            "area_threshold": "7.100",
+            "face_colors": None,
+            "style": None,
+        }
 
     @pytest.mark.parametrize("make", [editing, a_second_cut_in_progress], ids=["first", "second"])
     def test_point_names_stay_the_same(self, make: Callable[[], Editor]) -> None:

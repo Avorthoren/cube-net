@@ -11,6 +11,7 @@ from types import MappingProxyType
 
 from PyQt6.QtGui import QColor
 
+from cube_net.core.body import CUBE, Body
 from cube_net.core.body.cube import FACE_COLORS as CUBE_FACE_COLORS
 
 # Background of the main area around the sheet.
@@ -25,6 +26,10 @@ GRID = QColor("#D3D3D3")
 # The open project's face colours (face k: FACE_COLORS[k]); `set_face_colors` puts them in place. The cube's default
 # ones (docs/idea.txt) until a project says otherwise.
 FACE_COLORS = MappingProxyType({face: QColor(color) for face, color in enumerate(CUBE_FACE_COLORS, start=1)})
+
+# The open project's body: its faces are painted in FACE_COLORS, another body's (Help's cube, while a project of
+# another body is open) in that body's own default colours.
+_FACE_COLORS_BODY: Body = CUBE
 
 # Outline of the grid's preview square in the settings.
 SWATCH_OUTLINE = QColor("#000000")
@@ -121,10 +126,19 @@ APPROVE_BUTTON_PRESSED_TOP = QColor("#9AA0A6")
 APPROVE_BUTTON_DISABLED = QColor("#9E9E9E")
 
 
-def set_face_colors(colors: Sequence[str]) -> None:
-    """Use these face colours ("#RRGGBB", face k: colors[k - 1]) from now on."""
-    global FACE_COLORS
+def set_face_colors(colors: Sequence[str], body: Body = CUBE) -> None:
+    """Use these face colours ("#RRGGBB", face k: colors[k - 1]) for the faces of `body` (the open project's) from
+    now on."""
+    global FACE_COLORS, _FACE_COLORS_BODY
     FACE_COLORS = MappingProxyType({face: QColor(color) for face, color in enumerate(colors, start=1)})
+    _FACE_COLORS_BODY = body
+
+
+def face_color(body: Body, face: int) -> QColor:
+    """The colour face `face` of `body` is painted in."""
+    if body is _FACE_COLORS_BODY:
+        return FACE_COLORS[face]
+    return QColor(body.colors[face - 1])
 
 
 def set_grid_color(grid: QColor) -> None:

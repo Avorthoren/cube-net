@@ -111,7 +111,11 @@ def build_net(body: Body, specs: Iterable[RegionSpec]) -> Net:
 def _turn(arriving: HalfEdge, leaving: list[HalfEdge]) -> HalfEdge:
     """The half-edge that follows `arriving` around the face on its left: of those leaving its destination, the first
     one clockwise from the way back (`arriving.twin`). Where the perimeter passes a vertex more than once, that keeps
-    each pass with its own part of the net."""
+    each pass with its own part of the net.
+
+    At the tip of a slit, the perimeter goes back the way it came: a half-edge leaving the same way as `back` lies
+    right after it if it's on the perimeter (between them is the slit, outside the net, as on `back`'s right), and a
+    full turn later if a region is on its left (as on `back`'s: they can't be right next to each other)."""
     back = arriving.twin
     at = back.origin.position
     d0 = back.destination.position - at
@@ -126,6 +130,6 @@ def _turn(arriving: HalfEdge, leaving: list[HalfEdge]) -> HalfEdge:
             return 1, Fraction(0)
         if y > 0:
             return 2, x / y
-        return 3, Fraction(0)  # the same way as d0: a full turn
+        return (-1 if he.region is None else 3), Fraction(0)  # the same way as d0: through a slit, or a full turn
 
     return min((he for he in leaving if he is not back), key=clockwise)

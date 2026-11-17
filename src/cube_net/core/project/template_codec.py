@@ -5,7 +5,8 @@
 and redo go on after reopening). Like a project's (docs/plan.md, section 5.3): exact numbers as strings, and every
 template stored once, in a table, the states referring to it by index.
 
-`{"format_version": 1, "kind": "template", "templates": [...], "states": [...], "state": i, "history": {...}}`
+`{"format_version": 1, "kind": "template", "style": {...}, "templates": [...], "states": [...], "state": i,
+"history": {...}}` (no "style": saved before the style belonged to documents)
 """
 
 from __future__ import annotations
@@ -15,8 +16,9 @@ from typing import Any
 
 from cube_net.core.body.body import COLOR_PATTERN
 from cube_net.core.history import ActionKind, History, HistoryEntry
-from cube_net.core.project.codec import read_origin, read_vec, write_origin, write_vec
+from cube_net.core.project.codec import read_origin, read_style, read_vec, write_origin, write_style, write_vec
 from cube_net.core.project.project import ProjectFileError
+from cube_net.core.style import Style
 from cube_net.core.template.template import Fold, Label, LoopVertex, Template, TemplateFace
 from cube_net.core.template.template_editor import TemplateSnapshot
 
@@ -29,10 +31,14 @@ TEMPLATE_KIND = "template"
 
 @dataclass(frozen=True, slots=True)
 class TemplateDocument:
-    """What a template file keeps: the template being made, and its history."""
+    """What a template file keeps: the template being made, its history, and its style."""
 
     state: TemplateSnapshot
     history: History[TemplateSnapshot]
+
+    # Settings -> Style while the template is made; a project made from it starts with it. None: not chosen yet (a new
+    # template, or one saved before the style belonged to documents); the application fills it in.
+    style: Style | None = None
 
 
 def encode_template(document: TemplateDocument) -> dict[str, Any]:
@@ -66,6 +72,7 @@ def encode_template(document: TemplateDocument) -> dict[str, Any]:
     return {
         "format_version": TEMPLATE_FORMAT_VERSION,
         "kind": TEMPLATE_KIND,
+        "style": write_style(document.style),
         "templates": templates_data,
         "states": states_data,
         "state": state,
@@ -92,7 +99,7 @@ def decode_template(data: object) -> TemplateDocument:
         history: History[TemplateSnapshot] = History.restored(
             [entry(e) for e in data["history"]["done"]], [entry(e) for e in data["history"]["undone"]]
         )
-        return TemplateDocument(states[data["state"]], history)
+        return TemplateDocument(states[data["state"]], history, read_style(data.get("style")))
     except (KeyError, IndexError, TypeError, ValueError, AttributeError, ZeroDivisionError) as e:
         raise ProjectFileError("It is damaged ({detail}).", detail=f"{type(e).__name__}: {e}") from e
 

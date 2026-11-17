@@ -15,7 +15,7 @@ from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import HalfEdge, default_net
 from cube_net.ui import palette
 from cube_net.ui.sheet import net_style
-from cube_net.ui.sheet.net_item import NetItem, hatch_path
+from cube_net.ui.sheet.net_item import NetItem
 
 SCALE = 100.0  # px per unit
 ORIGIN = QPointF(9, 15)  # sheet point drawn at the image's top-left corner
@@ -44,15 +44,6 @@ def render(
 def colour_at(image: QImage, world: QTransform, x: float, y: float) -> QColor:
     p = world.map(QPointF(x, y))
     return image.pixelColor(int(p.x()), int(p.y()))
-
-
-def test_hatch_covers_half_of_the_face() -> None:
-    path = hatch_path()
-    area = 0.0
-    for i in range(path.elementCount() // 4):  # 4 elements per closed triangle
-        a, b, c = (path.elementAt(4 * i + j) for j in range(3))
-        area += abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)) / 2
-    assert area == pytest.approx(0.5)
 
 
 def test_hatch_upper_triangle_coloured_lower_white() -> None:
@@ -117,7 +108,7 @@ def test_single_face_circle_has_no_radius_line() -> None:
     image = QImage(60, 60, QImage.Format.Format_RGB32)
     image.fill(QColor("white"))
     painter = QPainter(image)
-    paint_vertex(painter, QPointF(30, 30), {2}, 20)
+    paint_vertex(painter, CUBE, QPointF(30, 30), {2}, 20)
     painter.end()
     for y in range(14, 29):  # straight up from the center: all face colour, no outline pixels
         assert image.pixelColor(30, y) == palette.FACE_COLORS[2], y

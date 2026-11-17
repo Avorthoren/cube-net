@@ -3,27 +3,23 @@
 
 """The Style tab: how the net and the sheet look (docs/idea.txt, settings). Every change takes effect at once.
 
-The face colours belong to the open project (one row per face of its body); everything else is the application's."""
+All of it belongs to the open document (docs/template_plan.md, §8.3): the face colours to the project (one row per face
+of its body; a template has its faces' own, given on the sheet), the rest to the project or the template. Restore
+default brings back the body's colours, and the style files' values for the rest."""
 
 from collections.abc import Sequence
 from dataclasses import replace
 
-from PyQt6.QtCore import QLocale, pyqtSignal
+from PyQt6.QtCore import QLocale, Qt, pyqtSignal
 from PyQt6.QtWidgets import QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout, QWidget
 
+from cube_net.core.style import DASHES_RANGE, EDGE_WIDTH_RANGE, GRID_WIDTH_RANGE, TILING_RANGE, VERTEX_RADIUS_RANGE
 from cube_net.ui.i18n import bind, tr
 from cube_net.ui.settings_panel.color_field import ColorField
 from cube_net.ui.settings_panel.section import Section
 from cube_net.ui.settings_panel.swatches import ColorSwatch, GridSwatch
-from cube_net.ui.style import DEFAULT_STYLE, Style
-from cube_net.ui.style.style import (
-    DASHES_RANGE,
-    EDGE_WIDTH_RANGE,
-    GRID_WIDTH_RANGE,
-    TILING_RANGE,
-    VERTEX_RADIUS_RANGE,
-    least_vertex_radius,
-)
+from cube_net.ui.style import DEFAULT_STYLE, Style, fitted
+from cube_net.ui.style.default_style import least_vertex_radius
 
 # Between the two numbers of the tiling: the multiplication sign.
 BY_SIGN = chr(0x00D7)
@@ -96,6 +92,7 @@ class StyleTab(QWidget):
         self._colors_section.body.addWidget(self._face_rows)
         self.face_swatches: list[ColorSwatch] = []
         self.face_fields: list[ColorField] = []
+        self.face_numbers: list[QLabel] = []
 
         tiling = self._section(FACE_TILING)
         self.hatch_columns, self.hatch_rows = _count_box(TILING_RANGE, tiling), _count_box(TILING_RANGE, tiling)
@@ -130,6 +127,11 @@ class StyleTab(QWidget):
     def style(self) -> Style:
         return self._style
 
+    def set_style(self, style: Style) -> None:
+        """Show the open document's style (without taking that for a change by the user)."""
+        self._style = style
+        self._fill(style)
+
     def set_face_colors_shown(self, shown: bool) -> None:
         """Faces colors, and the line under it, shown or not (not while a template is made: its faces have their own
         colours, given on the sheet)."""
@@ -158,20 +160,25 @@ class StyleTab(QWidget):
             row = item.widget()
             if row is not None:
                 row.deleteLater()
-        self.face_swatches, self.face_fields = [], []
+        self.face_swatches, self.face_fields, self.face_numbers = [], [], []
+        width = self._face_rows.fontMetrics().horizontalAdvance(str(count))  # the widest number: the last one
         for face in range(1, count + 1):
             row = QWidget(self._face_rows)
+            number = QLabel(f"{face}", row)
+            number.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)  # units under units
+            number.setFixedWidth(width)
             swatch = ColorSwatch("#FFFFFF", row)
             field = ColorField("#FFFFFF", row, lambda face=face: tr("Face {face} color", face=face))
             field.changed.connect(lambda color, face=face: self._on_face_color(face, color))
             line = QHBoxLayout(row)
             line.setContentsMargins(0, 0, 0, 0)
-            for widget in (QLabel(f"{face}", row), swatch, field):
+            for widget in (number, swatch, field):
                 line.addWidget(widget)
             line.addStretch()
             self._face_rows_layout.addWidget(row)
             self.face_swatches.append(swatch)
             self.face_fields.append(field)
+            self.face_numbers.append(number)
 
     def _section(self, title: str) -> Section:
         section = Section(title, self)
@@ -221,7 +228,7 @@ class StyleTab(QWidget):
         if self._filling:
             return
         # Thicker edges may need larger vertices: they grow with them, just as much as needed.
-        self._style = replace(self._style, **values).fitted()  # type: ignore[arg-type]
+        self._style = fitted(replace(self._style, **values))  # type: ignore[arg-type]
         self._fill(self._style)  # the swatches follow
         self.style_changed.emit(self._style)
 

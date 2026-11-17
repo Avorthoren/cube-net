@@ -18,8 +18,8 @@ from pathlib import Path
 from PyQt6.QtCore import QBuffer, QIODevice, QRect, Qt
 from PyQt6.QtGui import QColor, QImage, QPainter
 
-from cube_net.core.net import Net, default_net
 from cube_net.core.body import CUBE
+from cube_net.core.net import Net, default_net
 
 ROOT = Path(__file__).resolve().parent.parent
 WINDOW_ICON = ROOT / "src/cube_net/ui/icons/cube_net.png"

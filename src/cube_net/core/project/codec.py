@@ -13,6 +13,7 @@ it's the cube), so a project of a body made from a template doesn't need the tem
 from __future__ import annotations
 
 import sys
+from dataclasses import fields
 from fractions import Fraction
 from typing import Any
 
@@ -26,6 +27,7 @@ from cube_net.core.net import EdgeKind, HalfEdge, Net, NetInvariantError, NetVer
 from cube_net.core.origin import Origin
 from cube_net.core.project.project import Project, ProjectFileError
 from cube_net.core.project_settings import ProjectSettings, format_threshold
+from cube_net.core.style import Style
 
 # Exact coordinates can have many digits, more than Python turns into text by default (a guard against huge numbers from
 # strangers, which doesn't apply here). A project must be saved and loaded, however complicated it got.
@@ -97,6 +99,20 @@ def read_origin(data: dict[str, Any] | None) -> Origin:
     if name is not None and not isinstance(name, str):
         raise TypeError(f"expected a point's name, got {name!r}")
     return Origin(read_vec(data["at"]), None if point is None else read_vec(point), name)
+
+
+def write_style(style: Style | None) -> dict[str, Any] | None:
+    return None if style is None else {field.name: getattr(style, field.name) for field in fields(Style)}
+
+
+def read_style(data: object) -> Style | None:
+    """A document's style (None: saved before the style belonged to documents). Raises `StyleError` (a `ValueError`)
+    if a value isn't a valid one."""
+    if data is None:
+        return None
+    if not isinstance(data, dict):
+        raise TypeError(f"expected a style, got {data!r}")
+    return Style(**{field.name: data[field.name] for field in fields(Style)})
 
 
 def _write_motion(motion: Rigid90) -> dict[str, Any]:
@@ -232,6 +248,7 @@ class _Encoder:
             "settings": {
                 "area_threshold": format_threshold(project.settings.area_threshold),
                 "face_colors": None if colors is None else list(colors),
+                "style": write_style(project.settings.style),
             },
             "labels": {"names": [[_write_point(p), name] for p, name in names.items()], "next": next_index},
             "nets": self._nets_data,
@@ -320,7 +337,11 @@ class _Decoder:
         return Project(
             self._states[data["state"]],
             history,
-            ProjectSettings(read_number(data["settings"]["area_threshold"]), self._face_colors()),
+            ProjectSettings(
+                read_number(data["settings"]["area_threshold"]),
+                self._face_colors(),
+                read_style(data["settings"].get("style")),
+            ),
             PointLabels.restored(self._body, names, data["labels"]["next"]),
         )
 

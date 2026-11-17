@@ -30,23 +30,11 @@ from cube_net.core.template import Template
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
+from cube_net.ui.sheet.hatch import cells_around, tiled_hatch
 from cube_net.ui.sheet.net_painting import UP_RIGHT, paint_labels
 from cube_net.ui.template.corners import middle_angle, owned_arcs, shared
 
 type Segment = tuple[Vec, Vec]
-
-
-def tiled_hatch(left: int, bottom: int, right: int, top: int) -> QPainterPath:
-    """The hatch's coloured triangles over the unit cells from (left, bottom) to (right, top): in every cell of a
-    unit's `HATCH_COLUMNS` x `HATCH_ROWS`, the triangle above the diagonal from its bottom-left corner up."""
-    path = QPainterPath()
-    w, h = 1 / net_style.HATCH_COLUMNS, 1 / net_style.HATCH_ROWS
-    for i in range((right - left) * net_style.HATCH_COLUMNS):
-        for j in range((top - bottom) * net_style.HATCH_ROWS):
-            x0, y0 = left + i * w, bottom + j * h
-            path.addPolygon(QPolygonF([QPointF(x0, y0), QPointF(x0 + w, y0 + h), QPointF(x0, y0 + h)]))
-            path.closeSubpath()
-    return path
 
 
 class TemplateItem(QGraphicsItem):
@@ -172,12 +160,7 @@ class TemplateItem(QGraphicsItem):
             painter.setClipPath(outline, Qt.ClipOperation.IntersectClip)
             painter.fillPath(outline, palette.WHITE)
             if face.color != palette.WHITE.name().upper():  # white on white: nothing to see
-                cells = (
-                    math.floor(min(p.x for p in polygon)),
-                    math.floor(min(p.y for p in polygon)),
-                    math.ceil(max(p.x for p in polygon)),
-                    math.ceil(max(p.y for p in polygon)),
-                )
+                cells = cells_around(polygon)
                 hatch = self._hatches.get(cells)
                 if hatch is None:
                     hatch = self._hatches[cells] = tiled_hatch(*cells)

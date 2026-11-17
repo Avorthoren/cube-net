@@ -4,9 +4,11 @@
 
 import pytest
 
-from cube_net.core.body import CUBE, FACES, LOCAL_CORNERS, Body
+from cube_net.core.body import CUBE, FACES, LOCAL_CORNERS, Body, SurfacePoint
 from cube_net.core.geometry import Rigid90, Vec
 from cube_net.core.net import EdgeKind, NetBuildError, NetInvariantError, RegionSpec, build_net, validate_net
+from cube_net.core.net.builder import _turn
+from cube_net.core.net.elements import HalfEdge, NetVertex, Region
 
 ID = Rigid90()
 
@@ -86,3 +88,23 @@ def test_incomplete_net_rejected() -> None:
     """A single face is not a cube net: its cuts have no counterparts."""
     with pytest.raises(NetInvariantError, match="has no counterpart"):
         build_net(CUBE, [square(2, Vec(0, 0))])
+
+
+def test_at_a_slits_tip_the_perimeter_goes_back() -> None:
+    """The tip T of a slit, its two sides of different lengths (one goes on to R, the other only to U): arriving at T
+    up the slit, the perimeter goes back down it, not along a fold or round the other side."""
+
+    def vertex(i: int, x: int, y: int) -> NetVertex:
+        return NetVertex(i, Vec(x, y), SurfacePoint(CUBE, 1, Vec(0, 0)))
+
+    t, r, u, fold_end = vertex(0, 1, 1), vertex(1, 1, 3), vertex(2, 1, 2), vertex(3, 1, 0)
+    left, right = Region(0, 1, ID), Region(1, 2, ID)
+    side_up = HalfEdge(0, t, EdgeKind.BOUNDARY, left)  # T -> R, the net on its left
+    arriving = HalfEdge(1, r, EdgeKind.BOUNDARY, None)  # R -> T, on the perimeter
+    side_up.twin, arriving.twin = arriving, side_up
+    down_slit = HalfEdge(2, t, EdgeKind.BOUNDARY, None)  # T -> U: the other side's way out, on the perimeter
+    other_side = HalfEdge(3, u, EdgeKind.BOUNDARY, right)
+    down_slit.twin, other_side.twin = other_side, down_slit
+    fold = HalfEdge(4, t, EdgeKind.FOLD, right)
+    fold.twin = HalfEdge(5, fold_end, EdgeKind.FOLD, left)
+    assert _turn(arriving, [side_up, down_slit, fold]) is down_slit

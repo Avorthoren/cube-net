@@ -16,7 +16,9 @@ RUSSIAN: dict[str, str] = {
     "&Undo": "&Отменить",
     "&Redo": "&Повторить",
     "&Settings": "&Настройки",
-    "Settings of the application (not of the project)": "Настройки приложения (не проекта)",
+    "Settings: Style is the open project's or template's, the rest the application's": (
+        "Настройки: Стиль относится к открытому проекту или шаблону, остальное — к приложению"
+    ),
     "&Help": "&Справка",
     "&About": "&О программе",
     "Check for &updates": "Проверить &обновления",
@@ -412,4 +414,14 @@ RUSSIAN: dict[str, str] = {
         "Грань касается сама себя в {list}, а так быть не может: прорезь или точка, где контур касается сам себя, "
         "должна лежать между двумя гранями. Разделите там грань линией сгиба."
     ),
+    # File -> New.
+    "Cube": "Куб",
+    "Cube with a hole": "Куб с дыркой",
+    "Custom template": "Свой шаблон",
+    "Template file (.nettemplate)": "Файл шаблона (.nettemplate)",
+    "Browse...": "Обзор...",
+    "Create": "Создать",
+    "Choose template": "Выбор шаблона",
+    "{path} is a project, not a template.": "{path} — это проект, а не шаблон.",
+    "Template is not valid. Open template?": "Шаблон некорректен. Открыть шаблон?",
 }
