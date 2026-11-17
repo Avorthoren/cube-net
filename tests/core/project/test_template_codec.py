@@ -3,6 +3,7 @@
 
 import json
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -60,6 +61,13 @@ def test_a_template_saved_without_a_style_has_none(cross_template: Template) -> 
     data = json.loads(json.dumps(encode_template(document_of(edited(cross_template)))))
     assert data.pop("style") is None
     assert decode_template(data).style is None
+
+
+def test_faces_without_a_colour(cross_template: Template) -> None:
+    template = replace(cross_template, faces=tuple(replace(face, color=None) for face in cross_template.faces))
+    document = TemplateDocument(TemplateSnapshot(template), History())
+    assert encode_template(document)["templates"][0]["faces"][0]["color"] is None
+    assert round_trip(document).state.template == template
 
 
 def test_a_template_while_drawing() -> None:

@@ -11,7 +11,7 @@
     anywhere else, or Escape, gives it up);
   - a click on a side's middle circle inserts a vertex there (on release, like a button);
   - Ctrl+click on a vertex deletes it (and its folds), on a fold deletes the fold;
-  - a click inside a face asks for its colour (`face_clicked`).
+  - a double click inside a face asks for its colour (`face_double_clicked`); a click there drags the sheet.
 - Anything that breaks the rules shows the offending segments in black for a moment and changes nothing; a deletion
   that would leave too few vertices says so (`warned`).
 
@@ -95,7 +95,7 @@ class TemplateTool(QObject):
     acted = pyqtSignal(str, Vec)
 
     # The user clicked inside a face (its index): it's up to the window to ask for a colour.
-    face_clicked = pyqtSignal(int)
+    face_double_clicked = pyqtSignal(int)
 
     # A deletion that isn't allowed: what to tell the user.
     warned = pyqtSignal(str)
@@ -126,6 +126,7 @@ class TemplateTool(QObject):
         self._flash_timer.timeout.connect(lambda: self.item.set_flash(()))
         view.left_pressed.connect(self._on_left_pressed)
         view.left_released.connect(self._on_left_released)
+        view.left_double_clicked.connect(self._on_left_double_clicked)
         view.mouse_moved.connect(self._on_mouse_moved)
         view.mouse_left.connect(self._on_mouse_left)
         view.shift_changed.connect(self._follow_mouse)
@@ -156,10 +157,7 @@ class TemplateTool(QObject):
         if self._editor.state is not TemplateState.FINALIZATION or self._fold_start is not None:
             return True
         return (
-            self._vertex_at(x, y) is not None
-            or self._midpoint_at(x, y) is not None
-            or self._editor.template.face_at(self._quantize(x, y)) is not None
-            or self._fold_at(x, y) is not None
+            self._vertex_at(x, y) is not None or self._midpoint_at(x, y) is not None or self._fold_at(x, y) is not None
         )
 
     def cursor_at(self, x: float, y: float) -> CursorKind:
@@ -375,10 +373,14 @@ class TemplateTool(QObject):
             return
         if vertex is not None:
             self._pressed_vertex = vertex, (x, y)
+
+    def _on_left_double_clicked(self, x: float, y: float) -> None:
+        """Inside a face (not on anything there, nor while a fold or a drag is under way): ask for its colour."""
+        if self._editor.state is not TemplateState.FINALIZATION or self.busy() or self.claims(x, y):
             return
         face = self._editor.template.face_at(self._quantize(x, y))
         if face is not None:
-            self.face_clicked.emit(face)
+            self.face_double_clicked.emit(face)
 
     def _on_left_released(self, x: float, y: float) -> None:
         self._mouse = x, y

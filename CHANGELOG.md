@@ -5,6 +5,7 @@ What's new in every version of Cube Net. While working, write the changes under 
 
 ## Unreleased
  - File path added to footer
+ - Style settings are not global but per project now.
 
 ## 1.2.0 (2026-11-15)
  - Exact value of bounding rectangle area added to the hint

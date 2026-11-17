@@ -409,6 +409,12 @@ RUSSIAN: dict[str, str] = {
         "Вершины перенумерованы автоматически.\nДругих проблем не найдено."
     ),
     "No problems found.": "Проблем не найдено.",
+    "You have faces without a color. Double-click on a face to assign its color.": (
+        "У некоторых граней нет цвета. Щёлкните дважды по грани, чтобы назначить ей цвет."
+    ),
+    "You have a face without a color. Double-click on the face to assign its color.": (
+        "У одной грани нет цвета. Щёлкните дважды по грани, чтобы назначить ей цвет."
+    ),
     "A face touches itself at {list}, which a face can't do: a slit, or a point where the loop touches itself, must "
     "lie between two faces. Divide the face there with a fold.": (
         "Грань касается сама себя в {list}, а так быть не может: прорезь или точка, где контур касается сам себя, "

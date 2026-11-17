@@ -27,9 +27,6 @@ MIN_INDEX = 1
 
 MAX_INDEX = 99
 
-# A face's colour until it's given one.
-WHITE = "#FFFFFF"
-
 
 @dataclass(frozen=True, slots=True, order=True)
 class Label:
@@ -71,8 +68,8 @@ class TemplateFace:
     # The ids of its corners, counter-clockwise.
     corners: tuple[int, ...]
 
-    # As "#RRGGBB".
-    color: str = WHITE
+    # As "#RRGGBB"; None until it's given one (it can't be taken away then: white is a colour too).
+    color: str | None = None
 
     def has_side(self, a: int, b: int) -> bool:
         """Does the face go straight from corner `a` to corner `b` (counter-clockwise)?"""

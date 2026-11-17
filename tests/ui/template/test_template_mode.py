@@ -36,6 +36,8 @@ def mode(qtbot: QtBot) -> TemplateMode:
     labels = {str(v.label): v.id for v in mode.editor.template.vertices}
     for a, b in FOLDS:
         assert mode.editor.add_fold(labels[a], labels[b]) is None
+    for index in range(len(mode.editor.template.faces)):
+        mode.editor.set_face_color(index, f"#0000{index:02X}")
     mode.tool.refresh()
     return mode
 
@@ -50,6 +52,27 @@ def test_no_problems(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch) -> Non
     texts = told(monkeypatch)
     mode.validate()
     assert texts == ["No problems found."]
+
+
+@pytest.mark.parametrize(
+    ("loaded", "text"),
+    [
+        (1, "You have a face without a color. Double-click on the face to assign its color."),
+        (2, "You have faces without a color. Double-click on a face to assign its color."),
+    ],
+)
+def test_faces_without_a_colour(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch, loaded: int, text: str) -> None:
+    from dataclasses import replace as changed
+
+    from cube_net.core.history import History
+    from cube_net.core.template import TemplateSnapshot
+
+    template = mode.editor.template
+    faces = tuple(changed(face, color=None) if i < loaded else face for i, face in enumerate(template.faces))
+    mode.editor.load(TemplateSnapshot(changed(template, faces=faces)), History())
+    texts = told(monkeypatch)
+    mode.validate()
+    assert texts == [text]
 
 
 @pytest.mark.parametrize("answer", [True, False])

@@ -30,7 +30,7 @@ from cube_net.core.template import Template
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
-from cube_net.ui.sheet.hatch import cells_around, tiled_hatch
+from cube_net.ui.sheet.hatch import cells_around, tiled_chessboard, tiled_hatch
 from cube_net.ui.sheet.net_painting import UP_RIGHT, paint_labels
 from cube_net.ui.template.corners import middle_angle, owned_arcs, shared
 
@@ -52,6 +52,7 @@ class TemplateItem(QGraphicsItem):
         self._midpoints_shown = False
         self._pressed_midpoint: int | None = None
         self._hatches: dict[tuple[int, int, int, int], QPainterPath] = {}
+        self._boards: dict[tuple[int, int, int, int], QPainterPath] = {}
 
     # --- what to show -------------------------------------------------------------------------------------------------
 
@@ -111,6 +112,7 @@ class TemplateItem(QGraphicsItem):
     def restyle(self) -> None:
         """The style changed: the hatch is made again."""
         self._hatches.clear()
+        self._boards.clear()
         self.update()
 
     def boundingRect(self) -> QRectF:
@@ -159,8 +161,13 @@ class TemplateItem(QGraphicsItem):
             painter.save()
             painter.setClipPath(outline, Qt.ClipOperation.IntersectClip)
             painter.fillPath(outline, palette.WHITE)
-            if face.color != palette.WHITE.name().upper():  # white on white: nothing to see
-                cells = cells_around(polygon)
+            cells = cells_around(polygon)
+            if face.color is None:  # no colour yet: a chessboard
+                board = self._boards.get(cells)
+                if board is None:
+                    board = self._boards[cells] = tiled_chessboard(*cells)
+                painter.fillPath(board, palette.UNCOLORED_FACE)
+            elif face.color != palette.WHITE.name().upper():  # white on white: nothing to see
                 hatch = self._hatches.get(cells)
                 if hatch is None:
                     hatch = self._hatches[cells] = tiled_hatch(*cells)

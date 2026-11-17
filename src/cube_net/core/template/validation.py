@@ -22,40 +22,43 @@ MIN_FACES = 4
 
 
 class ValidationProblem(Enum):
-    # 1. Some vertices have no label.
+    # 1. Some faces have no colour.
+    NO_COLOR = "no color"
+
+    # 2. Some vertices have no label.
     UNLABELLED = "unlabelled"
 
-    # 2. Segments or folds joining a name to itself (`segments`: like "A1-A3").
+    # 3. Segments or folds joining a name to itself (`segments`: like "A1-A3").
     SELF_EDGE = "self edge"
 
-    # 3. Loop segments without exactly one counterpart (`names`: like "A-CT").
+    # 4. Loop segments without exactly one counterpart (`names`: like "A-CT").
     NO_COUNTERPART = "no counterpart"
 
-    # 4. Counterparts neither parallel nor perpendicular (`names`).
+    # 5. Counterparts neither parallel nor perpendicular (`names`).
     NOT_PARALLEL = "not parallel"
 
-    # 5. Counterparts of different lengths (`names`).
+    # 6. Counterparts of different lengths (`names`).
     DIFFERENT_LENGTHS = "different lengths"
 
-    # 6. Counterparts running the same way along the loop (`names`).
+    # 7. Counterparts running the same way along the loop (`names`).
     SAME_DIRECTION = "same direction"
 
-    # 7. Folds named like a glued pair (`groups`: a cut of the pair, then the folds, like ("A1-B1", "A1-B3")).
+    # 8. Folds named like a glued pair (`groups`: a cut of the pair, then the folds, like ("A1-B1", "A1-B3")).
     CUT_AND_FOLD = "cut and fold"
 
-    # 8. Folds named the same (`groups`: the folds of each name pair).
+    # 9. Folds named the same (`groups`: the folds of each name pair).
     SAME_FOLDS = "same folds"
 
-    # 9. Names whose instances aren't all glued together (`names`: like "A").
+    # 10. Names whose instances aren't all glued together (`names`: like "A").
     NOT_GLUED = "not glued"
 
-    # 10. Fewer than 4 faces.
+    # 11. Fewer than 4 faces.
     TOO_FEW_FACES = "too few faces"
 
-    # 11. Faces that touch themselves: a slit (or a point) inside a face (`names`: the vertices where, like "S2").
+    # 12. Faces that touch themselves: a slit (or a point) inside a face (`names`: the vertices where, like "S2").
     FACE_TOUCHES_ITSELF = "face touches itself"
 
-    # 12. Names whose indices don't go 1, 2, 3, ... (`names`); the UI offers to reindex them.
+    # 13. Names whose indices don't go 1, 2, 3, ... (`names`); the UI offers to reindex them.
     INDEX_GAPS = "index gaps"
 
 
@@ -66,8 +69,11 @@ class ValidationFailure:
     # The names, name pairs or segments to list, in order along the loop.
     names: tuple[str, ...] = ()
 
-    # Groups of segments to list (checks 7 and 8).
+    # Groups of segments to list (checks 8 and 9).
     groups: tuple[tuple[str, ...], ...] = ()
+
+    # How many there are, where nothing is listed (check 1: the faces without a colour).
+    count: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,7 +85,7 @@ class _Side:
 
     @property
     def labels(self) -> tuple[Label, Label]:
-        assert self.start.label is not None and self.end.label is not None  # check 1 passed
+        assert self.start.label is not None and self.end.label is not None  # check 2 passed
         return self.start.label, self.end.label
 
     @property
@@ -102,6 +108,9 @@ def validate(template: Template) -> ValidationFailure | None:
     """The first check that fails, or None if the template is valid. The loop must be closed."""
     if not template.closed:
         raise ValueError("only a closed loop can be validated")
+    uncoloured = sum(face.color is None for face in template.faces)
+    if uncoloured:
+        return ValidationFailure(ValidationProblem.NO_COLOR, count=uncoloured)
     if any(v.label is None for v in template.vertices):
         return ValidationFailure(ValidationProblem.UNLABELLED)
     sides = [_Side(template.vertex(a), template.vertex(b)) for a, b in template.loop_sides()]
@@ -264,7 +273,7 @@ def _index_gaps(template: Template) -> tuple[str, ...]:
 
 
 def _name(v: LoopVertex) -> str:
-    assert v.label is not None  # check 1 passed
+    assert v.label is not None  # check 2 passed
     return v.label.name
 
 

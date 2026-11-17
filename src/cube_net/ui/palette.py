@@ -31,6 +31,9 @@ FACE_COLORS = MappingProxyType({face: QColor(color) for face, color in enumerate
 # another body is open) in that body's own default colours.
 _FACE_COLORS_BODY: Body = CUBE
 
+# The grey squares of a template's face that has no colour yet (a chessboard with white).
+UNCOLORED_FACE = QColor("#E6E6E6")
+
 # Outline of the grid's preview square in the settings.
 SWATCH_OUTLINE = QColor("#000000")
 

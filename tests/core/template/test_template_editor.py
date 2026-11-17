@@ -197,12 +197,20 @@ class TestFinalization:
 
     def test_face_colours(self) -> None:
         editor = drawn(PILLOW)
+        assert all(face.color is None for face in editor.template.faces)  # none given yet
         editor.set_face_color(0, "#ABCDEF")
         assert editor.template.faces[0].color == "#ABCDEF"
         revision = editor.history.revision
         editor.set_face_color(0, "#ABCDEF")
         assert editor.history.revision == revision
-        assert editor.undo() and editor.template.faces[0].color == "#FFFFFF"
+        editor.set_face_color(0, "#FFFFFF")  # white is a colour too
+        assert editor.template.faces[0].color == "#FFFFFF"
+        assert editor.undo() and editor.undo() and editor.template.faces[0].color is None
+
+    def test_a_fold_divides_a_face_without_a_colour_into_two(self) -> None:
+        editor = drawn(PILLOW)
+        assert editor.add_fold(1, 4) is None
+        assert [face.color for face in editor.template.faces] == [None, None]
 
 
 class TestLabels:

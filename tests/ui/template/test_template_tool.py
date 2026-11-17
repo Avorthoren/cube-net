@@ -4,7 +4,7 @@
 from fractions import Fraction as F
 
 import pytest
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QPointF, Qt
 from pytestqt.qtbot import QtBot
 
 from cube_net.core.geometry import Box, Vec
@@ -161,14 +161,47 @@ def test_ctrl_click_deletes(
     assert len(tool.editor.template.vertices) == 6
 
 
-def test_a_click_in_a_face_asks_for_its_colour(setup: tuple[SheetView, TemplateTool], qtbot: QtBot) -> None:
+def test_a_double_click_in_a_face_asks_for_its_colour(setup: tuple[SheetView, TemplateTool], qtbot: QtBot) -> None:
     view, tool = setup
     drawn(view, tool)
-    with qtbot.waitSignal(tool.face_clicked) as blocker:
-        view.left_pressed.emit(10.4, 10.6)
+    with qtbot.waitSignal(tool.face_double_clicked) as blocker:
+        view.left_double_clicked.emit(10.4, 10.6)
     assert blocker.args == [0]
     tool.set_face_color(0, "#123456")
     assert tool.editor.template.faces[0].color == "#123456"
+
+
+def test_a_click_in_a_face_drags_the_sheet(setup: tuple[SheetView, TemplateTool], qtbot: QtBot) -> None:
+    view, tool = setup
+    drawn(view, tool)
+    assert not tool.claims(10.4, 10.6)  # the view pans
+    asked: list[int] = []
+    tool.face_double_clicked.connect(asked.append)
+    click(view, 10.4, 10.6)
+    assert asked == []
+
+
+def test_a_double_click_on_a_vertex_or_while_folding_asks_nothing(
+    setup: tuple[SheetView, TemplateTool], qtbot: QtBot
+) -> None:
+    view, tool = setup
+    drawn(view, tool)
+    asked: list[int] = []
+    tool.face_double_clicked.connect(asked.append)
+    view.left_double_clicked.emit(10.0, 10.0)  # on a vertex
+    click(view, 10.0, 10.0)  # a fold starts there
+    view.left_double_clicked.emit(10.4, 10.6)
+    assert asked == []
+
+
+def test_a_real_double_click(setup: tuple[SheetView, TemplateTool], qtbot: QtBot) -> None:
+    from PyQt6.QtCore import QPoint
+
+    view, tool = setup
+    drawn(view, tool)
+    p = view.from_sheet(QPointF(10.4, 10.6))
+    with qtbot.waitSignal(tool.face_double_clicked):
+        qtbot.mouseDClick(view.viewport(), Qt.MouseButton.LeftButton, pos=QPoint(round(p.x()), round(p.y())))
 
 
 def test_undo_and_redo(setup: tuple[SheetView, TemplateTool]) -> None:

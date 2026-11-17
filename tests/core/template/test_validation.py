@@ -41,30 +41,41 @@ def test_only_a_closed_loop() -> None:
         validate(Template().with_vertex_appended(Vec(1, 1)))
 
 
-def test_1_every_vertex_has_a_label(cross_template: Template) -> None:
+def test_1_every_face_has_a_colour(cross_template: Template) -> None:
+    faces = tuple(replace(face, color=None) if i in (1, 3) else face for i, face in enumerate(cross_template.faces))
+    failure = validate(replace(relabelled(cross_template, G1=""), faces=faces))  # before the labels
+    assert failure is not None and failure.problem is ValidationProblem.NO_COLOR and failure.count == 2
+
+
+def test_white_is_a_colour(cross_template: Template) -> None:
+    faces = tuple(replace(face, color="#FFFFFF") for face in cross_template.faces)
+    assert validate(replace(cross_template, faces=faces)) is None
+
+
+def test_2_every_vertex_has_a_label(cross_template: Template) -> None:
     failure = validate(relabelled(cross_template, G1=""))
     assert failure is not None and failure.problem is ValidationProblem.UNLABELLED
 
 
-def test_2_no_segment_joins_a_name_to_itself(cross_template: Template) -> None:
+def test_3_no_segment_joins_a_name_to_itself(cross_template: Template) -> None:
     failure = validate(relabelled(cross_template, B3="F3"))  # the loop goes on from it to F_1
     assert failure is not None and failure.problem is ValidationProblem.SELF_EDGE
     assert failure.names == ("F3-F1",)
 
 
-def test_3_every_segment_has_exactly_one_counterpart(cross_template: Template) -> None:
+def test_4_every_segment_has_exactly_one_counterpart(cross_template: Template) -> None:
     failure = validate(relabelled(cross_template, A3="Q1"))  # Q-B and E-Q once each, and so A-B and A-E
     assert failure is not None and failure.problem is ValidationProblem.NO_COUNTERPART
     assert failure.names == ("Q-B", "B-A", "A-E", "E-Q")
 
 
-def test_4_counterparts_parallel_or_perpendicular(cross_template: Template) -> None:
+def test_5_counterparts_parallel_or_perpendicular(cross_template: Template) -> None:
     failure = validate(moved(cross_template, "A3", Vec(11, 9)))  # A_3-B_3 askew; E_1-A_3 is longer, but upright
     assert failure is not None and failure.problem is ValidationProblem.NOT_PARALLEL
     assert failure.names == ("A-B",)
 
 
-def test_5_counterparts_of_the_same_length(draw: Draw) -> None:
+def test_6_counterparts_of_the_same_length(draw: Draw) -> None:
     # TWO_QS stretched: its right half is 2 long, its left half 1.
     stretched = [
         (10, 10, "P", 1),
@@ -79,7 +90,7 @@ def test_5_counterparts_of_the_same_length(draw: Draw) -> None:
     assert failure.names == ("P-Q", "S-Q")
 
 
-def test_6_counterparts_run_opposite_ways(draw: Draw) -> None:
+def test_7_counterparts_run_opposite_ways(draw: Draw) -> None:
     # The bottom P-Q-R glued to the top P-Q-R the same way round: it would have to be turned over.
     loop = [(10, 10, "P", 1), (11, 10, "Q", 1), (12, 10, "R", 1), (12, 11, "P", 2), (11, 11, "Q", 2), (10, 11, "R", 2)]
     failure = validate(draw(loop, []).template)
@@ -87,13 +98,13 @@ def test_6_counterparts_run_opposite_ways(draw: Draw) -> None:
     assert failure.names == ("P-Q", "Q-R", "R-P")
 
 
-def test_7_a_fold_named_like_a_glued_pair(draw: Draw) -> None:
+def test_8_a_fold_named_like_a_glued_pair(draw: Draw) -> None:
     failure = validate(draw(TWO_QS, [("P1", "Q2")]).template)  # a diagonal, named like the bottom's P-Q
     assert failure is not None and failure.problem is ValidationProblem.CUT_AND_FOLD
     assert failure.groups == (("P1-Q1", "P1-Q2"),)
 
 
-def test_8_two_folds_named_the_same(cross_template: Template) -> None:
+def test_9_two_folds_named_the_same(cross_template: Template) -> None:
     # Two more folds (where they go doesn't matter to the names), both from A to G.
     folds = (Fold(vertex_id(cross_template, "A1"), vertex_id(cross_template, "G1")),)
     folds += (Fold(vertex_id(cross_template, "A3"), vertex_id(cross_template, "G1")),)
@@ -102,18 +113,18 @@ def test_8_two_folds_named_the_same(cross_template: Template) -> None:
     assert failure.groups == (("A1-G1", "A3-G1"),)
 
 
-def test_9_every_names_instances_glued_together(draw: Draw) -> None:
+def test_10_every_names_instances_glued_together(draw: Draw) -> None:
     failure = validate(draw(TWO_QS, []).template)
     assert failure is not None and failure.problem is ValidationProblem.NOT_GLUED
     assert failure.names == ("Q",)
 
 
-def test_9_through_chains(pinwheel_template: Template) -> None:
+def test_10_through_chains(pinwheel_template: Template) -> None:
     """The pinwheel box's M: 4 instances glued in a ring, opposite ones sharing no neighbour."""
     assert validate(pinwheel_template) is None
 
 
-def test_10_at_least_four_faces(
+def test_11_at_least_four_faces(
     draw: Draw, cross_drawing: tuple[list[tuple[int, int, str, int]], list[tuple[str, str]]]
 ) -> None:
     loop, folds = cross_drawing
@@ -121,7 +132,7 @@ def test_10_at_least_four_faces(
     assert failure is not None and failure.problem is ValidationProblem.TOO_FEW_FACES
 
 
-def test_11_indices_without_gaps_and_reindexing(cross_template: Template) -> None:
+def test_13_indices_without_gaps_and_reindexing(cross_template: Template) -> None:
     gappy = relabelled(cross_template, A3="A9", E2="E5")
     failure = validate(gappy)
     assert failure is not None and failure.problem is ValidationProblem.INDEX_GAPS

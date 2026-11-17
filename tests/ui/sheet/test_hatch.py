@@ -26,6 +26,26 @@ def test_it_covers_half_of_a_unit() -> None:
     assert area == pytest.approx(0.5)
 
 
+@pytest.mark.parametrize(("columns", "rows"), [(1, 2), (2, 1), (8, 2), (3, 3)])
+def test_the_chessboard_halves_every_hatch_rectangle(columns: int, rows: int) -> None:
+    """Grey halves alternate with white ones: a 1 x 1/2 rectangle of the hatch is two 1/2 x 1/2 squares, one grey."""
+    from cube_net.ui.sheet.hatch import tiled_chessboard
+
+    net_style.set_sizes(
+        net_style.EDGE_WIDTH_PX, net_style.VERTEX_RADIUS_PX, columns, rows, net_style.DASHES_PER_EDGE, 1.0
+    )
+    board = tiled_chessboard(0, 0, 2, 1)
+    rects = [board.elementAt(i) for i in range(0, board.elementCount(), 5)]  # 5 elements per closed rectangle
+    w, h = 1 / columns, 1 / rows
+    small = (w / 2, h) if w >= h else (w, h / 2)
+    assert len(rects) == 2 * columns * rows  # half of the 2 * 2 * columns * rows halves
+    assert board.boundingRect().width() * board.boundingRect().height() <= 2
+    cell = board.toFillPolygons()[0].boundingRect()
+    assert (cell.width(), cell.height()) == pytest.approx(small)
+    corners = {(round(r.x / small[0]), round(r.y / small[1])) for r in rects}
+    assert all((i + j) % 2 == 1 for i, j in corners)  # never two grey ones side by side
+
+
 def test_the_cells_around_points() -> None:
     assert cells_around([Vec(0, 0), Vec(1, 0), Vec(1, 1)]) == (0, 0, 1, 1)  # a cube's face
     assert cells_around([Vec(44, 50), Vec(Fraction(97, 2), 53)]) == (44, 50, 49, 53)  # a template's, on its grid

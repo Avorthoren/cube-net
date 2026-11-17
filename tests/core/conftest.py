@@ -122,7 +122,7 @@ CROSS_COLORS = ("#0057B8", "#F28E00", "#008A4B", "#8B45B5", "#E50055", "#00A6D6"
 
 
 def drawn_template(loop: list[tuple[int, int, str, int]], folds: list[tuple[str, str]]) -> TemplateEditor:
-    """A template drawn in the editor: the loop, closed, its labels, then its folds."""
+    """A template drawn in the editor: the loop, closed, its labels, then its folds, then a colour for each face."""
     editor = TemplateEditor()
     for x, y, *_ in [*loop, loop[0]]:
         assert editor.add_point(Vec(x, y)) is None
@@ -131,6 +131,8 @@ def drawn_template(loop: list[tuple[int, int, str, int]], folds: list[tuple[str,
     by_label = {str(v.label): v.id for v in editor.template.vertices}
     for start, end in folds:
         assert editor.add_fold(by_label[start], by_label[end]) is None
+    for index in range(len(editor.template.faces)):  # a face needs a colour to be valid: a different one each
+        editor.set_face_color(index, f"#{40 * index % 256:02X}80{255 - 40 * index % 256:02X}")
     return editor
 
 

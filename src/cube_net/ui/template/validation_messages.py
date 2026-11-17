@@ -42,6 +42,10 @@ def failure_text(failure: ValidationFailure) -> str:
     """The message for a failed check (the last one's is a question: see `REINDEX`)."""
     names, many = failure.names, len(failure.names) > 1 or len(failure.groups) > 1
     match failure.problem:
+        case ValidationProblem.NO_COLOR:
+            if failure.count > 1:
+                return tr("You have faces without a color. Double-click on a face to assign its color.")
+            return tr("You have a face without a color. Double-click on the face to assign its color.")
         case ValidationProblem.UNLABELLED:
             return tr("Some vertices don't have assigned labels. Name each vertex.")
         case ValidationProblem.SELF_EDGE:

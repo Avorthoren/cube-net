@@ -175,7 +175,9 @@ def _int(value: object) -> int:
     return value
 
 
-def _color(value: object) -> str:
+def _color(value: object) -> str | None:
+    if value is None:
+        return None  # not given yet
     if not isinstance(value, str) or not COLOR_PATTERN.fullmatch(value):
         raise ValueError(f"expected a colour as #RRGGBB, got {value!r}")
     return value

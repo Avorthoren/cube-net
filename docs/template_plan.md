@@ -411,6 +411,17 @@ Done (T6a):
   rings only its parts, its label goes along the middle of them. Sides of a closed loop are drawn inside the net; of
   two middle circles on each other, the side the mouse is on wins.
 
+### 8.2a Before T6b: faces start without a colour
+(Asked for on 2026-11-17.)
+- A template's face has no colour until it's given one (`TemplateFace.color` is None; saved as `null`); a fold divides
+  it into two without a colour. Such a face is a chessboard of white and light grey (`palette.UNCOLORED_FACE`): every
+  rectangle of the hatch halved across its longer side (`hatch.tiled_chessboard`). White is a colour like any other; a
+  colour can't be taken away. Templates saved before keep their colours (white ones stay white).
+- Validation's new check 1: every face has a colour ("You have a face without a color. Double-click on the face to
+  assign its color."); the others move one down (check 13 is reindexing).
+- The colour picker opens on a double click in a face (`SheetView.left_double_clicked`); a single click there drags the
+  sheet.
+
 ### 8.2 T6b: faces in pieces, faces with holes
 Faces of the template with the same colour that share a side (a fold, or a glued pair) are pieces of one face of the
 body: a face may then have holes (a ring, made of pieces). The sides between pieces of one face are "flat": never drawn

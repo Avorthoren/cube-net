@@ -4291,7 +4291,10 @@ class TestTemplates:
         self.draw(window)
         assert window.validate_action.isEnabled()
         window.validate_action.trigger()
-        assert told == ["Some vertices don't have assigned labels. Name each vertex."]
+        assert told == ["You have a face without a color. Double-click on the face to assign its color."]
+        window.template_mode.tool.set_face_color(0, "#FFFFFF")
+        window.validate_action.trigger()
+        assert told[-1] == "Some vertices don't have assigned labels. Name each vertex."
 
     def test_recorded(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path, record=True)

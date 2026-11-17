@@ -26,7 +26,7 @@ def body_from_template(template: Template) -> Body:
         corners = [template.vertex(i) for i in face.corners]
         faces[number] = ([v.position for v in corners], [v.label.name for v in corners if v.label is not None])
     start = [(number, Rigid90.identity()) for number in faces]
-    colors = [face.color for face in template.faces]
+    colors = [face.color for face in template.faces if face.color is not None]  # all of them: it's valid
     order = sorted(template.vertices, key=lambda v: (v.label.name, v.label.index) if v.label else ("", 0))
     keys: list[tuple[Vec, str]] = []
     for v in order:

@@ -66,6 +66,10 @@ class SheetView(QGraphicsView):
     # Left button released at a sheet point (x, y), unless it ended panning.
     left_released = pyqtSignal(float, float)
 
+    # Left button double-clicked at a sheet point (x, y): the second press (the first one came as a press, which may
+    # have started panning, and a release).
+    left_double_clicked = pyqtSignal(float, float)
+
     # Right button pressed at a sheet point (x, y) (not while the sheet is being dragged).
     right_pressed = pyqtSignal(float, float)
 
@@ -328,6 +332,12 @@ class SheetView(QGraphicsView):
             event.accept()
             return
         super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent | None) -> None:
+        if event is not None and event.button() == Qt.MouseButton.LeftButton and self._pan_last is None:
+            p = self.to_sheet(event.position())
+            self.left_double_clicked.emit(p.x(), p.y())
+        super().mouseDoubleClickEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
         if event is None:

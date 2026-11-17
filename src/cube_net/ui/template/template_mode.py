@@ -29,6 +29,7 @@ from cube_net.core.template import (
     template_area,
     validate,
 )
+from cube_net.ui import palette
 from cube_net.ui.dialogs.message_window import MessageIcon, ask_yes_no, tell
 from cube_net.ui.i18n import tr
 from cube_net.ui.sheet.sheet_context_menu import SheetContextMenu
@@ -72,7 +73,7 @@ class TemplateMode(QObject):
         self.tool.changed.connect(self.changed)
         self.tool.acted.connect(lambda action, p: self._note("template", action, _point(p)))
         self.tool.rejected.connect(lambda p, problem: self._note("template", "rejected", problem.value, _point(p)))
-        self.tool.face_clicked.connect(self._pick_face_color)
+        self.tool.face_double_clicked.connect(self._pick_face_color)
         self.tool.warned.connect(lambda text: tell(parent, "Cube Net", text, icon=MessageIcon.WARNING))
         self.view.show_initial_view(FIRST_VIEW)
 
@@ -167,7 +168,7 @@ class TemplateMode(QObject):
     def _pick_face_color(self, face: int) -> None:
         picker = QColorDialog(self.view.window())
         picker.setOption(QColorDialog.ColorDialogOption.DontUseNativeDialog)  # before the colour: see `ColorField`
-        picker.setCurrentColor(QColor(self.editor.template.faces[face].color))
+        picker.setCurrentColor(QColor(self.editor.template.faces[face].color or palette.WHITE.name()))
         picker.setWindowTitle(tr("Face color"))
         try:
             accepted = picker.exec() == QColorDialog.DialogCode.Accepted

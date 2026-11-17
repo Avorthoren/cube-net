@@ -1,6 +1,8 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from dataclasses import replace
+
 from PyQt6.QtGui import QColor, QImage, QPainter, QTransform
 from pytestqt.qtbot import QtBot
 
@@ -37,6 +39,20 @@ def test_a_face_shows_its_colour_and_white(qtbot: QtBot) -> None:
         for y in range(110, 190, 3):
             seen.add(image.pixelColor(x, y).name())
     assert {"#0000ff", "#ffffff"} <= seen
+
+
+def test_a_face_without_a_colour_is_a_chessboard(qtbot: QtBot) -> None:
+    from cube_net.ui import palette
+
+    template = coloured_square()
+    template = replace(template, faces=(replace(template.faces[0], color=None),))
+    image = render(TemplateItem(template))
+    seen = set()
+    for x in range(110, 190, 3):
+        for y in range(110, 190, 3):
+            seen.add(image.pixelColor(x, y).name())
+    assert {palette.UNCOLORED_FACE.name(), "#ffffff"} <= seen
+    assert "#0000ff" not in seen
 
 
 def test_outside_the_loop_nothing(qtbot: QtBot) -> None:
