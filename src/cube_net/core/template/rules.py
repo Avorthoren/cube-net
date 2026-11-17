@@ -94,10 +94,11 @@ def check(template: Template, changed: Iterable[tuple[int, int]]) -> TemplateRej
         if pieces(template) != 1:
             return TemplateRejection(TemplateProblem.APART, _shown(template, changed_pairs, changed_pairs))
         outside, crossing = _fold_problems(template)
-        if crossing:
-            return TemplateRejection(TemplateProblem.CROSSING, _shown(template, crossing, changed_pairs))
-        if outside:
-            return TemplateRejection(TemplateProblem.OUTSIDE_THE_LOOP, _shown(template, outside, changed_pairs))
+        if crossing or outside:
+            # Both sides of every conflict: what changed, and the folds it runs into (all was fine before the change).
+            problem = TemplateProblem.CROSSING if crossing else TemplateProblem.OUTSIDE_THE_LOOP
+            involved = crossing | outside
+            return TemplateRejection(problem, _shown(template, involved, involved))
         return None
     if broken:
         return TemplateRejection(TemplateProblem.CROSSING, _shown(template, broken, changed_pairs))

@@ -251,3 +251,15 @@ def test_a_slit_tip_on_the_far_side_would_part_the_paper() -> None:
     rejection = editor.move_vertex(tip, Vec(11, 12))  # on the top side
     assert rejection is not None and rejection.problem is TemplateProblem.APART
     assert editor.template.position(tip) == Vec(11, F(23, 2))
+
+
+def test_a_refusal_shows_the_fold_it_runs_into_too() -> None:
+    """A slit up from the bottom side along a fold: both the slit's sides and the fold flash."""
+    editor = drawn([Vec(10, 10), Vec(11, 10), Vec(12, 10), Vec(12, 12), Vec(11, 12), Vec(10, 12)])
+    assert editor.add_fold(1, 4) is None  # (11, 10) up to (11, 12)
+    editor.insert_vertex(1, 2)
+    middle = editor.template.vertices[2].id  # (23/2, 10)
+    rejection = editor.move_vertex(middle, Vec(11, 11))
+    assert rejection is not None
+    assert (Vec(11, 10), Vec(11, 12)) in rejection.segments or (Vec(11, 12), Vec(11, 10)) in rejection.segments
+    assert any(Vec(11, 11) in segment for segment in rejection.segments)  # the moved vertex's sides
