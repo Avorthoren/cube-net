@@ -105,6 +105,12 @@ def failure_text(failure: ValidationFailure) -> str:
             return tr("Vertex {name} is not glued to itself, which is impossible.", name=names[0])
         case ValidationProblem.TOO_FEW_FACES:
             return tr("Net should have at least 4 faces.")
+        case ValidationProblem.FACE_TOUCHES_ITSELF:
+            return tr(
+                "A face touches itself at {list}, which a face can't do: a slit, or a point where the loop touches "
+                "itself, must lie between two faces. Divide the face there with a fold.",
+                list=listed(names),
+            )
         case ValidationProblem.INDEX_GAPS:
             if many:
                 return tr("Indices for vertices {list} have gaps. Reindex automatically?", list=listed(names))

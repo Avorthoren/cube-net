@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 from types import MappingProxyType
 
-from cube_net.core.geometry import Rigid90, Vec, on_segment, signed_area
+from cube_net.core.geometry import IntersectionKind, Rigid90, Vec, classify_segments, on_segment, signed_area
 
 type Face = int
 type VertexName = str
@@ -105,13 +105,14 @@ class Body:
         faces: Mapping[Face, tuple[Sequence[Vec], Sequence[VertexName]]],
         start: Sequence[tuple[Face, Rigid90]],
         colors: Sequence[str] | None = None,
-        vertex_order: Sequence[Vec] | None = None,
+        vertex_order: Sequence[tuple[Vec, VertexName]] | None = None,
     ) -> None:
         """`faces`: for each face number (1, 2, ...), its corners, counter-clockwise in its own frame, and their names.
         `start`: where each face goes in the starting net (local -> sheet), in the order its vertices get their ids.
         `colors`: each face's default colour ("#RRGGBB"; face k: colors[k - 1]), white if not given.
-        `vertex_order`: the starting net's vertices (their sheet positions) in the order they get their ids, which
-        numbers the images of each vertex; if not given, the order `start` reaches them in.
+        `vertex_order`: the starting net's vertices (their sheet positions and names: several vertices may be at one
+        point) in the order they get their ids, which numbers the images of each vertex; if not given, the order
+        `start` reaches them in.
         """
         self._faces = {n: BodyFace(n, tuple(corners), tuple(names)) for n, (corners, names) in faces.items()}
         _check_faces(self._faces)
@@ -134,7 +135,7 @@ class Body:
                 raise BodyError(f"a colour must be #RRGGBB with capital letters, got {color!r}")
         self._vertex_order = None if vertex_order is None else tuple(vertex_order)
         if self._vertex_order is not None and len(set(self._vertex_order)) != len(self._vertex_order):
-            raise BodyError("the order of the starting net's vertices has a position twice")
+            raise BodyError("the order of the starting net's vertices has a vertex twice")
 
     # --- faces --------------------------------------------------------------------------------------------------------
 
@@ -154,7 +155,7 @@ class Body:
         return self._area
 
     @property
-    def vertex_order(self) -> tuple[Vec, ...] | None:
+    def vertex_order(self) -> tuple[tuple[Vec, VertexName], ...] | None:
         """The starting net's vertex positions in the order of their ids, if the body says (see `__init__`)."""
         return self._vertex_order
 
@@ -242,10 +243,29 @@ def _check_faces(faces: Mapping[Face, BodyFace]) -> None:
             raise BodyError(f"face {face.number} has two corners at the same point: {face.corners}")
         if signed_area(face.corners) <= 0:
             raise BodyError(f"the corners of face {face.number} must be counter-clockwise: {face.corners}")
+        if not _simple(face.corners):
+            raise BodyError(f"face {face.number} touches itself: {face.corners}")
         for i in range(n):
             a, b = face.side_names(i)
             if a == b:
                 raise BodyError(f"side {i} of face {face.number} joins vertex {a} to itself")
+
+
+def _simple(corners: Sequence[Vec]) -> bool:
+    """Do the polygon's sides meet only where neighbours meet, at their shared corner?"""
+    n = len(corners)
+    sides = [(corners[i], corners[(i + 1) % n]) for i in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            hit = classify_segments(*sides[i], *sides[j])
+            if hit.kind is IntersectionKind.DISJOINT:
+                continue
+            if j == i + 1 and hit.kind is IntersectionKind.TOUCH and hit.point == sides[i][1]:
+                continue
+            if i == 0 and j == n - 1 and hit.kind is IntersectionKind.TOUCH and hit.point == sides[i][0]:
+                continue
+            return False
+    return True
 
 
 def _vertex_angles(faces: Mapping[Face, BodyFace]) -> dict[VertexName, int]:

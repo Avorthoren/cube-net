@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from fractions import Fraction
 
 from cube_net.core.body import Body, Face, SurfacePoint
 from cube_net.core.geometry import Rigid90, Vec, signed_area
@@ -33,13 +34,11 @@ class RegionSpec:
 
 
 def build_net(body: Body, specs: Iterable[RegionSpec]) -> Net:
-    """Build a net of `body`. Corners at the same sheet position become one vertex; sides shared by two regions become
-    inner edges (FOLD on an edge of the body, SEAM otherwise); all other sides become the perimeter.
-
-    Limitation: no two perimeter segments may start at the same vertex (no touching parts), which is enough for the
-    default net and for tests.
-    """
-    vertices: dict[Vec, NetVertex] = {}
+    """Build a net of `body`. Corners at the same sheet position that are the same point of the body become one vertex;
+    other points of the body there are other vertices (a net that touches itself, docs/template_plan.md §8.1). Sides
+    shared by two regions become inner edges (FOLD on an edge of the body, SEAM otherwise); all other sides become the
+    perimeter, which may pass through a vertex more than once."""
+    vertices: dict[tuple[Vec, SurfacePoint], NetVertex] = {}
     half_edges: list[HalfEdge] = []
     regions: list[Region] = []
     by_side: dict[tuple[NetVertex, NetVertex], HalfEdge] = {}
@@ -56,11 +55,9 @@ def build_net(body: Body, specs: Iterable[RegionSpec]) -> Net:
         cycle: list[HalfEdge] = []
         for position in corners:
             point = SurfacePoint(body, spec.face, to_local.apply(position))
-            vertex = vertices.get(position)
+            vertex = vertices.get((position, point))
             if vertex is None:
-                vertex = vertices[position] = NetVertex(len(vertices), position, point)
-            elif vertex.point != point:
-                raise NetBuildError(f"regions disagree at {position}: {vertex.point} vs {point}")
+                vertex = vertices[(position, point)] = NetVertex(len(vertices), position, point)
             he = HalfEdge(len(half_edges), vertex, EdgeKind.BOUNDARY, region)
             half_edges.append(he)
             cycle.append(he)
@@ -74,7 +71,7 @@ def build_net(body: Body, specs: Iterable[RegionSpec]) -> Net:
             he.origin.edge = he
         region.edge = cycle[0]
 
-    outside_from: dict[NetVertex, HalfEdge] = {}
+    outside: list[HalfEdge] = []
     paired: set[HalfEdge] = set()
     for (a, b), he in by_side.items():
         if he in paired:
@@ -92,17 +89,43 @@ def build_net(body: Body, specs: Iterable[RegionSpec]) -> Net:
         out = HalfEdge(len(half_edges), b, EdgeKind.BOUNDARY, None)
         half_edges.append(out)
         he.twin, out.twin = out, he
-        if b in outside_from:
-            raise NetBuildError(f"two perimeter segments start at {b.position} (touching parts are not supported)")
-        outside_from[b] = out
+        outside.append(out)
 
-    for out in outside_from.values():
-        nxt = outside_from.get(out.destination)
-        if nxt is None:
+    leaving: dict[NetVertex, list[HalfEdge]] = {}
+    for he in half_edges:
+        leaving.setdefault(he.origin, []).append(he)
+    followed: set[HalfEdge] = set()
+    for out in outside:
+        nxt = _turn(out, leaving[out.destination])
+        if nxt.region is not None or nxt in followed:
             raise NetBuildError(f"perimeter is broken at {out.destination.position}")
+        followed.add(nxt)
         out.next, nxt.prev = nxt, out
 
     net = Net(body, vertices.values(), half_edges, regions)
-    if len(net.perimeter()) != len(outside_from):
+    if len(net.perimeter()) != len(outside):
         raise NetBuildError("the net's perimeter must be a single cycle (the net must be connected and have no holes)")
     return net
+
+
+def _turn(arriving: HalfEdge, leaving: list[HalfEdge]) -> HalfEdge:
+    """The half-edge that follows `arriving` around the face on its left: of those leaving its destination, the first
+    one clockwise from the way back (`arriving.twin`). Where the perimeter passes a vertex more than once, that keeps
+    each pass with its own part of the net."""
+    back = arriving.twin
+    at = back.origin.position
+    d0 = back.destination.position - at
+
+    def clockwise(he: HalfEdge) -> tuple[int, Fraction]:
+        """Sorts by the angle clockwise from `d0`, exactly: which half of the turn, then a ratio that grows with it."""
+        d = he.destination.position - at
+        x, y = d.dot(d0), d0.cross(d)  # y < 0: within half a turn clockwise of d0
+        if y < 0:
+            return 0, x / y
+        if y == 0 and x < 0:
+            return 1, Fraction(0)
+        if y > 0:
+            return 2, x / y
+        return 3, Fraction(0)  # the same way as d0: a full turn
+
+    return min((he for he in leaving if he is not back), key=clockwise)

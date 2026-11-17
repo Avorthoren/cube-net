@@ -14,6 +14,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import Enum
 
+from cube_net.core.geometry import IntersectionKind, Vec, classify_segments
 from cube_net.core.template.template import Label, LoopVertex, Template
 
 # The fewest faces a valid template has.
@@ -51,7 +52,10 @@ class ValidationProblem(Enum):
     # 10. Fewer than 4 faces.
     TOO_FEW_FACES = "too few faces"
 
-    # 11. Names whose indices don't go 1, 2, 3, ... (`names`); the UI offers to reindex them.
+    # 11. Faces that touch themselves: a slit (or a point) inside a face (`names`: the vertices where, like "S2").
+    FACE_TOUCHES_ITSELF = "face touches itself"
+
+    # 12. Names whose indices don't go 1, 2, 3, ... (`names`); the UI offers to reindex them.
     INDEX_GAPS = "index gaps"
 
 
@@ -151,6 +155,10 @@ def validate(template: Template) -> ValidationFailure | None:
     if len(template.faces) < MIN_FACES:
         return ValidationFailure(ValidationProblem.TOO_FEW_FACES)
 
+    touching = _faces_touching_themselves(template)
+    if touching:
+        return ValidationFailure(ValidationProblem.FACE_TOUCHES_ITSELF, touching)
+
     gaps = _index_gaps(template)
     if gaps:
         return ValidationFailure(ValidationProblem.INDEX_GAPS, gaps)
@@ -202,7 +210,8 @@ def _opposite(s: _Side, t: _Side) -> bool:
 
 def _not_glued(template: Template) -> tuple[str, ...]:
     """The names whose instances the gluing doesn't bring together: two instances are glued directly when a name is
-    next to both along the loop (their segments to it are counterparts); gluing goes on through chains of those."""
+    next to both along the loop (their segments to it are counterparts), or when they're at the same point (the loop
+    touches itself there); gluing goes on through chains of those."""
     vertices = template.vertices
     n = len(vertices)
     neighbours = {v.id: {_name(vertices[i - 1]), _name(vertices[(i + 1) % n])} for i, v in enumerate(vertices)}
@@ -216,12 +225,35 @@ def _not_glued(template: Template) -> tuple[str, ...]:
         while grown:
             grown = False
             for v in instances:
-                if v.id not in group and any(neighbours[v.id] & neighbours[g] for g in group):
+                if v.id not in group and any(
+                    neighbours[v.id] & neighbours[g] or v.position == template.position(g) for g in group
+                ):
                     group.add(v.id)
                     grown = True
         if len(group) != len(instances):
             apart.append(name)
     return tuple(apart)
+
+
+def _faces_touching_themselves(template: Template) -> tuple[str, ...]:
+    """The labels of the vertices where a face touches itself (the loop may touch itself, but only between faces: a
+    face is a simple polygon, docs/template_plan.md §8.1). In the loop's order."""
+    places: set[Vec] = set()
+    for face in template.faces:
+        corners = face.corners
+        n = len(corners)
+        sides = [(template.position(corners[i]), template.position(corners[(i + 1) % n])) for i in range(n)]
+        for i in range(n):
+            for j in range(i + 1, n):
+                hit = classify_segments(*sides[i], *sides[j])
+                if hit.kind is IntersectionKind.DISJOINT:
+                    continue
+                neighbours = j == i + 1 or (i == 0 and j == n - 1)
+                shared = sides[i][1] if j == i + 1 else sides[i][0]
+                if neighbours and hit.kind is IntersectionKind.TOUCH and hit.point == shared:
+                    continue
+                places.update(hit.points)
+    return tuple(str(v.label) for v in template.vertices if v.position in places and v.label is not None)
 
 
 def _index_gaps(template: Template) -> tuple[str, ...]:

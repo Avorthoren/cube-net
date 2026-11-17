@@ -11,7 +11,7 @@ template is A_2 in a project of it.
 """
 
 from cube_net.core.body import Body
-from cube_net.core.geometry import Rigid90
+from cube_net.core.geometry import Rigid90, Vec
 from cube_net.core.template.template import Template
 from cube_net.core.template.validation import validate
 
@@ -28,4 +28,9 @@ def body_from_template(template: Template) -> Body:
     start = [(number, Rigid90.identity()) for number in faces]
     colors = [face.color for face in template.faces]
     order = sorted(template.vertices, key=lambda v: (v.label.name, v.label.index) if v.label else ("", 0))
-    return Body(faces, start, colors, [v.position for v in order])
+    keys: list[tuple[Vec, str]] = []
+    for v in order:
+        key = (v.position, v.label.name if v.label else "")
+        if key not in keys:  # two images of a vertex at one point: one vertex of the net (it touches itself there)
+            keys.append(key)
+    return Body(faces, start, colors, keys)

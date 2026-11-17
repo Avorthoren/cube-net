@@ -66,15 +66,38 @@ class TestLooping:
         [
             Vec(11, 10),  # on the first segment
             Vec(12, 10),  # on a vertex that isn't the first one
-            Vec(12, 11),  # back along the last segment
-            Vec(12, 12),  # the last vertex again
+            Vec(12, 11),  # back along the last segment: a slit
         ],
     )
-    def test_no_touching(self, p: Vec) -> None:
+    def test_touching_is_fine(self, p: Vec) -> None:
         editor = TemplateEditor()
         for q in (Vec(10, 10), Vec(12, 10), Vec(12, 12)):
             editor.add_point(q)
-        rejection = editor.add_point(p)
+        assert editor.add_point(p) is None
+
+    def test_the_last_vertex_again_is_no_segment(self) -> None:
+        editor = TemplateEditor()
+        for q in (Vec(10, 10), Vec(12, 10), Vec(12, 12)):
+            editor.add_point(q)
+        rejection = editor.add_point(Vec(12, 12))
+        assert rejection is not None and rejection.problem is TemplateProblem.CROSSING
+
+    def test_a_slit_into_the_loop(self) -> None:
+        """Up 1 from the bottom side and down 1.5, past where it went up: the loop goes back along itself, with the net
+        on both sides of the slit."""
+        editor = TemplateEditor()
+        for q in (Vec(10, 10), Vec(11, 10), Vec(11, 11), Vec(11, F(19, 2)), Vec(12, F(19, 2)), Vec(12, 12)):
+            assert editor.add_point(q) is None
+        assert editor.add_point(Vec(10, 12)) is None
+        assert editor.add_point(Vec(10, 10)) is None
+        assert editor.state is TemplateState.FINALIZATION
+
+    def test_touching_with_the_net_on_the_same_side_is_refused(self) -> None:
+        """Along its own first side again, the same way round: the net would be on the same side of both."""
+        editor = TemplateEditor()
+        for q in (Vec(10, 10), Vec(13, 10), Vec(13, 12), Vec(11, 12), Vec(11, 11), Vec(9, 11), Vec(9, 10)):
+            assert editor.add_point(q) is None
+        rejection = editor.add_point(Vec(12, 10))  # along the first side, the same way
         assert rejection is not None and rejection.problem is TemplateProblem.CROSSING
 
     def test_a_clockwise_loop_ends_up_counter_clockwise(self) -> None:
@@ -215,3 +238,16 @@ def test_the_editor_needs_a_closed_loop_for_finalization() -> None:
         editor.add_fold(0, 0)
     with pytest.raises(ValueError, match="is closed"):
         drawn(PILLOW).add_point(Vec(50, 50))
+
+
+def test_a_slit_tip_on_the_far_side_would_part_the_paper() -> None:
+    """A slit up from the bottom side whose tip is moved onto the top side: the net would be two pieces meeting at a
+    point (docs/template_plan.md, §8.1)."""
+    editor = drawn(
+        [Vec(10, 10), Vec(11, 10), Vec(11, 11), Vec(11, F(19, 2)), Vec(12, F(19, 2)), Vec(12, 12), Vec(10, 12)]
+    )
+    tip = 2
+    assert editor.move_vertex(tip, Vec(11, F(23, 2))) is None  # still inside: fine
+    rejection = editor.move_vertex(tip, Vec(11, 12))  # on the top side
+    assert rejection is not None and rejection.problem is TemplateProblem.APART
+    assert editor.template.position(tip) == Vec(11, F(23, 2))

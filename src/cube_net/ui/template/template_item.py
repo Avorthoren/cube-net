@@ -31,6 +31,7 @@ from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.net_painting import UP_RIGHT, paint_labels
+from cube_net.ui.template.corners import middle_angle, owned_arcs, shared
 
 type Segment = tuple[Vec, Vec]
 
@@ -57,6 +58,8 @@ class TemplateItem(QGraphicsItem):
         self._rubber: Segment | None = None
         self._flash: tuple[Segment, ...] = ()
         self._highlight_vertex: Vec | None = None
+        # The parts of its circle the highlighted vertex owns, where several are at its point (None: all of it).
+        self._highlight_arcs: list[tuple[float, float]] | None = None
         self._highlight_fold: Segment | None = None
         self._midpoints_shown = False
         self._pressed_midpoint: int | None = None
@@ -98,12 +101,16 @@ class TemplateItem(QGraphicsItem):
     def flash(self) -> tuple[Segment, ...]:
         return self._flash
 
-    def set_highlight_vertex(self, position: Vec | None) -> None:
-        self._highlight_vertex = position
+    def set_highlight_vertex(self, position: Vec | None, arcs: list[tuple[float, float]] | None = None) -> None:
+        """Ring the vertex at `position` (None: none); only along `arcs` (radians, counter-clockwise), if given."""
+        self._highlight_vertex, self._highlight_arcs = position, arcs
         self.update()
 
     def highlight_vertex(self) -> Vec | None:
         return self._highlight_vertex
+
+    def highlight_arcs(self) -> list[tuple[float, float]] | None:
+        return self._highlight_arcs
 
     def set_highlight_fold(self, segment: Segment | None) -> None:
         self._highlight_fold = segment
@@ -140,7 +147,11 @@ class TemplateItem(QGraphicsItem):
         if self._highlight_fold is not None:
             self._line(painter, world, self._highlight_fold, palette.TEMPLATE_FOLD, net_style.HIGHLIGHT_WIDTH_PX)
         for a, b in template.loop_sides():
-            self._line(painter, world, (template.position(a), template.position(b)), palette.TEMPLATE_LOOP)
+            segment = (template.position(a), template.position(b))
+            if template.closed:  # inside the net, on its own side of the line (as cuts are drawn in a project)
+                self._inner_line(painter, world, segment)
+            else:
+                self._line(painter, world, segment, palette.TEMPLATE_LOOP)
         if self._rubber is not None:
             self._line(painter, world, self._rubber, palette.RUBBER_BAND, net_style.RUBBER_BAND_PX, dashed=True)
         for segment in self._flash:
@@ -191,6 +202,21 @@ class TemplateItem(QGraphicsItem):
         a, b = segment
         painter.drawLine(world.map(to_qpointf(a)), world.map(to_qpointf(b)))
 
+    @staticmethod
+    def _inner_line(painter: QPainter, world: QTransform, segment: Segment) -> None:
+        """A side of the closed loop, drawn just inside the net (on its left: the loop goes counter-clockwise)."""
+        a, b = (world.map(to_qpointf(p)) for p in segment)
+        d = b - a
+        length = math.hypot(d.x(), d.y())
+        if length == 0:
+            return
+        width = net_style.EDGE_WIDTH_PX
+        inset = QPointF(d.y(), -d.x()) / length * (width / 2)  # left in the sheet is right on screen (y is flipped)
+        pen = QPen(palette.TEMPLATE_LOOP, width)
+        pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+        painter.setPen(pen)
+        painter.drawLine(a + inset, b + inset)
+
     def _paint_vertices(self, painter: QPainter, world: QTransform, template: Template) -> None:
         r = net_style.VERTEX_RADIUS_PX
         painter.setPen(QPen(palette.VERTEX_OUTLINE, 1))
@@ -201,7 +227,13 @@ class TemplateItem(QGraphicsItem):
             ring = r + net_style.VERTEX_HIGHLIGHT_PX / 2
             painter.setPen(QPen(palette.VERTEX_HIGHLIGHT, net_style.VERTEX_HIGHLIGHT_PX))
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawEllipse(world.map(to_qpointf(self._highlight_vertex)), ring, ring)
+            center = world.map(to_qpointf(self._highlight_vertex))
+            if self._highlight_arcs is None:
+                painter.drawEllipse(center, ring, ring)
+            else:  # the sheet's y goes up, as Qt's angles do on screen
+                rect = QRectF(center.x() - ring, center.y() - ring, 2 * ring, 2 * ring)
+                for start, end in self._highlight_arcs:
+                    painter.drawArc(rect, round(math.degrees(start) * 16), round(math.degrees(end - start) * 16))
 
     def _paint_midpoints(self, painter: QPainter, world: QTransform, template: Template) -> None:
         r = net_style.midpoint_radius()
@@ -214,6 +246,11 @@ class TemplateItem(QGraphicsItem):
 
     def _paint_labels(self, painter: QPainter, world: QTransform, template: Template) -> None:
         directions = _outward(world, template)
+        for v in template.vertices:  # several at one point: each along the middle of its own part of it
+            if shared(template, v.id):
+                angle = middle_angle(owned_arcs(template, v.id))
+                if angle is not None:
+                    directions[v.id] = QPointF(math.cos(angle), -math.sin(angle))  # the sheet's y goes up
         paint_labels(
             painter,
             (

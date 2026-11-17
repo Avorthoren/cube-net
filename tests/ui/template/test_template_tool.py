@@ -235,3 +235,24 @@ def test_assign_the_vertex_once_the_loop_is_closed(setup: tuple[SheetView, Templ
     view.left_pressed.emit(11.0, 10.0)
     view.mouse_moved.emit(11.0, 9.5)  # dragging it
     assert not tool.can_assign()
+
+
+def test_vertices_at_one_point_are_picked_by_direction(setup: tuple[SheetView, TemplateTool]) -> None:
+    """A square with a triangular hole whose top corner touches the top side at (12, 14): T_1 and T_2 share that
+    point; the mouse picks by direction."""
+    from cube_net.ui.template.corners import owned_arcs
+
+    view, tool = setup
+    view.show_initial_view(Box(Vec(9, 9), Vec(15, 15)))
+    loop = [(10, 10), (14, 10), (14, 14), (12, 14), (13, 12), (11, 12), (12, 14), (10, 14)]
+    for x, y in [*loop, loop[0]]:
+        view.left_pressed.emit(float(x), float(y))
+    assert tool.editor.state is TemplateState.FINALIZATION
+    t1, t2 = 3, 6  # in the order drawn
+    step = net_style.VERTEX_RADIUS_PX / 2 / view.scale_factor()
+    assert tool.vertex_id_at(12 + step, 14 - step / 3) == t1  # right of the hole
+    assert tool.vertex_id_at(12 - step, 14 - step / 3) == t2  # left of it
+    assert tool.vertex_id_at(12, 14 - step) is None  # in the hole
+    view.mouse_moved.emit(12 + step, 14 - step / 3)
+    assert tool.item.highlight_vertex() == Vec(12, 14)
+    assert tool.item.highlight_arcs() == owned_arcs(tool.editor.template, t1)

@@ -126,9 +126,8 @@ def drawn_template(loop: list[tuple[int, int, str, int]], folds: list[tuple[str,
     editor = TemplateEditor()
     for x, y, *_ in [*loop, loop[0]]:
         assert editor.add_point(Vec(x, y)) is None
-    by_position = {v.position: v.id for v in editor.template.vertices}
-    for x, y, name, index in loop:
-        assert editor.set_label(by_position[Vec(x, y)], Label(name, index)) is None
+    for vertex_id, (_, _, name, index) in enumerate(loop):  # ids go in the order the points were drawn
+        assert editor.set_label(vertex_id, Label(name, index)) is None
     by_label = {str(v.label): v.id for v in editor.template.vertices}
     for start, end in folds:
         assert editor.add_fold(by_label[start], by_label[end]) is None

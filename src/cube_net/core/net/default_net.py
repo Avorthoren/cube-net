@@ -5,6 +5,7 @@
 docs/idea.txt."""
 
 from cube_net.core.body import CUBE, Body
+from cube_net.core.geometry import Vec
 from cube_net.core.net.builder import NetBuildError, RegionSpec, build_net
 from cube_net.core.net.net import Net
 
@@ -17,12 +18,12 @@ def starting_net(body: Body) -> Net:
         specs.append(RegionSpec(face, placement, [placement.apply(c) for c in body.face(face).corners]))
     net = build_net(body, specs)
     if body.vertex_order is not None:
-        rank = {position: i for i, position in enumerate(body.vertex_order)}
-        if set(rank) != {v.position for v in net.vertices}:
+        rank: dict[tuple[Vec, str | None], int] = {key: i for i, key in enumerate(body.vertex_order)}
+        if set(rank) != {(v.position, v.point.vertex) for v in net.vertices}:
             raise NetBuildError("the body's order of the starting net's vertices doesn't name exactly its vertices")
-        for v in net.vertices:
-            v.id = rank[v.position]
-        net.vertices.sort(key=lambda v: v.id)
+        net.vertices.sort(key=lambda v: rank[(v.position, v.point.vertex)])
+        for i, v in enumerate(net.vertices):
+            v.id = i
         net.reindex()
     return net
 

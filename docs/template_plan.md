@@ -169,12 +169,14 @@ words it (§6.5). The first failing check stops the rest.
    can't be glued without turning one side over (§2.2).
 7. No fold has the same two names as a pair of loop segments.
 8. No two folds have the same two names (`Body` refuses them: 4 face sides would join the same two vertices).
-9. All instances of each name are glued together. Two instances are glued directly when one name is adjacent to both
+9. All instances of each name are glued together (instances at the same point count as glued: the net touches itself
+   there). Two instances are glued directly when one name is adjacent to both
    along the loop (loop segments only: folds glue nothing); the direct gluings must connect all of a name's instances
    into one group (union-find). Pairwise direct gluing would be too strict: a vertex with 4 instances has them glued
    in a ring, M_1–M_2–M_3–M_4–M_1, and M_1, M_3 share no neighbour.
 10. The net has at least 4 faces.
-11. Indices of each name are `1..k` with no gaps; on failure offer to reindex (Yes/No), keeping the order.
+11. No face touches itself (T6a: a slit or a pinch point must lie between faces).
+12. Indices of each name are `1..k` with no gaps; on failure offer to reindex (Yes/No), keeping the order.
 
 No Euler characteristic check: a torus is allowed.
 
@@ -294,6 +296,8 @@ Each one ends with the app working and all tests green.
 | T4 | `Template`, `TemplateEditor`, its rules and history, `template_area` | Nothing |
 | T5 | Template validation, `body_from_template` | Nothing |
 | T6 | Template creation mode: File → New Template, the sheet, drawing, editing, folds, colours, hatching, Assign the vertex, Validate, Net area, settings hidden; session logs record template creation from the first version you can try | The new mode |
+| T6a | Loops that touch themselves (§8.1) | Slits, loops meeting at a point |
+| T6b | Faces in pieces, one face by colour; faces with holes (§8.2) | A ring-shaped face shows as one |
 | T7 | File → New with Cube/Custom, projects from templates, the Style tab scrolling | The feature complete |
 | T8 | `idea.txt`/`plan.md` updated (once this plan is done), Russian texts | |
 
@@ -367,6 +371,52 @@ Done in T6 (`ui/template/`):
 
 T2 is where any cube assumption I've missed would show up: the test bodies aren't cubes, have faces that aren't
 squares (and one that isn't convex), vertices with 4 faces, and two faces sharing several edges.
+
+### 8.1 T6a: loops that touch themselves
+A template's loop (and so its net) may touch itself, even along a segment (a slit), as a rearranged net in a project
+may: never crossing itself, the area it encloses never overlapping (the overlap check's test around each contact
+point, `geometry/sectors.py`, instead of "segments meet only at their shared vertex").
+- The net builder tells vertices at one position apart by which point of the body they are, and lets the perimeter
+  pass one position more than once.
+- A face can't have a slit inside itself (refused, with a message): a slit lies between two faces.
+- **The mouse:** any number of vertices may share a position, and each one must be selectable. Each occupies the
+  sector of the net between its two loop sides (they can't overlap: that's the rule above), so the direction from the
+  point to the mouse picks one: the vertex circle's hitbox is split into those sectors, the part outside the net
+  belongs to none. The highlight shows the chosen one's sector. The same for the middle circles of two sides on top of
+  each other: the side of the line the mouse is on.
+- **Drawing (as for cuts in projects):** a loop side is drawn strictly inside the net, on its own side of the line, and
+  its hitbox too, so two sides touching along a segment never share their drawing or their hitbox. Labels of vertices
+  at one position go each into its own sector's direction.
+
+Done (T6a):
+- `template/loop_geometry.py`: rays of the loop at a point, the gaps between them and the loop's winding number just
+  inside each (1: the net, 0: outside, anything else: it overlaps itself). No pairing of rays into passes: at a slit's
+  tip on a point the loop passes again, that pairing is ambiguous, the winding number isn't.
+- `rules.py`: while the loop is open, crossings, sides of no length and sides along each other the same way are
+  refused; once it's closed, every point where it touches itself must have gaps of 0 or 1 only. A fold leaves each end
+  into a gap of the net that one of its vertex's sides bounds, and touches nothing but its ends.
+- The net builder keeps vertices at one point apart by the point of the body (one vertex if it's the same one), and
+  links the perimeter by angle where it passes a vertex twice. A slit whose two sides are one edge of the body is a fold
+  in the net (as gluing would make it).
+- One piece of paper (`loop_geometry.pieces`): the loop's sides, cut where it touches itself, make a plane graph; each
+  bounded face the loop goes round with the net on its left is a piece. A closed loop must be exactly one: parts
+  meeting only at points, or a slit from edge to edge, are refused at once (a hole touching the edge, or a slit with a
+  free end, are fine).
+- Validation: check 9 counts instances at one point as glued; new check 11, a face may not touch itself (a pinch point
+  or a slit must lie between faces; a face hanging on by a point can't be a template). `Body.vertex_order` is by
+  position and name.
+- UI (`ui/template/corners.py`): at a point shared by several vertices, each owns the parts of the gaps next to its
+  rays (to the middle when the other ray is another vertex's); the direction to the mouse picks one, the highlight
+  rings only its parts, its label goes along the middle of them. Sides of a closed loop are drawn inside the net; of
+  two middle circles on each other, the side the mouse is on wins.
+
+### 8.2 T6b: faces in pieces, faces with holes
+Faces of the template with the same colour that share a side (a fold, or a glued pair) are pieces of one face of the
+body: a face may then have holes (a ring, made of pieces). The sides between pieces of one face are "flat": never drawn
+(no fold, no cut), a cut along one is coloured as one inside a face, a vertex counts the face once, and a point where
+only flat sides meet (360 degrees round it) isn't a vertex of the body (it may go from the perimeter like any redundant
+point, and has no circle or label in a project). Each piece stays a simple polygon in its own frame. Validation gets a
+few more checks (pieces of one colour meeting only at a point, ...), to work out then.
 
 ---
 

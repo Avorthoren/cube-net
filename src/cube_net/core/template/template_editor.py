@@ -85,12 +85,10 @@ class TemplateEditor:
                 return TemplateRejection(TemplateProblem.TOO_EARLY_TO_CLOSE)
             closed = self.template.closed_loop()
             return self._apply(ActionKind.ADD_VERTEX, closed, [(vertices[-1].id, vertices[0].id)])
+        if vertices and p == vertices[-1].position:
+            return TemplateRejection(TemplateProblem.CROSSING)  # a segment of no length
         after = self.template.with_vertex_appended(p)
         changed = [(vertices[-1].id, after.vertices[-1].id)] if vertices else []
-        if vertices and p == vertices[-1].position:
-            return TemplateRejection(TemplateProblem.CROSSING)
-        if vertices and any(v.position == p for v in vertices):
-            return TemplateRejection(TemplateProblem.CROSSING, ((vertices[-1].position, p),))
         return self._apply(ActionKind.ADD_VERTEX, after, changed)
 
     def insert_vertex(self, a: int, b: int) -> None:

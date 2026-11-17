@@ -1,13 +1,12 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-from fractions import Fraction as F
 
 import pytest
 
-from cube_net.core.body import CUBE, FACES, LOCAL_CORNERS
+from cube_net.core.body import CUBE, FACES, LOCAL_CORNERS, Body
 from cube_net.core.geometry import Rigid90, Vec
-from cube_net.core.net import EdgeKind, NetBuildError, NetInvariantError, RegionSpec, build_net
+from cube_net.core.net import EdgeKind, NetBuildError, NetInvariantError, RegionSpec, build_net, validate_net
 
 ID = Rigid90()
 
@@ -53,9 +52,10 @@ def test_clockwise_rejected() -> None:
         build_net(CUBE, [RegionSpec(1, ID, [Vec(0, 0), Vec(0, 1), Vec(1, 1), Vec(1, 0)])])
 
 
-def test_disagreeing_regions_rejected() -> None:
-    """Face 1 at the origin and face 2 right next to it: sheet point (1, 0) would be D (face 1) and H (face 2)."""
-    with pytest.raises(NetBuildError, match="regions disagree at Vec"):
+def test_different_points_at_one_position_are_different_vertices() -> None:
+    """Face 1 at the origin and face 2 right next to it: sheet point (1, 0) is D (face 1) and H (face 2), two vertices
+    (and the sides between them aren't shared: this is no net)."""
+    with pytest.raises(NetInvariantError, match="no counterpart"):
         build_net(CUBE, [square(1, Vec(0, 0)), square(2, Vec(1, 0))])
 
 
@@ -64,15 +64,17 @@ def test_overlapping_regions_rejected() -> None:
         build_net(CUBE, [square(2, Vec(0, 0)), square(2, Vec(0, 0))])
 
 
-def test_touching_parts_not_supported() -> None:
-    """Two diagonal quarters of face 2 touch only at its center."""
-    q = F(1, 2)
+def test_parts_touching_at_a_point(pillow: Body) -> None:
+    """The pillow's two faces, apart, meeting only at R: one vertex, which the perimeter passes twice."""
     specs = [
-        RegionSpec(2, ID, [Vec(0, 0), Vec(q, 0), Vec(q, q), Vec(0, q)]),
-        RegionSpec(2, ID, [Vec(q, q), Vec(1, q), Vec(1, 1), Vec(q, 1)]),
+        RegionSpec(1, ID, [Vec(0, 0), Vec(1, 0), Vec(1, 1), Vec(0, 1)]),
+        RegionSpec(2, Rigid90(1, Vec(2, 0)), [Vec(2, 1), Vec(2, 2), Vec(1, 2), Vec(1, 1)]),
     ]
-    with pytest.raises(NetBuildError, match="two perimeter segments start at Vec"):
-        build_net(CUBE, specs)
+    net = build_net(pillow, specs)
+    validate_net(net)
+    (r,) = [v for v in net.vertices if v.position == Vec(1, 1)]
+    assert [he.origin for he in net.perimeter()].count(r) == 2
+    assert net.fold_edges() == []
 
 
 def test_disconnected_rejected() -> None:

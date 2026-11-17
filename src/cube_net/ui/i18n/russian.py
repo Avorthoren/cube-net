@@ -341,6 +341,9 @@ RUSSIAN: dict[str, str] = {
     "The point is off the sheet.": "Точка за пределами листа.",
     "The loop needs 3 segments at least.": "В контуре должно быть хотя бы 3 отрезка.",
     "The loop would turn inside out.": "Контур вывернулся бы наизнанку.",
+    "The net would come apart: its parts may touch, but it must stay one piece.": (
+        "Развёртка распалась бы: её части могут касаться, но она должна остаться одним куском."
+    ),
     "A fold would be outside the loop.": "Линия сгиба оказалась бы снаружи контура.",
     "The loop would touch or cross itself, or a fold.": "Контур коснулся бы себя или линии сгиба либо пересёк бы их.",
     "A loop keeps 6 vertices at least: this one can't be deleted.": (
@@ -404,4 +407,9 @@ RUSSIAN: dict[str, str] = {
         "Вершины перенумерованы автоматически.\nДругих проблем не найдено."
     ),
     "No problems found.": "Проблем не найдено.",
+    "A face touches itself at {list}, which a face can't do: a slit, or a point where the loop touches itself, must "
+    "lie between two faces. Divide the face there with a fold.": (
+        "Грань касается сама себя в {list}, а так быть не может: прорезь или точка, где контур касается сам себя, "
+        "должна лежать между двумя гранями. Разделите там грань линией сгиба."
+    ),
 }

@@ -117,7 +117,7 @@ def _write_body(body: Body) -> str | dict[str, Any]:
         ],
         "start": [{"face": face, "placement": _write_motion(placement)} for face, placement in body.start],
         "colors": list(body.colors),
-        "vertex_order": None if body.vertex_order is None else [write_vec(p) for p in body.vertex_order],
+        "vertex_order": None if body.vertex_order is None else [[write_vec(p), name] for p, name in body.vertex_order],
     }
 
 
@@ -132,7 +132,7 @@ def _read_body(data: object) -> Body:
     }
     start = [(s["face"], _read_motion(s["placement"])) for s in data["start"]]
     order = data.get("vertex_order")
-    vertex_order = None if order is None else [read_vec(p) for p in order]
+    vertex_order = None if order is None else [(read_vec(p), _read_name(name)) for p, name in order]
     return Body(faces, start, [str(c) for c in data["colors"]], vertex_order)
 
 

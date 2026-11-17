@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from collections.abc import Callable
 from fractions import Fraction as F
 
 import pytest
@@ -9,7 +10,14 @@ from cube_net.core.body import CUBE, SurfacePoint
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import Net, default_net, starting_net, validate_net
-from cube_net.core.template import Template, body_from_template, template_area
+from cube_net.core.template import (
+    Template,
+    TemplateEditor,
+    TemplateProblem,
+    body_from_template,
+    template_area,
+    validate,
+)
 
 
 def labels_by_position(net: Net) -> dict[Vec, str]:
@@ -57,3 +65,45 @@ def test_only_a_valid_template(cross_template: Template) -> None:
     owner = cross_template.vertices[0].id
     with pytest.raises(ValueError, match="isn't valid"):
         body_from_template(cross_template.with_label(owner, None))
+
+
+# The cross with a slit along C-H instead of the fold: the loop goes down from C_1 to H_1 and back up to C_2, and passes
+# H again (H_2) between E_2 and E_1. Face 4 then hangs on by the points C and H only: two pieces of paper.
+SLIT_CROSS = [
+    (11, 10), (12, 10), (12, 11), (12, 12), (13, 12), (13, 13), (12, 13), (12, 14), (11, 14), (11, 13), (11, 12),
+    (11, 13), (10, 13), (10, 12), (11, 12), (11, 11),
+]  # fmt: skip
+
+
+def test_a_face_hanging_on_by_points_is_refused() -> None:
+    editor = TemplateEditor()
+    for x, y in SLIT_CROSS:
+        assert editor.add_point(Vec(x, y)) is None
+    rejection = editor.add_point(Vec(11, 10))  # closing it
+    assert rejection is not None and rejection.problem is TemplateProblem.APART
+    assert not editor.template.closed
+
+
+# The 1 x 1 x 2 box (`long_box`'s net, 10 units right and up), cut between its front and its right side from the top
+# down to the middle M of their edge B-F: the loop goes down that slit and back up. B-M stays a fold. The slit's two
+# sides are images of one edge of the body lying on each other: in the net that's a fold (as gluing would make it).
+SLIT_BOX = [
+    (10, 9, "D", 1), (11, 9, "C", 1), (11, 10, "B", 1), (12, 10, "C", 2), (13, 10, "D", 2), (14, 10, "A", 1),
+    (14, 12, "E", 1), (13, 12, "H", 1), (12, 12, "G", 1), (11, 12, "F", 1), (11, 11, "M", 1), (11, 12, "F", 2),
+    (11, 13, "G", 2), (10, 13, "H", 2), (10, 12, "E", 2), (10, 10, "A", 2),
+]  # fmt: skip
+SLIT_BOX_FOLDS = [("A2", "B1"), ("B1", "M1"), ("C2", "G1"), ("D2", "H1"), ("E2", "F2")]
+
+
+def test_a_slit_whose_sides_are_one_edge_is_a_fold(draw: Callable[..., TemplateEditor]) -> None:
+    template = draw(SLIT_BOX, SLIT_BOX_FOLDS).template
+    assert validate(template) is None
+    body = body_from_template(template)
+    assert body.area == 10 and body.vertex_angle("M") == 360
+    assert {"".join(sorted(e.names)) for e in body.edges} >= {"BM", "FM"}  # B-F is two edges now
+    net = starting_net(body)
+    validate_net(net)
+    at_f = [v for v in net.vertices if v.position == Vec(11, 12)]
+    assert len(at_f) == 1  # F_1 and F_2 are one point
+    folds = {frozenset((he.origin.position, he.destination.position)) for he in net.fold_edges()}
+    assert frozenset((Vec(11, 11), Vec(11, 12))) in folds and frozenset((Vec(11, 10), Vec(11, 11))) in folds

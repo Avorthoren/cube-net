@@ -44,6 +44,7 @@ from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.cursors import CursorKind
 from cube_net.ui.sheet.sheet_view import SheetView
+from cube_net.ui.template.corners import owned_arcs, shared, vertex_toward
 from cube_net.ui.template.template_item import TemplateItem
 
 # How long a rejected segment stays black (as for cuts).
@@ -62,6 +63,8 @@ def template_problem_text(problem: TemplateProblem) -> str:
             return tr("The loop needs 3 segments at least.")
         case TemplateProblem.TURNED_OVER:
             return tr("The loop would turn inside out.")
+        case TemplateProblem.APART:
+            return tr("The net would come apart: its parts may touch, but it must stay one piece.")
         case TemplateProblem.OUTSIDE_THE_LOOP:
             return tr("A fold would be outside the loop.")
         case _:
@@ -430,26 +433,28 @@ class TemplateTool(QObject):
         """What's drawn after the mouse: the line from the loop's end or a fold's start, and the highlights."""
         template = self._editor.template
         rubber = None
-        highlight = None
+        highlight: int | None = None
         if self._mouse is not None:
             x, y = self._mouse
             if self._editor.state is TemplateState.LOOPING and not self._view.is_panning():
                 end = self._placing.position if self._placing is not None else self._next_point(x, y)
                 if self._closing_at(x, y):
                     end = template.vertices[0].position
-                    highlight = end
+                    highlight = template.vertices[0].id
                 rubber = (template.vertices[-1].position, end)
             elif self._fold_start is not None:
-                vertex = self._vertex_at(x, y)
-                end = template.position(vertex) if vertex is not None else self._quantize(x, y)
+                highlight = self._vertex_at(x, y)
+                end = template.position(highlight) if highlight is not None else self._quantize(x, y)
                 rubber = (template.position(self._fold_start), end)
-                highlight = template.position(vertex) if vertex is not None else None
             elif self._editor.state is TemplateState.FINALIZATION and self._drag is None:
-                vertex = self._vertex_at(x, y)
-                highlight = template.position(vertex) if vertex is not None else None
+                highlight = self._vertex_at(x, y)
         fold = self._fold_at(*self._mouse) if self._mouse is not None and self._view.ctrl_held() else None
         self.item.set_rubber(rubber)
-        self.item.set_highlight_vertex(highlight)
+        if highlight is None:
+            self.item.set_highlight_vertex(None)
+        else:
+            arcs = owned_arcs(template, highlight) if shared(template, highlight) else None
+            self.item.set_highlight_vertex(template.position(highlight), arcs)
         self.item.set_highlight_fold(
             None if fold is None else (template.position(fold.start), template.position(fold.end))
         )
@@ -521,23 +526,39 @@ class TemplateTool(QObject):
         return self._drawn_vertex_at(x, y)
 
     def _drawn_vertex_at(self, x: float, y: float) -> int | None:
-        """The vertex whose circle the mouse is in (the nearest one), whether the loop is closed or not."""
+        """The vertex whose circle the mouse is in (the nearest one), whether the loop is closed or not. Where several
+        vertices of the closed loop are at one point, the one owning the direction to the mouse (`corners`); none if
+        that's outside the net."""
+        template = self._editor.template
         best: tuple[float, int] | None = None
-        for v in self._editor.template.vertices:
+        for v in template.vertices:
             d = self._distance_px(x, y, v.position)
             if d <= net_style.VERTEX_RADIUS_PX and (best is None or d < best[0]):
                 best = d, v.id
-        return None if best is None else best[1]
+        if best is None or not shared(template, best[1]):
+            return None if best is None else best[1]
+        q = template.position(best[1])
+        candidates = [v.id for v in template.vertices if v.position == q]
+        mouse, point = self._view.from_sheet(QPointF(x, y)), self._view.from_sheet(to_qpointf(q))
+        direction = (mouse.x() - point.x(), point.y() - mouse.y())  # in the sheet's directions (y up)
+        if direction == (0.0, 0.0):
+            return candidates[0]
+        return vertex_toward(template, candidates, direction)
 
     def _midpoint_at(self, x: float, y: float) -> int | None:
         """The loop's side whose middle circle the mouse is in."""
         if self._editor.state is not TemplateState.FINALIZATION or self._vertex_at(x, y) is not None:
             return None
         template = self._editor.template
+        mouse = self._quantize(x, y)
+        found = None
         for i, (a, b) in enumerate(template.loop_sides()):
-            if self._within(x, y, (template.position(a) + template.position(b)) / 2, net_style.midpoint_radius()):
-                return i
-        return None
+            pa, pb = template.position(a), template.position(b)
+            if self._within(x, y, (pa + pb) / 2, net_style.midpoint_radius()):
+                if (pb - pa).cross(mouse - pa) > 0:
+                    return i  # on its side of the line (where the net is): two sides may lie on each other
+                found = i if found is None else found
+        return found
 
     def _fold_at(self, x: float, y: float) -> Fold | None:
         """The fold line whose hitbox the mouse is in."""
