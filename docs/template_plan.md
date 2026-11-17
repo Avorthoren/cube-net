@@ -298,7 +298,8 @@ Each one ends with the app working and all tests green.
 | T6 | Template creation mode: File → New Template, the sheet, drawing, editing, folds, colours, hatching, Assign the vertex, Validate, Net area, settings hidden; session logs record template creation from the first version you can try | The new mode |
 | T6a | Loops that touch themselves (§8.1) | Slits, loops meeting at a point |
 | T6b | Faces in pieces, one face by colour; faces with holes (§8.2) | A ring-shaped face shows as one |
-| T7 | File → New with Cube/Custom, projects from templates, the Style tab scrolling | The feature complete |
+| T6c | The whole Style belongs to the template or the project, with the origin (§8.3) | Style per document |
+| T7 | File → New with Cube / Cube with a hole / Custom, projects from templates, the Style tab scrolling (§8.3) | The feature complete |
 | T8 | `idea.txt`/`plan.md` updated (once this plan is done), Russian texts | |
 
 Done in T1 beyond the table above: `Net.body_edge_of` / `Net.segment_faces` (a half-edge's body edge and colours,
@@ -417,6 +418,25 @@ body: a face may then have holes (a ring, made of pieces). The sides between pie
 only flat sides meet (360 degrees round it) isn't a vertex of the body (it may go from the perimeter like any redundant
 point, and has no circle or label in a project). Each piece stays a simple polygon in its own frame. Validation gets a
 few more checks (pieces of one colour meeting only at a point, ...), to work out then.
+
+### 8.3 T6c and T7: style per document, built-in templates
+(Asked for on 2026-11-17; it replaces the parts of §7 it contradicts.)
+- **File -> New** offers three: Cube, Cube with a hole (the torus template, once it's finished), and Custom (a
+  `.nettemplate` file). The first two are built into the application, as the cube is now: their templates (or bodies),
+  styles and origins are part of the app.
+- **The whole of Settings -> Style belongs to the document**, no longer to the application (the face colours already
+  do, T3):
+  - a new template starts with the default style (the one in the style files);
+  - changes made while a template is open are saved in that template, and opening it brings its style back;
+  - a new project copies its template's style (a built-in one's for Cube and Cube with a hole); from then on the
+    project's style is its own: changes are saved in the project, the template doesn't change;
+  - **files saved before this** have no style: they open with the style an older version kept in the application's
+    settings (read, never written, as `legacy_face_colors` is now), or the default if there's none, so nothing made
+    so far becomes useless (the torus template included).
+- **The origin too:** a new project starts with its template's origin (moved or not).
+- What to settle when it's built: whether Settings -> Style's "Restore default" brings back the style files' defaults
+  or the template's; how the Style tab says that it's the document's (the Settings button's tooltip says "of the
+  application").
 
 ---
 
