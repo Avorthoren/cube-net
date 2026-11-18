@@ -297,7 +297,7 @@ Each one ends with the app working and all tests green.
 | T5 | Template validation, `body_from_template` | Nothing |
 | T6 | Template creation mode: File → New Template, the sheet, drawing, editing, folds, colours, hatching, Assign the vertex, Validate, Net area, settings hidden; session logs record template creation from the first version you can try | The new mode |
 | T6a | Loops that touch themselves (§8.1) | Slits, loops meeting at a point |
-| T6b | Faces in pieces, one face by colour; faces with holes (§8.2) | A ring-shaped face shows as one |
+| T6b | Faces in pieces, one face by colour; faces and nets with holes; validation status; tiling across pieces (§8.2) | The torus's purple pieces glue into one ring |
 | T6c | The whole Style belongs to the template or the project, with the origin (§8.3) | Style per document |
 | T7 | File → New with Cube / Cube with a hole / Custom, projects from templates, the Style tab scrolling (§8.3) | The feature complete |
 | T8 | `idea.txt`/`plan.md` updated (once this plan is done), Russian texts | |
@@ -422,13 +422,85 @@ Done (T6a):
 - The colour picker opens on a double click in a face (`SheetView.left_double_clicked`); a single click there drags the
   sheet.
 
-### 8.2 T6b: faces in pieces, faces with holes
-Faces of the template with the same colour that share a side (a fold, or a glued pair) are pieces of one face of the
-body: a face may then have holes (a ring, made of pieces). The sides between pieces of one face are "flat": never drawn
-(no fold, no cut), a cut along one is coloured as one inside a face, a vertex counts the face once, and a point where
-only flat sides meet (360 degrees round it) isn't a vertex of the body (it may go from the perimeter like any redundant
-point, and has no circle or label in a project). Each piece stays a simple polygon in its own frame. Validation gets a
-few more checks (pieces of one colour meeting only at a point, ...), to work out then.
+### 8.2 T6b: faces in pieces, faces with holes, nets with holes
+(Discussed on 2026-11-18; it replaces the earlier sketch of a face as a group of separate polygons.)
+
+Templates still have one loop (drawing inner loops stays in §10.1). But a project made from the torus template must
+let the user glue the two purple pieces together, and the result must be one purple face, as on the cube, where a
+face can be in several pieces of the net and cuts through them follow the rules the cube already has.
+
+**Faces (one colour, one face).**
+- Template faces of one colour are pieces of one face of the body, strictly: two faces that only look alike need
+  colours that differ (by one bit of RGB, if need be). Pieces of one colour that aren't joined are refused (below).
+- The body's face is the pieces glued together into one shape, in one frame: the frame of the face's *basis* piece
+  (below), every other piece placed by the gluing (a multiple of 90 degrees and a shift, as every gluing is). That
+  shape may be a ring (the torus's purple, glued along N-T and L-R). Its sides glued to each other aren't sides of the
+  body: they're inside the face, no edge, no fold.
+- So in a project nothing new happens inside a face: the starting net has the face in several pieces, like the cube's
+  net with half of face 5 moved onto face 1, and a cut along a side between the pieces (the torus's N2-T2 and N1-T1) is
+  a cut inside a face: dashes of the face's colour and white (today it shows the face's colour twice: two faces of one
+  colour). A cut crossing such a side gets no point there.
+- Template mode draws all of it as today: a side between pieces of one face is drawn like any other side of the loop.
+- A fold separates two faces, by definition: it can't have exactly the same colour on both sides (refused by
+  validation, below). Colours that only look alike are the user's choice.
+- A labelled vertex with only pieces of one face around it is a point inside that face in the project: no circle, no
+  label, removed from the perimeter like any redundant point.
+- The engine: a face of the body is no longer always a simple polygon (`Body` checks that now); it may have holes, so
+  its boundary is several loops. To work out when it's built: point location in a face, the face's sides and corners,
+  dashes measured along its sides, its area, and the hatch's cells.
+
+**Validation.** New checks before reindexing (which stays the last):
+- *No fold has one colour on both sides*: the folds are listed, like the other checks list sides.
+- *Pieces of one colour are joined*: through glued pairs of loop sides, every piece of a colour reaches every other.
+  Otherwise the colours are listed as squares.
+- *A face glued from its pieces doesn't intersect itself*: each face on its own, other faces ignored (after gluing, the
+  whole net may overlap itself, and that's fine: the torus can be flattened, though it doesn't look like it). The
+  pieces may not overlap in the face's frame, and the face must be one piece of paper. "This face self-intersects after
+  gluing: [square]" / "Some faces self-intersect after gluing: [square], [square] and [square]". Today's check "no
+  face touches itself" (T6a) becomes part of this one, for the glued face instead of the piece. Touching: none except
+  where it's glued (no slit inside it, no point where it meets itself), since a point of a face must be one point of
+  the body; to be widened if testing shows it's not enough.
+
+**Tiling across pieces.** On the template, pieces of one face are hatched independently, each tied to the grid, so
+in a project their hatches wouldn't match once glued. So:
+- A counter starts with the template; every time the user gives a face a colour (even the one it has), the face gets
+  the counter's value, the counter goes up, and that face's hatch goes back to the default (tied to the grid).
+- The face's basis piece is the one with the smallest number: coloured least recently (to make another piece the
+  basis, colour the current basis again). An explicit Validate that passes
+  works out, for every face in several pieces, where each piece lies in the basis piece's frame, and from then on
+  hatches each piece as the basis piece's hatch would continue over it: turned by a multiple of 90 degrees, shifted,
+  no longer tied to the grid. The template keeps those hatches (until a piece is coloured again).
+- The template file saves the counter, each face's number and hatch, and the status. A template saved before opens
+  Undefined, its faces numbered in their order, hatched by default.
+- Starting a project from a template validates it anyway (even if it's Validated) and starts the project the same way,
+  without changing the template.
+
+**Validation status.** A template is Undefined at first; an explicit Validate makes it Valid or Invalid; any change to
+the template itself (not Settings -> Style) makes it Undefined again.
+- Below Net area on the instrument panel, after a separator: a square button nearly as wide as the panel. Hint:
+  "Hotkey: V".
+  - Undefined: active, two lines, "Validate" and "template".
+  - Valid: inactive, "Validated" in its middle.
+  - Invalid: active (to validate again and see the message), "Invalid" in its middle.
+  - Inactive while the loop isn't closed.
+- Undo and Redo make it Undefined too, always (even back to a validated state).
+
+**Cuts in nets with holes.** Gluing the purple pieces along both of their sides makes a net with a hole, so projects
+must allow nets with holes, for every body (a cube's net can have holes too then).
+- The cut rule changes: a cut line divides the net in two. Its points may be anywhere, outside the net or in a hole;
+  what cuts is the part of the line on or inside the net, and the app works out its real points (where the line enters
+  and leaves the net). The cut ends as soon as the net falls apart into at least two pieces, and it's valid if they're
+  exactly two. Cutting the purple ring in half: from its outer side down across the hole to its outer side again (two
+  real pieces of cut, through the hole between them).
+- Everything that assumes one perimeter cycle: validation of the net (`validate_net`), splitting, the halves,
+  rearranging and the overlap check, approval, drawing, save and load. Areas and the bounding rectangle don't change
+  (a hole isn't area).
+
+**Steps (each ends with the app working):**
+1. The validation status and its button.
+2. Faces glued from pieces: the body's faces with holes, the two new checks, the cut inside a face coloured as one.
+3. Tiling across pieces: the counter, the basis piece, the hatches.
+4. Nets with holes in projects, and the new cut rule.
 
 ### 8.3 T6c and T7: style per document, built-in templates
 (Asked for on 2026-11-17; it replaces the parts of §7 it contradicts.)
@@ -486,16 +558,14 @@ Done (T6c and T7):
 ### 10.1 Templates and nets with holes
 To consider: a template whose net isn't a disk, but has holes: an outer loop and inner loops inside it, each hole's
 sides glued like the outer loop's (to sides of the same hole, of another hole, or of the outer loop). Nets with holes
-would also be what cutting can make in a project (today a cut must keep the net in one piece without holes).
+in projects, and faces with holes, come in T6b (§8.2); what's left here is drawing inner loops in templates.
 
 What it would touch, as far as known now:
 - Template: several loops (one outer, counter-clockwise; holes clockwise), drawn one after another; the rules for
   loops and folds (`rules.py`) apply to every loop, and no loop may touch another; faces may then have holes too, or
   folds must cut them so that every face stays a simple polygon (to decide).
 - Validation: counterparts may be on different loops; directions are counted along each loop's own way round.
-- The engine: the DCEL already allows several perimeter cycles, but a finished net is checked to have exactly one
-  (`validate_net`), and cutting, rearranging and the overlap check assume one; the "halves" after a cut may not be two
-  then. The bounding rectangle and the area are fine as they are (holes don't count in the area).
+- The engine: nets with holes come in T6b; a template's starting net with holes is what's new.
 - The UI: drawing a second loop, and which loop a click is about.
 
 ### 10.2 Coarser hatching for large faces
