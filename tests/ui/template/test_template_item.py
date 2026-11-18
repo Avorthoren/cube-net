@@ -102,3 +102,16 @@ def test_a_dragged_vertex_is_shown_where_it_is() -> None:
     assert item.template().position(2) == Vec(13, 13)
     item.set_template(coloured_square())
     assert item.template().position(2) == Vec(12, 12)
+
+
+def test_a_turned_hatch_is_drawn_turned(qtbot: QtBot) -> None:
+    """A face whose hatch continues another piece's: turned by 180 degrees about the square's middle (11, 11), its
+    picture is the plain one turned round (the middle is the image's (150, 150))."""
+    from cube_net.core.geometry import Rigid90
+
+    plain = render(TemplateItem(coloured_square()))
+    turned = render(TemplateItem(coloured_square().with_hatches([Rigid90(2, Vec(22, 22))])))
+    points = [(x, y) for x in range(55, 245, 4) for y in range(55, 245, 4)]
+    differ = sum(turned.pixelColor(x, y) != plain.pixelColor(299 - x, 299 - y) for x, y in points)
+    assert differ <= len(points) * 0.03
+    assert sum(turned.pixelColor(x, y) != plain.pixelColor(x, y) for x, y in points) > len(points) * 0.2

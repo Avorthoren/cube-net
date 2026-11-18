@@ -14,7 +14,7 @@ face touching itself (along a side or at a point) other than where it's glued.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import pairwise
 
@@ -68,9 +68,14 @@ class _Seam:
     to_other: Rigid90
 
 
-def glue_faces(template: Template, basis: Callable[[Sequence[int]], int] | None = None) -> Gluing:
-    """Each colour's face glued from its pieces. `basis` picks a colour's basis piece from its pieces (template face
-    indices, in order); the first one if not given."""
+def basis_piece(template: Template, pieces: Sequence[int]) -> int:
+    """Of a colour's pieces (template face indices), the basis: the one given its colour least recently (the smallest
+    number; faces coloured before the counter was kept count as earlier, in the template's order)."""
+    return min(pieces, key=lambda i: (template.faces[i].number or 0, i))
+
+
+def glue_faces(template: Template) -> Gluing:
+    """Each colour's face glued from its pieces, in its basis piece's frame."""
     by_color: dict[str, list[int]] = {}
     for i, face in enumerate(template.faces):
         assert face.color is not None  # validation's check 1 passed
@@ -78,7 +83,7 @@ def glue_faces(template: Template, basis: Callable[[Sequence[int]], int] | None 
     seams = _seams(template)
     faces, apart, broken = [], [], []
     for color, pieces in by_color.items():
-        first = pieces[0] if basis is None else basis(pieces)
+        first = basis_piece(template, pieces)
         frames = _frames(first, [s for s in seams if s.piece in pieces])
         if len(frames) != len(pieces):
             apart.append(color)
@@ -192,3 +197,13 @@ def _simple(loops: list[tuple[Corner, ...]]) -> bool:
                 continue  # neighbours along a loop (each point starts one side only: they're the only ones)
             return False
     return True
+
+
+def aligned_hatches(template: Template) -> Template:
+    """The template with every piece's hatch continuing its basis piece's: each piece hatched in its face's frame (the
+    basis piece's, tied to the template's grid). It must be valid (`validate` finds no problem)."""
+    hatches = [Rigid90.identity()] * len(template.faces)
+    for face in glue_faces(template).faces:
+        for piece, frame in zip(face.pieces, face.frames, strict=True):
+            hatches[piece] = frame
+    return template.with_hatches(hatches)

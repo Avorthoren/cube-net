@@ -5,7 +5,7 @@ from fractions import Fraction as F
 
 import pytest
 
-from cube_net.core.geometry import Vec
+from cube_net.core.geometry import Rigid90, Vec
 from cube_net.core.template import Fold, Label, Template, TemplateFace, template_area
 
 # The pillow's template (docs/template_plan.md, §2.1), counter-clockwise: ids 0..5.
@@ -73,7 +73,7 @@ class TestFolds:
         template = loop(PILLOW).with_fold(1, 4).with_face_color(0, "#AA0000").with_face_color(1, "#00AA00")
         # Going from 1 to 4, the left is face 1 (4, 5, 0, 1).
         merged = template.without_fold(Fold(1, 4))
-        assert merged.faces == (TemplateFace((4, 5, 0, 1, 2, 3), "#00AA00"),)
+        assert merged.faces == (TemplateFace((4, 5, 0, 1, 2, 3), "#00AA00", 2),)  # its number too
         upwards = loop(PILLOW).with_fold(4, 1).with_face_color(0, "#AA0000").with_face_color(1, "#00AA00")
         # Going down from 4 to 1, the left is the other half: face 1 again, (1, 2, 3, 4), now that one.
         assert upwards.faces[1].corners == (1, 2, 3, 4)
@@ -105,3 +105,26 @@ class TestLabels:
         assert template.first_free_index("P") == 2
         assert template.first_free_index("Q") == 1
         assert template.with_label(0, None).vertex(0).label is None
+
+
+class TestColourNumbers:
+    """Every colour given numbers the face by the counter (docs/template_plan.md, §8.2): the basis of a face in
+    pieces is the piece coloured least recently."""
+
+    TURNED = Rigid90(2, Vec(4, 2))
+
+    def test_the_counter_numbers_faces_and_goes_on(self) -> None:
+        template = loop(PILLOW).with_fold(1, 4)
+        assert template.next_number == 1 and [f.number for f in template.faces] == [None, None]
+        template = template.with_face_color(1, "#AA0000").with_face_color(0, "#AA0000").with_face_color(1, "#AA0000")
+        assert [f.number for f in template.faces] == [2, 3] and template.next_number == 4  # the same colour counts
+
+    def test_a_colour_ties_the_hatch_to_the_grid_again(self) -> None:
+        template = loop(PILLOW).with_face_color(0, "#AA0000")
+        turned = template.with_hatches([self.TURNED])
+        assert turned.faces[0].hatch == self.TURNED
+        assert turned.with_face_color(0, "#AA0000").faces[0].hatch.is_identity()
+
+    def test_a_fold_keeps_the_number_and_hatch_on_both_sides(self) -> None:
+        template = loop(PILLOW).with_face_color(0, "#AA0000").with_hatches([self.TURNED]).with_fold(1, 4)
+        assert [(f.number, f.hatch) for f in template.faces] == [(1, self.TURNED)] * 2

@@ -176,3 +176,18 @@ def test_the_status_is_saved_and_shown_again(
     assert mode.status() is ValidationStatus.UNDEFINED
     mode.show(document, path, DEFAULT_STYLE)  # type: ignore[arg-type]
     assert mode.status() is ValidationStatus.VALID and not mode.is_dirty
+
+
+def test_a_passed_validate_aligns_the_hatches(qtbot: QtBot, monkeypatch: pytest.MonkeyPatch) -> None:
+    from cube_net.core.project.builtin_templates import cube_with_a_hole
+
+    told(monkeypatch)
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    mode = TemplateMode(parent, lambda *_: None)
+    mode.show(cube_with_a_hole(), None, DEFAULT_STYLE)
+    mode.validate()
+    assert mode.status() is ValidationStatus.VALID
+    assert sum(not f.hatch.is_identity() for f in mode.editor.template.faces) == 2
+    mode.editor.undo()  # the alignment: an action
+    assert mode.status() is ValidationStatus.UNDEFINED

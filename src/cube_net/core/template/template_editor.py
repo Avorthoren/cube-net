@@ -24,6 +24,7 @@ from enum import Enum
 from cube_net.core.geometry import Vec
 from cube_net.core.history import ActionKind, History
 from cube_net.core.origin import DEFAULT_ORIGIN, Origin
+from cube_net.core.template.glued_faces import aligned_hatches
 from cube_net.core.template.rules import (
     MIN_VERTICES,
     MIN_VERTICES_TO_CLOSE,
@@ -140,9 +141,16 @@ class TemplateEditor:
         self._record(ActionKind.DELETE_FOLD, self.template.without_fold(fold))
 
     def set_face_color(self, face_index: int, color: str) -> None:
+        """Give a face a colour: even the one it has (it's numbered anew, its hatch tied to the grid again)."""
         self._require_closed()
-        if self.template.faces[face_index].color != color:
-            self._record(ActionKind.SET_FACE_COLOR, self.template.with_face_color(face_index, color))
+        self._record(ActionKind.SET_FACE_COLOR, self.template.with_face_color(face_index, color))
+
+    def align_hatches(self) -> None:
+        """Every piece's hatch continuing its basis piece's (a valid template's, after Validate): one action, if it
+        changes anything."""
+        after = aligned_hatches(self.template)
+        if after != self.template:
+            self._record(ActionKind.ALIGN_HATCHES, after)
 
     def set_label(self, vertex_id: int, label: Label | None) -> TemplateRejection | None:
         """Give a vertex a label (None: take its label away). Another vertex's label can't be taken."""

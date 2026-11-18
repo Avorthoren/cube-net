@@ -439,7 +439,7 @@ RUSSIAN: dict[str, str] = {
     ),
     # File -> New.
     "Cube": "Куб",
-    "Cube with a hole": "Куб с дыркой",
+    "Cube with a hole": "Куб с отверстием",
     "Custom template": "Свой шаблон",
     "Template file (.nettemplate)": "Файл шаблона (.nettemplate)",
     "Browse...": "Обзор...",

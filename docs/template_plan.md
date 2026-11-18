@@ -493,6 +493,9 @@ must allow nets with holes, for every body (a cube's net can have holes too then
   and leaves the net). The cut ends as soon as the net falls apart into at least two pieces, and it's valid if they're
   exactly two. Cutting the purple ring in half: from its outer side down across the hole to its outer side again (two
   real pieces of cut, through the hole between them).
+- Approving glues every pair of counterpart cuts that lie on each other, not only those it reaches from the chosen
+  cut along the perimeter (reported on 2026-11-18: the torus's purple pieces glued along L-R kept N-T apart, a slit
+  with two sets of vertices, because gluing it too makes a hole).
 - Everything that assumes one perimeter cycle: validation of the net (`validate_net`), splitting, the halves,
   rearranging and the overlap check, approval, drawing, save and load. Areas and the bounding rectangle don't change
   (a hole isn't area).
@@ -529,6 +532,18 @@ Done (step 2):
   their colours (`color_square`: an image in the rich text of the message).
 - The cut between pieces of one face (the torus's T2-N2 and N1-T1) is inside that face: its colour and white. The
   cube with half of face 5 moved onto face 1 gives the cube (with flat vertices at the middles of the cut's sides).
+
+Done (step 3):
+- `TemplateFace.number` and `Template.next_number` (the counter): `with_face_color` numbers the face (even with the
+  colour it has: Set face color is always an action now) and ties its hatch to the grid again. A fold's two sides keep
+  the face's number and hatch; a merged face keeps the left one's.
+- `TemplateFace.hatch`: the template sheet -> the frame its hatch is tied to the grid in. `glued_faces.basis_piece`:
+  the smallest number (faces without one, coloured before the counter was kept, first, in the template's order).
+  `aligned_hatches` gives every piece its face's frame; a Validate that passes does it as one action ("align
+  hatches", undoable), then the template is Valid. `TemplateItem` paints a face in its hatch's frame.
+- A project's faces are in their basis pieces' frames, so its hatches match across pieces whatever the template shows.
+- Template files: a face's `"number"` and `"hatch"` (only if it has them), the template's `"next_number"`; files
+  without them read as before.
 
 ### 8.3 T6c and T7: style per document, built-in templates
 (Asked for on 2026-11-17; it replaces the parts of §7 it contradicts.)

@@ -156,11 +156,13 @@ class TemplateMode(QObject):
             return
         template = self.editor.template
         failure = validate(template)
-        self._set_status(template, ValidationStatus.VALID if failure is None else ValidationStatus.INVALID)
         if failure is None:
+            self.tool.align_hatches()  # the pieces of each face hatched alike
+            self._set_status(self.editor.template, ValidationStatus.VALID)
             self._note("template", "validate", "ok")
             tell(self._parent, "Cube Net", no_problems_text())
             return
+        self._set_status(template, ValidationStatus.INVALID)
         self._note("template", "validate", failure.problem.value, *failure.names, *failure.colors)
         if failure.problem is not ValidationProblem.INDEX_GAPS:
             tell(self._parent, "Cube Net", failure_text(failure), icon=MessageIcon.WARNING)
@@ -168,6 +170,7 @@ class TemplateMode(QObject):
         if not ask_yes_no(self._parent, failure_text(failure)):
             return
         self.tool.reindex()
+        self.tool.align_hatches()
         self._set_status(self.editor.template, ValidationStatus.VALID)  # nothing else was wrong
         self._note("template", "reindexed")
         tell(self._parent, "Cube Net", reindexed_text())

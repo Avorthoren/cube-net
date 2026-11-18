@@ -13,11 +13,12 @@ only keep the structure consistent; whether a change is allowed geometrically is
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from fractions import Fraction
 from itertools import pairwise
 
-from cube_net.core.geometry import Vec, on_segment, polygon_contains, signed_area
+from cube_net.core.geometry import Rigid90, Vec, on_segment, polygon_contains, signed_area
 
 # A label's name: 1 or 2 capital Latin letters.
 NAME_PATTERN = re.compile(r"[A-Z]{1,2}")
@@ -26,6 +27,9 @@ NAME_PATTERN = re.compile(r"[A-Z]{1,2}")
 MIN_INDEX = 1
 
 MAX_INDEX = 99
+
+# A hatch tied to the template's grid.
+UNTURNED = Rigid90.identity()
 
 
 @dataclass(frozen=True, slots=True, order=True)
@@ -71,6 +75,14 @@ class TemplateFace:
     # As "#RRGGBB"; None until it's given one (it can't be taken away then: white is a colour too).
     color: str | None = None
 
+    # The template's colour counter when the face was last given a colour (None: not since the counter was kept).
+    # Of the pieces of one colour, the one with the smallest number is the basis (docs/template_plan.md, §8.2).
+    number: int | None = None
+
+    # How its hatch lies: the template sheet -> the frame where the hatch is tied to the grid. The identity (tied to
+    # the template's grid) until a Validate makes it continue the basis piece's hatch.
+    hatch: Rigid90 = UNTURNED
+
     def has_side(self, a: int, b: int) -> bool:
         """Does the face go straight from corner `a` to corner `b` (counter-clockwise)?"""
         n = len(self.corners)
@@ -91,6 +103,9 @@ class Template:
 
     # The id the next new vertex gets (ids are never reused).
     next_id: int = 0
+
+    # The colour counter: the number the next face given a colour gets.
+    next_number: int = 1
 
     # --- queries ------------------------------------------------------------------------------------------------------
 
@@ -203,8 +218,8 @@ class Template:
         k = corners.index(start)
         corners = corners[k:] + corners[:k]  # from `start`
         m = corners.index(end)
-        right = TemplateFace((*corners[: m + 1],), face.color)  # start ... end, then back along the fold
-        left = TemplateFace((*corners[m:], corners[0]), face.color)  # end ... start, then along the fold
+        right = replace(face, corners=(*corners[: m + 1],))  # start ... end, then back along the fold
+        left = replace(face, corners=(*corners[m:], corners[0]))  # end ... start, then along the fold
         i = self.faces.index(face)
         faces = (*self.faces[:i], right, left, *self.faces[i + 1 :])
         return replace(self, folds=(*self.folds, Fold(start, end)), faces=faces)
@@ -213,16 +228,23 @@ class Template:
         """The two faces on its sides become one, in the colour of the one on its left (seen from where it starts)."""
         left = next(f for f in self.faces if f.has_side(fold.start, fold.end))
         right = next(f for f in self.faces if f.has_side(fold.end, fold.start))
-        merged = TemplateFace(_merge(left.corners, right.corners, fold), left.color)
+        merged = replace(left, corners=_merge(left.corners, right.corners, fold))
         i = min(self.faces.index(left), self.faces.index(right))
         faces = [f for f in self.faces if f is not left and f is not right]
         faces.insert(i, merged)
         return replace(self, folds=tuple(f for f in self.folds if f != fold), faces=tuple(faces))
 
     def with_face_color(self, face_index: int, color: str) -> Template:
+        """The face in `color` (even the one it has), numbered by the counter (which goes on), its hatch tied to the
+        grid again."""
         faces = list(self.faces)
-        faces[face_index] = replace(faces[face_index], color=color)
-        return replace(self, faces=tuple(faces))
+        faces[face_index] = replace(faces[face_index], color=color, number=self.next_number, hatch=Rigid90.identity())
+        return replace(self, faces=tuple(faces), next_number=self.next_number + 1)
+
+    def with_hatches(self, hatches: Sequence[Rigid90]) -> Template:
+        """Every face's hatch as given (in the faces' order)."""
+        faces = tuple(replace(f, hatch=h) for f, h in zip(self.faces, hatches, strict=True))
+        return replace(self, faces=faces)
 
     def face_at(self, p: Vec) -> int | None:
         """The index of the face `p` lies strictly inside (not on a fold or the loop), if any."""

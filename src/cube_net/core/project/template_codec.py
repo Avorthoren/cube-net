@@ -16,8 +16,18 @@ from dataclasses import dataclass
 from typing import Any
 
 from cube_net.core.body.body import COLOR_PATTERN
+from cube_net.core.geometry import Rigid90
 from cube_net.core.history import ActionKind, History, HistoryEntry
-from cube_net.core.project.codec import read_origin, read_style, read_vec, write_origin, write_style, write_vec
+from cube_net.core.project.codec import (
+    read_motion,
+    read_origin,
+    read_style,
+    read_vec,
+    write_motion,
+    write_origin,
+    write_style,
+    write_vec,
+)
 from cube_net.core.project.project import ProjectFileError
 from cube_net.core.style import Style
 from cube_net.core.template.template import Fold, Label, LoopVertex, Template, TemplateFace
@@ -123,9 +133,30 @@ def _write_template(template: Template) -> dict[str, Any]:
         ],
         "closed": template.closed,
         "folds": [[f.start, f.end] for f in template.folds],
-        "faces": [{"corners": list(f.corners), "color": f.color} for f in template.faces],
+        "faces": [_write_face(f) for f in template.faces],
         "next_id": template.next_id,
+        "next_number": template.next_number,
     }
+
+
+def _write_face(face: TemplateFace) -> dict[str, Any]:
+    """Its corners and colour; its number and hatch only if it has them (not the identity)."""
+    data: dict[str, Any] = {"corners": list(face.corners), "color": face.color}
+    if face.number is not None:
+        data["number"] = face.number
+    if not face.hatch.is_identity():
+        data["hatch"] = write_motion(face.hatch)
+    return data
+
+
+def _read_face(data: dict[str, Any]) -> TemplateFace:
+    number = data.get("number")
+    return TemplateFace(
+        tuple(_int(c) for c in data["corners"]),
+        _color(data["color"]),
+        None if number is None else _int(number),
+        read_motion(data["hatch"]) if "hatch" in data else Rigid90.identity(),
+    )
 
 
 def _read_template(data: dict[str, Any]) -> Template:
@@ -140,8 +171,9 @@ def _read_template(data: dict[str, Any]) -> Template:
         vertices,
         closed,
         tuple(Fold(_int(start), _int(end)) for start, end in data["folds"]),
-        tuple(TemplateFace(tuple(_int(c) for c in f["corners"]), _color(f["color"])) for f in data["faces"]),
+        tuple(_read_face(f) for f in data["faces"]),
         _int(data["next_id"]),
+        _int(data.get("next_number", 1)),
     )
     _check(template)
     return template
@@ -155,6 +187,8 @@ def _check(template: Template) -> None:
     labels = [v.label for v in template.vertices if v.label is not None]
     if len(set(labels)) != len(labels):
         raise ValueError("two vertices have the same label")
+    if any(f.number is not None and not 1 <= f.number < template.next_number for f in template.faces):
+        raise ValueError("a face's number isn't below the next one")
     if not template.closed:
         if template.folds or template.faces:
             raise ValueError("an open loop with folds or faces")

@@ -71,6 +71,27 @@ def test_a_template_saved_without_a_status_is_undefined(cross_template: Template
     assert decode_template(data).validation is ValidationStatus.UNDEFINED
 
 
+def test_numbers_hatches_and_the_counter(cross_template: Template) -> None:
+    from cube_net.core.geometry import Rigid90
+
+    turned = Rigid90(1, Vec(3, -2))
+    template = cross_template.with_face_color(2, "#123456")
+    template = template.with_hatches([turned if i == 2 else f.hatch for i, f in enumerate(template.faces)])
+    loaded = round_trip(TemplateDocument(TemplateSnapshot(template), History())).state.template
+    assert loaded == template
+    assert loaded.faces[2].number == template.next_number - 1 and loaded.faces[2].hatch == turned
+
+
+def test_a_template_saved_before_the_counter(cross_template: Template) -> None:
+    data = encode_template(TemplateDocument(TemplateSnapshot(cross_template), History()))
+    for face in data["templates"][0]["faces"]:
+        face.pop("number", None)
+        face.pop("hatch", None)
+    del data["templates"][0]["next_number"]
+    loaded = decode_template(data).state.template
+    assert loaded.next_number == 1 and all(f.number is None and f.hatch.is_identity() for f in loaded.faces)
+
+
 def test_a_template_saved_without_a_style_has_none(cross_template: Template) -> None:
     data = json.loads(json.dumps(encode_template(document_of(edited(cross_template)))))
     assert data.pop("style") is None
@@ -120,6 +141,8 @@ def test_it_is_plain_json(cross_template: Template) -> None:
         lambda d: d.__setitem__("style", {"edge_width": 4.0}),
         lambda d: d.__setitem__("style", "bold"),
         lambda d: d.__setitem__("validation", "maybe"),
+        lambda d: d["templates"][0]["faces"][0].__setitem__("number", 999),  # not below the counter
+        lambda d: d["templates"][0]["faces"][0].__setitem__("hatch", {"k": 1}),
     ],
 )
 def test_damaged(cross_template: Template, change: Callable[[dict[str, Any]], None]) -> None:

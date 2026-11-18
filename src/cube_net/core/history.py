@@ -41,6 +41,9 @@ class ActionKind(Enum):
     SET_FACE_COLOR = "set face color"
     SET_LABEL = "set label"
 
+    # A valid template's pieces of one face hatched as its basis piece's hatch continues (Validate).
+    ALIGN_HATCHES = "align hatches"
+
 
 @dataclass(frozen=True, slots=True)
 class HistoryEntry[State]:

@@ -200,12 +200,12 @@ class TestFinalization:
         assert all(face.color is None for face in editor.template.faces)  # none given yet
         editor.set_face_color(0, "#ABCDEF")
         assert editor.template.faces[0].color == "#ABCDEF"
-        revision = editor.history.revision
-        editor.set_face_color(0, "#ABCDEF")
-        assert editor.history.revision == revision
+        assert editor.template.faces[0].number == 1
+        editor.set_face_color(0, "#ABCDEF")  # the same colour: still an action, numbered anew
+        assert editor.template.faces[0].number == 2 and editor.history.done_count == 2 + len(PILLOW) + 1
         editor.set_face_color(0, "#FFFFFF")  # white is a colour too
         assert editor.template.faces[0].color == "#FFFFFF"
-        assert editor.undo() and editor.undo() and editor.template.faces[0].color is None
+        assert editor.undo() and editor.undo() and editor.undo() and editor.template.faces[0].color is None
 
     def test_a_fold_divides_a_face_without_a_colour_into_two(self) -> None:
         editor = drawn(PILLOW)
@@ -271,3 +271,17 @@ def test_a_refusal_shows_the_fold_it_runs_into_too() -> None:
     assert rejection is not None
     assert (Vec(11, 10), Vec(11, 12)) in rejection.segments or (Vec(11, 12), Vec(11, 10)) in rejection.segments
     assert any(Vec(11, 11) in segment for segment in rejection.segments)  # the moved vertex's sides
+
+
+class TestAlignHatches:
+    def test_one_action_and_none_if_nothing_changes(self) -> None:
+        from cube_net.core.history import ActionKind
+        from cube_net.core.project.builtin_templates import cube_with_a_hole
+
+        editor = TemplateEditor(cube_with_a_hole().state.template)
+        editor.align_hatches()
+        assert editor.history.done_count == 1 and editor.history.done_entries()[0].kind is ActionKind.ALIGN_HATCHES
+        assert sum(not f.hatch.is_identity() for f in editor.template.faces) == 2
+        editor.align_hatches()
+        assert editor.history.done_count == 1
+        assert editor.undo() and all(f.hatch.is_identity() for f in editor.template.faces)

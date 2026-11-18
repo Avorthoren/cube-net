@@ -26,9 +26,9 @@ from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import VertexLabel
 from cube_net.core.sheet import TEMPLATE_SHEET_HEIGHT, TEMPLATE_SHEET_WIDTH
-from cube_net.core.template import Template
+from cube_net.core.template import Template, TemplateFace
 from cube_net.ui import palette
-from cube_net.ui.qt_geometry import to_qpointf
+from cube_net.ui.qt_geometry import to_qpointf, to_qtransform
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.dashing import dash_length, dash_pieces
 from cube_net.ui.sheet.hatch import cells_around, chessboard_brush, hatch_brush, tiled_chessboard, tiled_hatch
@@ -155,35 +155,44 @@ class TemplateItem(QGraphicsItem):
 
     def _paint_faces(self, painter: QPainter, template: Template) -> None:
         for face in template.faces:
-            polygon = template.face_polygon(face)
-            outline = QPainterPath()
-            outline.addPolygon(QPolygonF([to_qpointf(p) for p in polygon]))
-            outline.closeSubpath()
-            painter.fillPath(outline, palette.WHITE)
-            if face.color is None:  # no colour yet: a chessboard
-                brush = chessboard_brush(palette.UNCOLORED_FACE, painter.worldTransform())
-            elif face.color != palette.WHITE.name().upper():  # white on white: nothing to see
-                brush = hatch_brush(QColor(face.color), painter.worldTransform())
-            else:
-                continue
-            if brush is not None:
-                painter.fillPath(outline, brush)
-                continue
-            # Zoomed in so far that a rectangle is too large for a brush: its paths (few of them on the screen).
-            painter.save()
-            painter.setClipPath(outline, Qt.ClipOperation.IntersectClip)
-            cells = cells_around(polygon)
-            if face.color is None:
-                board = self._boards.get(cells)
-                if board is None:
-                    board = self._boards[cells] = tiled_chessboard(*cells)
-                painter.fillPath(board, palette.UNCOLORED_FACE)
-            else:
-                hatch = self._hatches.get(cells)
-                if hatch is None:
-                    hatch = self._hatches[cells] = tiled_hatch(*cells)
-                painter.fillPath(hatch, QColor(face.color))
-            painter.restore()
+            turned = not face.hatch.is_identity()
+            if turned:  # drawn in the frame its hatch is tied to the grid in (its basis piece's face frame)
+                painter.save()
+                painter.setTransform(to_qtransform(face.hatch.inverse()), combine=True)
+            self._paint_face(painter, face, [face.hatch.apply(p) for p in template.face_polygon(face)])
+            if turned:
+                painter.restore()
+
+    def _paint_face(self, painter: QPainter, face: TemplateFace, polygon: list[Vec]) -> None:
+        """A face, its corners given in the frame its hatch is tied to the grid in (the painter's)."""
+        outline = QPainterPath()
+        outline.addPolygon(QPolygonF([to_qpointf(p) for p in polygon]))
+        outline.closeSubpath()
+        painter.fillPath(outline, palette.WHITE)
+        if face.color is None:  # no colour yet: a chessboard
+            brush = chessboard_brush(palette.UNCOLORED_FACE, painter.worldTransform())
+        elif face.color != palette.WHITE.name().upper():  # white on white: nothing to see
+            brush = hatch_brush(QColor(face.color), painter.worldTransform())
+        else:
+            return
+        if brush is not None:
+            painter.fillPath(outline, brush)
+            return
+        # Zoomed in so far that a rectangle is too large for a brush: its paths (few of them on the screen).
+        painter.save()
+        painter.setClipPath(outline, Qt.ClipOperation.IntersectClip)
+        cells = cells_around(polygon)
+        if face.color is None:
+            board = self._boards.get(cells)
+            if board is None:
+                board = self._boards[cells] = tiled_chessboard(*cells)
+            painter.fillPath(board, palette.UNCOLORED_FACE)
+        else:
+            hatch = self._hatches.get(cells)
+            if hatch is None:
+                hatch = self._hatches[cells] = tiled_hatch(*cells)
+            painter.fillPath(hatch, QColor(face.color))
+        painter.restore()
 
     @staticmethod
     def _line(

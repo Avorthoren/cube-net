@@ -118,11 +118,11 @@ def read_style(data: object) -> Style | None:
     return Style(**{field.name: data[stored_name(field.name)] for field in fields(Style)})
 
 
-def _write_motion(motion: Rigid90) -> dict[str, Any]:
+def write_motion(motion: Rigid90) -> dict[str, Any]:
     return {"k": motion.k, "t": write_vec(motion.t)}
 
 
-def _read_motion(data: dict[str, Any]) -> Rigid90:
+def read_motion(data: dict[str, Any]) -> Rigid90:
     return Rigid90(data["k"], read_vec(data["t"]))
 
 
@@ -151,7 +151,7 @@ def _read_body(data: object) -> Body:
     start = [
         StartPiece(
             s["face"],
-            _read_motion(s["placement"]),
+            read_motion(s["placement"]),
             None if "corners" not in s else tuple(read_vec(c) for c in s["corners"]),
         )
         for s in data["start"]
@@ -178,7 +178,7 @@ def _read_loop(data: dict[str, Any]) -> tuple[list[Vec], list[str]]:
 
 
 def _write_start_piece(piece: StartPiece) -> dict[str, Any]:
-    data: dict[str, Any] = {"face": piece.face, "placement": _write_motion(piece.placement)}
+    data: dict[str, Any] = {"face": piece.face, "placement": write_motion(piece.placement)}
     if piece.corners is not None:  # a piece of the face
         data["corners"] = [write_vec(c) for c in piece.corners]
     return data
@@ -217,8 +217,7 @@ def _write_net(net: Net) -> dict[str, Any]:
             for he in net.half_edges
         ],
         "regions": [
-            {"id": r.id, "face": r.face, "placement": _write_motion(r.placement), "edge": r.edge.id}
-            for r in net.regions
+            {"id": r.id, "face": r.face, "placement": write_motion(r.placement), "edge": r.edge.id} for r in net.regions
         ],
     }
 
@@ -230,7 +229,7 @@ class _LoadedNet:
         self.vertices = {
             v["id"]: NetVertex(v["id"], read_vec(v["at"]), _read_point(body, v["point"])) for v in data["vertices"]
         }
-        self.regions = {r["id"]: Region(r["id"], r["face"], _read_motion(r["placement"])) for r in data["regions"]}
+        self.regions = {r["id"]: Region(r["id"], r["face"], read_motion(r["placement"])) for r in data["regions"]}
         self.edges = {
             e["id"]: HalfEdge(
                 e["id"],
@@ -331,7 +330,7 @@ class _Encoder:
                 "net": self._net(rearranged.net),
                 "kept": rearranged.kept.id,
                 "moved": rearranged.moved.id,
-                "motion": _write_motion(rearranged.motion),
+                "motion": write_motion(rearranged.motion),
                 "overlapping": sorted(he.id for he in rearranged.overlapping),
             }
         )
@@ -403,7 +402,7 @@ class _Decoder:
             loaded.net,
             loaded.edges[data["kept"]],
             loaded.edges[data["moved"]],
-            _read_motion(data["motion"]),
+            read_motion(data["motion"]),
             frozenset(loaded.edges[i] for i in data["overlapping"]),
         )
 

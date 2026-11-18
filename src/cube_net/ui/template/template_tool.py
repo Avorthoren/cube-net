@@ -334,6 +334,11 @@ class TemplateTool(QObject):
         self.refresh()
         self.changed.emit()
 
+    def align_hatches(self) -> None:
+        self._editor.align_hatches()
+        self.refresh()
+        self.changed.emit()
+
     def restyle(self) -> None:
         self.item.restyle()
 
