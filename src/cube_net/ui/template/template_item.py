@@ -31,7 +31,7 @@ from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.dashing import dash_length, dash_pieces
-from cube_net.ui.sheet.hatch import cells_around, tiled_chessboard, tiled_hatch
+from cube_net.ui.sheet.hatch import cells_around, chessboard_brush, hatch_brush, tiled_chessboard, tiled_hatch
 from cube_net.ui.sheet.net_painting import UP_RIGHT, paint_labels
 from cube_net.ui.template.corners import middle_angle, owned_arcs, shared
 
@@ -159,16 +159,26 @@ class TemplateItem(QGraphicsItem):
             outline = QPainterPath()
             outline.addPolygon(QPolygonF([to_qpointf(p) for p in polygon]))
             outline.closeSubpath()
+            painter.fillPath(outline, palette.WHITE)
+            if face.color is None:  # no colour yet: a chessboard
+                brush = chessboard_brush(palette.UNCOLORED_FACE, painter.worldTransform())
+            elif face.color != palette.WHITE.name().upper():  # white on white: nothing to see
+                brush = hatch_brush(QColor(face.color), painter.worldTransform())
+            else:
+                continue
+            if brush is not None:
+                painter.fillPath(outline, brush)
+                continue
+            # Zoomed in so far that a rectangle is too large for a brush: its paths (few of them on the screen).
             painter.save()
             painter.setClipPath(outline, Qt.ClipOperation.IntersectClip)
-            painter.fillPath(outline, palette.WHITE)
             cells = cells_around(polygon)
-            if face.color is None:  # no colour yet: a chessboard
+            if face.color is None:
                 board = self._boards.get(cells)
                 if board is None:
                     board = self._boards[cells] = tiled_chessboard(*cells)
                 painter.fillPath(board, palette.UNCOLORED_FACE)
-            elif face.color != palette.WHITE.name().upper():  # white on white: nothing to see
+            else:
                 hatch = self._hatches.get(cells)
                 if hatch is None:
                     hatch = self._hatches[cells] = tiled_hatch(*cells)

@@ -31,7 +31,7 @@ from cube_net.core.sheet import SHEET_MARGIN
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf, to_qtransform
 from cube_net.ui.sheet import net_style
-from cube_net.ui.sheet.hatch import cells_around, tiled_hatch
+from cube_net.ui.sheet.hatch import cells_around, hatch_brush, tiled_hatch
 from cube_net.ui.sheet.net_painting import (
     UP_RIGHT,
     DashedSegment,
@@ -212,8 +212,14 @@ class NetItem(QGraphicsItem):
             painter.save()
             painter.setClipPath(outline, Qt.ClipOperation.IntersectClip)
             painter.fillPath(outline, palette.WHITE)
-            painter.setTransform(to_qtransform(region.placement), combine=True)
-            painter.fillPath(self._hatch(region.face), palette.face_color(self._net.body, region.face))
+            painter.setTransform(to_qtransform(region.placement), combine=True)  # the face's own frame
+            color = palette.face_color(self._net.body, region.face)
+            brush = hatch_brush(color, painter.worldTransform())
+            if brush is not None:
+                left, bottom, right, top = cells_around(self._net.body.face(region.face).corners)
+                painter.fillRect(QRectF(left, bottom, right - left, top - bottom), brush)
+            else:  # zoomed in so far that a rectangle is too large for a brush: the paths
+                painter.fillPath(self._hatch(region.face), color)
             painter.restore()
 
     def _hatch(self, face: Face) -> QPainterPath:

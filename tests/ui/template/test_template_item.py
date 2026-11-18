@@ -3,6 +3,7 @@
 
 from dataclasses import replace
 
+import pytest
 from PyQt6.QtGui import QColor, QImage, QPainter, QTransform
 from pytestqt.qtbot import QtBot
 
@@ -79,6 +80,15 @@ def test_fold_dashes_are_per_unit(qtbot: QtBot) -> None:
 
     assert on_the_fold(0.25) and on_the_fold(1.25)
     assert not on_the_fold(0.75) and not on_the_fold(1.75)
+
+
+def test_zoomed_in_very_far_the_paths_are_painted(qtbot: QtBot, monkeypatch: pytest.MonkeyPatch) -> None:
+    from cube_net.ui.sheet import hatch
+
+    monkeypatch.setattr(hatch, "MAX_TILE_PX", 0)  # no rectangle fits into a brush's image
+    image = render(TemplateItem(coloured_square()))
+    seen = {image.pixelColor(x, y).name() for x in range(110, 190, 3) for y in range(110, 190, 3)}
+    assert {"#0000ff", "#ffffff"} <= seen
 
 
 def test_outside_the_loop_nothing(qtbot: QtBot) -> None:

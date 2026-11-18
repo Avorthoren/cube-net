@@ -5,10 +5,11 @@ from fractions import Fraction
 
 import pytest
 from PyQt6.QtCore import QRectF
+from PyQt6.QtGui import QImage
 
 from cube_net.core.geometry import Vec
 from cube_net.ui.sheet import net_style
-from cube_net.ui.sheet.hatch import cells_around, tiled_hatch
+from cube_net.ui.sheet.hatch import cells_around, tiled_chessboard, tiled_hatch
 
 
 def test_the_hatch_is_tiled_over_whole_units() -> None:
@@ -63,3 +64,60 @@ def test_the_cells_around_points() -> None:
     assert cells_around([Vec(0, 0), Vec(1, 0), Vec(1, 1)]) == (0, 0, 1, 1)  # a cube's face
     assert cells_around([Vec(44, 50), Vec(Fraction(97, 2), 53)]) == (44, 50, 49, 53)  # a template's, on its grid
     assert cells_around([Vec(Fraction(-1, 3), 2)]) == (-1, 2, 0, 2)
+
+
+class TestBrushes:
+    """A face is painted with a brush repeating one rectangle of the pattern: it must look like the paths."""
+
+    def render(self, kind: str, brush: bool) -> QImage:
+        from PyQt6.QtGui import QColor, QPainter, QPainterPath, QTransform
+
+        from cube_net.ui.sheet import hatch
+
+        image = QImage(400, 300, QImage.Format.Format_ARGB32)
+        image.fill(QColor("#FFFFFF"))
+        painter = QPainter(image)
+        painter.setWorldTransform(QTransform(100, 0, 0, -100, -950, 1250))  # 100 px per unit, y up
+        colour = QColor("#0000FF")
+        if brush:
+            make = hatch.hatch_brush if kind == "hatch" else hatch.chessboard_brush
+            found = make(colour, painter.worldTransform())
+            assert found is not None
+            area = QPainterPath()
+            area.addRect(QRectF(10, 10, 3, 2))
+            painter.fillPath(area, found)
+        else:
+            painter.fillPath((tiled_hatch if kind == "hatch" else tiled_chessboard)(10, 10, 13, 12), colour)
+        painter.end()
+        return image
+
+    @pytest.mark.parametrize("kind", ["hatch", "chessboard"])
+    def test_it_looks_like_the_paths(self, kind: str) -> None:
+        net_style.set_sizes(net_style.EDGE_WIDTH_PX, net_style.VERTEX_RADIUS_PX, 3.0, 2.0, 1.0, 1.0)
+        a, b = self.render(kind, brush=True), self.render(kind, brush=False)
+        points = [(x, y) for x in range(60, 340, 7) for y in range(60, 240, 7)]
+        different = [
+            p
+            for p in points
+            if max(abs(c1 - c2) for c1, c2 in zip(a.pixelColor(*p).getRgb(), b.pixelColor(*p).getRgb(), strict=True))
+            > 60
+        ]
+        assert len(different) < len(points) * 0.03  # only along the edges, where smoothing differs
+
+    def test_none_for_rectangles_too_large(self) -> None:
+        from PyQt6.QtGui import QColor, QTransform
+
+        from cube_net.ui.sheet.hatch import MAX_TILE_PX, hatch_brush
+
+        net_style.set_sizes(net_style.EDGE_WIDTH_PX, net_style.VERTEX_RADIUS_PX, 1.0, 1.0, 1.0, 1.0)
+        assert hatch_brush(QColor("#0000FF"), QTransform.fromScale(MAX_TILE_PX, MAX_TILE_PX)) is not None
+        assert hatch_brush(QColor("#0000FF"), QTransform.fromScale(MAX_TILE_PX + 10, MAX_TILE_PX + 10)) is None
+
+    def test_made_once_for_a_zoom(self) -> None:
+        from PyQt6.QtGui import QColor, QTransform
+
+        from cube_net.ui.sheet.hatch import hatch_brush
+
+        first = hatch_brush(QColor("#0000FF"), QTransform.fromScale(40, 40))
+        assert first is hatch_brush(QColor("#0000FF"), QTransform.fromScale(40, 40))
+        assert first is not hatch_brush(QColor("#0000FF"), QTransform.fromScale(80, 80))
