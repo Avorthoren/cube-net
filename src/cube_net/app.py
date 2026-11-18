@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
             window.show()
             QTimer.singleShot(SMOKE_TEST_MS, app.quit)
             return app.exec()
-    window = MainWindow(appimage=running_appimage())
+    window = MainWindow(appimage=running_appimage(), empty=True)  # nothing open until the last project is reopened
     window.show()
     window.offer_menu_entry()  # an AppImage asks once; later it only keeps the entry up to date
     # A file asked for later (macOS sends double-clicked ones so, even at launch) replaces what's shown then.
@@ -60,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     if project is not None:
         window.open_project_at_start(project)
     else:
-        window.reopen_last_project()
+        window.reopen_last_project()  # or File -> New's window, the first time
     window.show_help_at_first_start()  # over the project
     window.check_for_updates_at_start()  # in the background; it says something only if there's a newer version
     return app.exec()

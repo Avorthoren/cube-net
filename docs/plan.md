@@ -427,10 +427,12 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
   a bright lime such as #39D353 and tune it in M4 by looking at it next to face 3.
 
 ### 6.6 Startup and files
-- On start, reopen the project the user worked on last, kept in `QSettings` (saving or opening a project sets it):
-  - nothing there: start a new untitled project with the default net;
-  - loading fails: show why, and offer a new project or Open…. It's forgotten then, so that it isn't asked about at
-    every start.
+- The window starts with nothing open (`MainWindow(empty=True)`, `show_nothing`): the grey `EmptyArea` instead of the
+  sheet, the instruments and Settings -> Style off, nothing to save or undo. Then it reopens the project the user worked
+  on last, kept in `QSettings` (saving or opening a project sets it):
+  - nothing there (the first start): File -> New's window; given up, nothing stays open;
+  - loading fails: show why (over the grey area), and offer a new project (File -> New's window) or Open…. It's
+    forgotten then, so that it isn't asked about at every start.
 - New/Open/Quit when there are unsaved changes: ask "Save changes?" with Save / Don't save / Cancel. A project has
   unsaved changes when the history's revision differs from the one it was saved at. Every action, undo and redo changes
   it: the history is saved too, so an undo back to the saved state still isn't what's in the file. Closing the window
@@ -462,8 +464,8 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
   the current state (`MainWindow._record_state`), so the file alone is enough to reproduce what follows. Stopping
   writes `stop turned off by the user` and closes the file; starting again starts a new file.
 - **The state snapshot.** `state snapshot <base64>` holds the whole project, unsaved work included: the bytes of a project
-  file. It's written whenever recording starts and whenever another project comes along, except at launch with a project
-  about to be reopened: then the log's first snapshot is the reopened project (or, if that fails, the new one).
+  file. It's written whenever recording starts and whenever another project comes along; with nothing open (at launch)
+  there's none, so the log's first snapshot is the reopened project (or the one started instead).
   `python -m cube_net.ui.session.snapshots <log>` turns snapshots back into `.cubenet` files next to the log, ready for
   File → Open. The other `state …` lines are what a project doesn't hold (labels setting, window size, bounds, ruler,
   view), plus a short summary for a person to read.

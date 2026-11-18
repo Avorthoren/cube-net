@@ -9,9 +9,11 @@ from PyQt6.QtCore import QPoint, QRect, QSettings, Qt
 from PyQt6.QtWidgets import QToolBar, QWidget
 from pytestqt.qtbot import QtBot
 
+from cube_net.core.body import CUBE
 from cube_net.core.geometry import Vec
 from cube_net.core.project import project_from_bytes
 from cube_net.ui.app_settings import AppSettings
+from cube_net.ui.dialogs.new_project_window import NewProjectChoice, Start, builtin_project
 from cube_net.ui.main_window import (
     APP_TITLE,
     NO_COORDINATES,
@@ -2241,12 +2243,55 @@ class TestUnsavedChanges:
         window.stop_recording("test over")
 
 
+class TestNothingOpen:
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path, empty=True)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def test_the_grey_area_and_nothing_that_works_on_a_project(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert window.nothing_open and window.stack.currentWidget() is window.empty_area
+        assert window.windowTitle() == APP_TITLE and not window.is_dirty and window.save_state.text() == ""
+        for action in (window.save_action, window.save_as_action, window.undo_action, window.redo_action):
+            assert not action.isEnabled()
+        assert not window.approve_action.isEnabled() and not window.validate_action.isEnabled()
+        for action in (window.new_action, window.new_template_action, window.open_action, window.quit_action):
+            assert action.isEnabled()
+        assert not window.ruler_action.isVisible() and not window.bounding.action.isVisible()
+        assert not window.net_area.action.isVisible()
+        assert not window.settings_panel.style_tab.isEnabled()
+
+    def test_a_project_ends_it(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.new_action.trigger()  # the Cube
+        assert not window.nothing_open and window.stack.currentWidget() is window.sheet_view
+        assert window.windowTitle().startswith("[*]Untitled")
+        assert window.ruler_action.isVisible() and window.bounding.action.isVisible()
+        assert window.settings_panel.style_tab.isEnabled() and window.save_as_action.isEnabled()
+
+    def test_a_template_ends_it(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.new_template_action.trigger()
+        assert not window.nothing_open and window.in_template_mode
+        assert window.net_area.action.isVisible() and window.settings_panel.style_tab.isEnabled()
+
+    def test_closing_asks_nothing(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        asked: list[str] = []
+        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", lambda _p, name: asked.append(name))
+        window = self.make(qtbot, tmp_path)
+        window.close()
+        assert asked == [] and not window.isVisible()
+
+
 class TestReopeningAtStart:
     def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
         """A window as after a restart: the settings are in the same place, the project is the new one for now."""
         settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
         settings.record_session = record
-        window = MainWindow(settings=settings, session_dir=tmp_path)
+        window = MainWindow(settings=settings, session_dir=tmp_path, empty=True)  # as the application starts
         qtbot.addWidget(window)
         window.show()
         qtbot.waitExposed(window)
@@ -2278,14 +2323,33 @@ class TestReopeningAtStart:
         monkeypatch.setattr("cube_net.ui.main_window.ask_after_load_failed", ask)
         return told
 
-    def test_the_first_time_a_new_project(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_the_first_time_file_new_s_window(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         told = self.answers(monkeypatch)
+        shown: list[bool] = []
+
+        def choose(window: MainWindow, *_: object) -> NewProjectChoice:
+            shown.append(window.nothing_open)  # over the grey area, not a project
+            return NewProjectChoice(Start.CUBE_WITH_A_HOLE, None, builtin_project(Start.CUBE_WITH_A_HOLE))
+
+        monkeypatch.setattr("cube_net.ui.main_window.choose_new_project", choose)
         window = self.make(qtbot, tmp_path)
         window.reopen_last_project()
-        assert told == []
-        assert window.editor.state.value == "default"
+        assert told == [] and shown == [True]
+        assert not window.nothing_open and window.net.body is not CUBE
         assert window.project_path is None
         assert not window.is_dirty
+
+    def test_the_first_time_given_up_nothing_is_open(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("cube_net.ui.main_window.choose_new_project", lambda *_: None)
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        assert window.nothing_open
+        window.new_action.trigger()  # still there
+        assert window.nothing_open
 
     def test_back_to_what_was_saved(self, qtbot: QtBot, tmp_path: Path) -> None:
         path = self.worked_on(qtbot, tmp_path)
@@ -2301,7 +2365,7 @@ class TestReopeningAtStart:
     def test_a_window_alone_opens_nothing(self, qtbot: QtBot, tmp_path: Path) -> None:
         self.worked_on(qtbot, tmp_path)
         window = self.make(qtbot, tmp_path)
-        assert window.editor.state.value == "default"
+        assert window.nothing_open
 
     def test_the_last_one_saved_wins(self, qtbot: QtBot, tmp_path: Path) -> None:
         self.worked_on(qtbot, tmp_path, "a.cubenet")
@@ -2356,9 +2420,27 @@ class TestReopeningAtStart:
         window = self.make(qtbot, tmp_path)
         window.reopen_last_project()
         assert len(told) == 1 and "cube.cubenet" in told[0]
-        assert window.editor.state.value == "default"
-        assert window.project_path is None
+        assert window.editor.state.value == "default"  # the Cube, chosen in File -> New's window
+        assert not window.nothing_open and window.project_path is None
         assert not window.is_dirty
+
+    def test_it_is_gone_and_no_new_project_is_chosen(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.ui.load_failed_dialog import AfterLoadFailed
+
+        self.worked_on(qtbot, tmp_path).unlink()
+        shown: list[bool] = []
+
+        def ask(window: MainWindow, _message: str) -> AfterLoadFailed:
+            shown.append(window.nothing_open)  # no net behind the message
+            return AfterLoadFailed.NEW_PROJECT
+
+        monkeypatch.setattr("cube_net.ui.main_window.ask_after_load_failed", ask)
+        monkeypatch.setattr("cube_net.ui.main_window.choose_new_project", lambda *_: None)
+        window = self.make(qtbot, tmp_path)
+        window.reopen_last_project()
+        assert shown == [True] and window.nothing_open
 
     def test_it_is_damaged_the_user_is_told_why(
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -2814,7 +2896,7 @@ class TestSnapshotsAtLaunch:
     def make(self, qtbot: QtBot, tmp_path: Path, record: bool = True) -> MainWindow:
         settings = AppSettings(QSettings(str(tmp_path / "s.ini"), QSettings.Format.IniFormat))
         settings.record_session = record
-        window = MainWindow(settings=settings, session_dir=tmp_path)
+        window = MainWindow(settings=settings, session_dir=tmp_path, empty=True)  # as the application starts
         qtbot.addWidget(window)
         window.show()
         qtbot.waitExposed(window)
@@ -2858,8 +2940,11 @@ class TestSnapshotsAtLaunch:
         window = self.make(qtbot, tmp_path)
         assert window.recorder is not None
         lines = session_lines(window.recorder.log.path)
-        assert "state project untitled" in lines
-        assert "state net default" in lines
+        assert "state nothing open" in lines and "state language en" in lines
+        assert not any(line.startswith("state net") for line in lines)  # there's no project yet
+        window.reopen_last_project()
+        lines = session_lines(window.recorder.log.path)
+        assert "state net default" in lines[lines.index("state nothing open") :]
         window.stop_recording("test over")
 
     def test_reopening_failed_one_of_the_new_project(
@@ -2899,6 +2984,8 @@ class TestSnapshotsAtLaunch:
         self.saved_project(qtbot, tmp_path)
         window = self.make(qtbot, tmp_path, record=False)
         window.logging_action.trigger()
+        assert self.snapshots(window) == []  # nothing open yet
+        window.reopen_last_project()
         assert len(self.snapshots(window)) == 1
         window.stop_recording("test over")
 

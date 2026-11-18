@@ -39,8 +39,10 @@ a dot in the close button, as usual there), and on the right of the status bar "
 CTRL+S always shows it did something, even with nothing to save. An undo is a change too: the file has the history.
 
 When user starts the application, it should attempt to load last project user worked on. If that fails - notify user
-about that and suggest creating a new project. If there are no saved projects user worked on - immediately start a new
-project (so that's what we'll get the first time we launch the application).
+about that and suggest creating a new project. If there are no saved projects user worked on - show the window of
+"File -> New" (Cube, Cube with a hole or Custom template), so that's what we'll get the first time we launch the
+application. While no project (or template) is open - at start, behind that window or the message, or when the user
+gave up starting one - a gray filler is shown instead of the working sheet.
 
 New project should start with default cube net which is described above (the "cross").
 Which means, every cube net user will create in the application will be achieved from this default cube net by applying

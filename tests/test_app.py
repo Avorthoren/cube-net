@@ -50,7 +50,9 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
             return 7
 
     class FakeWindow:
-        def __init__(self, settings: object = None, session_dir: object = None, appimage: object = None) -> None:
+        def __init__(
+            self, settings: object = None, session_dir: object = None, appimage: object = None, empty: bool = False
+        ) -> None:
             done.append("window" + (" with its own settings" if settings is not None else ""))
 
         def show(self) -> None:

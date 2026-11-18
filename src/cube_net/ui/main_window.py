@@ -51,7 +51,8 @@ from cube_net.ui import palette
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.desktop_integration import AppImage, DesktopEntry, data_home
 from cube_net.ui.dialogs.message_window import MessageIcon, tell
-from cube_net.ui.dialogs.new_project_window import Start, builtin_project, choose_new_project
+from cube_net.ui.dialogs.new_project_window import NewProjectChoice, Start, builtin_project, choose_new_project
+from cube_net.ui.empty_area import EmptyArea
 from cube_net.ui.help.about_dialog import AboutDialog
 from cube_net.ui.help.help_window import HelpWindow
 from cube_net.ui.i18n import TRANSLATIONS, Language, bind, tr
@@ -173,10 +174,12 @@ class MainWindow(QMainWindow):
         session_dir: Path | None = None,
         appimage: AppImage | None = None,
         desktop_entry: DesktopEntry | None = None,
+        empty: bool = False,
     ) -> None:
         """`session_dir`: where session recordings go (default: the app data folder). `appimage`: the AppImage the
         app runs from, if it does (Linux), and `desktop_entry` where its applications menu's entry goes (default: the
-        user's data folder)."""
+        user's data folder). `empty`: start with nothing open (as the application does, until it reopens the last
+        project or one is started), not with a new project of the cube."""
         super().__init__(parent)
         self.settings = AppSettings() if settings is None else settings
         self.appimage = appimage
@@ -235,6 +238,9 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget(self)
         self.stack.addWidget(self.sheet_view)
         self.stack.addWidget(self.template_mode.view)
+        # Nothing open: no sheet, just the grey around it (`nothing_open`).
+        self.empty_area = EmptyArea(self)
+        self.stack.addWidget(self.empty_area)
         self.setCentralWidget(self.stack)
         self.sheet_view.setFocus()  # it wants to know about SHIFT even before the first click
 
@@ -284,6 +290,8 @@ class MainWindow(QMainWindow):
         self._resize_to_screen()
 
         self._session_dir = session_dir
+        if empty:
+            self.show_nothing()
         if self.settings.record_session:
             self.start_recording(STARTED_AT_LAUNCH)
 
@@ -301,10 +309,9 @@ class MainWindow(QMainWindow):
         # If the window goes away before the app quits, its recording ends with it (only `app` and `recorder` are
         # captured: the window itself is already gone when this runs).
         self.destroyed.connect(lambda: _end_recording(app, recorder))
-        # At launch, with a project about to be reopened, the new one the window has for now isn't worth a snapshot:
-        # `reopen_last_project` takes care of that.
-        reopening = reason == STARTED_AT_LAUNCH and self.settings.last_project is not None
-        self._record_state(recorder, snapshot=not reopening)
+        # The application starts with nothing open (no snapshot then): the project reopened, or the one started in
+        # File -> New's window, gets one.
+        self._record_state(recorder)
         self.statusBar().showMessage(tr("Recording session to {path}", path=recorder.log.path), 15000)
         self._update_logging_action()
 
@@ -320,6 +327,13 @@ class MainWindow(QMainWindow):
     def _record_state(self, recorder: SessionRecorder, snapshot: bool = True) -> None:
         """Everything needed to reproduce the session from this point on: the whole project in its snapshot, and what
         isn't part of a project. The rest is there to be read by a person."""
+        if self.nothing_open:
+            recorder.note("state", "nothing open")
+            recorder.note("state", "coordinates", "on" if self.settings.show_vertex_coordinates else "off")
+            recorder.note("state", "language", self.settings.language.value)
+            recorder.note("state", "max_zoom", self.settings.max_zoom)
+            recorder.note("state", "window", f"{self.width()}x{self.height()}")
+            return
         if self.in_template_mode:
             self._record_template_state(recorder, snapshot)
             return
@@ -438,6 +452,30 @@ class MainWindow(QMainWindow):
             self.recorder.note("cut", "approve")
 
     @property
+    def nothing_open(self) -> bool:
+        """Is no project or template open (the grey area instead of a sheet)?"""
+        return self.stack.currentWidget() is self.empty_area
+
+    def show_nothing(self) -> None:
+        """No project or template: the grey area instead of the sheet, and nothing that works on one (the
+        instruments, Save, Undo, Settings -> Style...). Opening or starting one ends it."""
+        self.ruler_action.setChecked(False)
+        self.cut_tool.unlock_slope()
+        self.template_mode.tool.cancel()
+        self.stack.setCurrentWidget(self.empty_area)
+        self.project_path = None
+        for action in (self.ruler_action, self.net_area.action, self.validate_action):
+            action.setVisible(False)
+        self.ruler_total_action.setVisible(False)
+        self.bounding.set_shown(False)
+        self.approve_action.setVisible(True)
+        self.settings_panel.style_tab.setEnabled(False)
+        self._mouse = None
+        self._show_mouse_coordinates()
+        self._update_title()
+        self._update_edit_actions()
+
+    @property
     def in_template_mode(self) -> bool:
         """Is a template shown (made), not a project?"""
         return self.stack.currentWidget() is self.template_mode.view
@@ -451,6 +489,7 @@ class MainWindow(QMainWindow):
             self.template_mode.tool.cancel()
         self.stack.setCurrentWidget(self.template_mode.view if template else self.sheet_view)
         (self.template_mode.view if template else self.sheet_view).setFocus()
+        self.settings_panel.style_tab.setEnabled(True)
         self.ruler_action.setVisible(not template)
         self.bounding.set_shown(not template)
         self.net_area.action.setVisible(template)
@@ -547,6 +586,21 @@ class MainWindow(QMainWindow):
     def _update_edit_actions(self) -> None:
         """Undo and redo need something to undo or redo and no point being dragged; approving needs a valid
         rearrangement."""
+        if self.nothing_open:
+            for action in (
+                self.approve_action,
+                self.validate_action,
+                self.unlock_slope_action,
+                self.undo_action,
+                self.redo_action,
+                self.save_action,
+                self.save_as_action,
+            ):
+                action.setEnabled(False)
+            for action in (self.new_action, self.new_template_action, self.open_action, self.quit_action):
+                action.setEnabled(True)
+            self._update_saved_state()
+            return
         if self.in_template_mode:
             tool = self.template_mode.tool
             dragging = tool.busy()
@@ -615,12 +669,16 @@ class MainWindow(QMainWindow):
     def is_dirty(self) -> bool:
         """Are there changes that aren't saved? Undo and redo count too: the history is saved with the project (or the
         template)."""
+        if self.nothing_open:
+            return False
         if self.in_template_mode:
             return self.template_mode.is_dirty
         return self.editor.history.revision != self._saved_revision or self.project_settings != self._saved_settings
 
     def _document_path(self) -> Path | None:
-        """The file of what's shown: the project's or the template's."""
+        """The file of what's shown: the project's or the template's (None: none, or nothing is open)."""
+        if self.nothing_open:
+            return None
         return self.template_mode.path if self.in_template_mode else self.project_path
 
     def _project_name(self) -> str:
@@ -629,7 +687,7 @@ class MainWindow(QMainWindow):
 
     def _update_title(self) -> None:
         # "[*]": a "*" before the name while there are unsaved changes (on macOS a dot in the close button instead).
-        self.setWindowTitle(f"[*]{self._project_name()} — {APP_TITLE}")
+        self.setWindowTitle(APP_TITLE if self.nothing_open else f"[*]{self._project_name()} — {APP_TITLE}")
         self.path_label.set_path(self._document_path())
 
     def _update_saved_state(self) -> None:
@@ -698,6 +756,7 @@ class MainWindow(QMainWindow):
         """At start: back to the project the user worked on last, if any (otherwise the window's new one stays)."""
         path = self.settings.last_project
         if path is None:
+            self.ask_for_new_project()  # the first start (or the last one couldn't be reopened then)
             return
         try:
             self._load_and_show(path)
@@ -706,8 +765,6 @@ class MainWindow(QMainWindow):
             if self.recorder is not None:
                 self.recorder.note("project", "reopening failed", path)
             self._offer_another_project(error_text(e))
-            if self.recorder is not None and self.project_path is None:
-                self._record_snapshot(self.recorder)  # it's the new project after all
 
     # --- updates -------------------------------------------------------------------------------------------------
 
@@ -897,9 +954,11 @@ class MainWindow(QMainWindow):
         self.open_project_from(path)
 
     def _offer_another_project(self, message: str) -> None:
-        """The project that should be here can't be loaded: the user decides. The window has a new one until then."""
+        """The project that should be here can't be loaded: the user decides (a new one, from File -> New's window, or
+        another file). Nothing is open until then, and stays so if the user gives up."""
+        self.show_nothing()
         while ask_after_load_failed(self, message) is AfterLoadFailed.OPEN_ANOTHER:
-            name, _ = QFileDialog.getOpenFileName(self, tr("Open project"), "", project_files())
+            name, _ = QFileDialog.getOpenFileName(self, tr("Open project"), "", any_files())
             if not name:
                 return
             try:
@@ -908,6 +967,7 @@ class MainWindow(QMainWindow):
                 message = error_text(e)
             else:
                 return
+        self.ask_for_new_project()
 
     def start_new_project(self, project: Project | None = None, start: str = Start.CUBE.value) -> None:
         """Show a new project (None: the cube's, File -> New's Cube) instead of the current one."""
@@ -969,8 +1029,20 @@ class MainWindow(QMainWindow):
     def _on_new(self) -> None:
         """File -> New: the user chooses what the project starts from (or a template that isn't valid, to open)."""
         choice = choose_new_project(self, template_files(), self._dialog_folder())
-        if choice is None or not self._confirm_leaving_project():
-            return
+        if choice is not None and self._confirm_leaving_project():
+            self._start_chosen(choice)
+
+    def ask_for_new_project(self) -> None:
+        """File -> New's window with nothing open (at the first start, or when the last project couldn't be reopened);
+        given up, nothing is open."""
+        self.show_nothing()
+        choice = choose_new_project(self, template_files(), "")
+        if choice is not None:
+            self._start_chosen(choice)
+        elif self.recorder is not None:
+            self.recorder.note("project", "new", "cancelled")
+
+    def _start_chosen(self, choice: NewProjectChoice) -> None:
         if choice.template is not None:
             assert choice.path is not None
             self._show_template(choice.template, choice.path)
