@@ -40,14 +40,15 @@ def surface_point_at(net: Net, p: Vec, region: Region | None = None) -> SurfaceP
     return SurfacePoint(net.body, region.face, region.placement.inverse().apply(p))
 
 
-def pieces(net: Net, a: Vec, b: Vec) -> list[Piece]:
-    """Segment a-b (lying on the net) split at every point where it meets a fold edge."""
+def pieces(net: Net, a: Vec, b: Vec, at_seams: bool = False) -> list[Piece]:
+    """Segment a-b (lying on the net) split at every point where it meets a fold edge (`at_seams`: or a seam left in
+    the net, which the segment's colours don't change at, but splitting it into cuts must stop at)."""
     if a == b:
         return []
     d = b - a
     length2 = d.length_squared()
     cuts = {a, b}
-    for fold in net.fold_edges():
+    for fold in [*net.fold_edges(), *(net.inner_seams() if at_seams else ())]:
         for p in classify_segments(a, b, fold.origin.position, fold.destination.position).points:
             cuts.add(p)
     ordered = sorted(cuts, key=lambda p: (p - a).dot(d) / length2)

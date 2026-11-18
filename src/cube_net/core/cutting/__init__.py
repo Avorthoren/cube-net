@@ -12,6 +12,7 @@ from cube_net.core.cutting.rearrange import Rearranged, rearrange
 from cube_net.core.cutting.rules import (
     MAX_POINTS_AFTER_FIRST,
     invalid_segments,
+    on_one_perimeter,
     project_onto,
     segment_allowed,
     segment_valid,
@@ -37,6 +38,7 @@ __all__ = [
     "endpoint_point",
     "invalid_segments",
     "line_meets_segment",
+    "on_one_perimeter",
     "overlapping_cuts",
     "pieces",
     "project_onto",

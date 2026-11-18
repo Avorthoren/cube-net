@@ -6,9 +6,12 @@
 1. The chosen cut is glued with its counterpart.
 2. From both of its ends the gluing goes on along the perimeter, while the next two cuts are images of the same part
    of the cube and lie on each other. It stops at the first pair that doesn't match.
-3. Cleanup. Cuts glued inside a cube face leave nothing behind: such seams disappear, and the regions on their sides
-   become one. Vertices left inside the net disappear. So do points of the perimeter that no longer mean anything: where
-   at all their images the perimeter goes straight on, between cuts of the same colours.
+3. Any other two cuts that are images of the same part of the body and lie on each other are glued too (and the gluing
+   goes on from their ends): a net may get a hole that way (docs/template_plan.md §8.2).
+4. Cleanup. Cuts glued inside a cube face leave nothing behind: such seams disappear, and the regions on their sides
+   become one; a seam with one region on both sides (it would make the region a ring) stays, unseen. Vertices left
+   inside the net disappear. So do points of the perimeter that no longer mean anything: where at all their images the
+   perimeter goes straight on, between cuts of the same colours.
 """
 
 from cube_net.core.body import SurfacePoint
@@ -25,16 +28,37 @@ def approve(rearranged: Rearranged) -> Net:
         raise ValueError("a rearrangement with overlapping halves can't be approved")
     copy = rearranged.net.copy()
     net = copy.net
-    end_b, end_a = glue_cuts(net, copy.edges[rearranged.kept], copy.edges[rearranged.moved])
-    for end in (end_b, end_a):
-        if end is not None:
-            _zip(net, *end)
+    _glue(net, copy.edges[rearranged.kept], copy.edges[rearranged.moved])
+    while (pair := _lying_on_each_other(net)) is not None:
+        _glue(net, *pair)
     _dissolve_seams(net)
     _remove_inner_vertices(net)
     _remove_redundant_points(net)
     net.reindex()
     validate_net(net)
     return net
+
+
+def _glue(net: Net, kept: HalfEdge, moved: HalfEdge) -> None:
+    """Glue the two cuts, and go on from their ends."""
+    end_b, end_a = glue_cuts(net, kept, moved)
+    for end in (end_b, end_a):
+        if end is not None:
+            _zip(net, *end)
+
+
+def _lying_on_each_other(net: Net) -> tuple[HalfEdge, HalfEdge] | None:
+    """Two cuts, images of the same part of the body, lying on each other, if there are any."""
+    net.reindex()
+    for he in net.boundary_edges():
+        other = net.counterpart(he)
+        if (
+            other is not he
+            and he.origin.position == other.destination.position
+            and he.destination.position == other.origin.position
+        ):
+            return he, other
+    return None
 
 
 def _zip(net: Net, arriving: HalfEdge, leaving: HalfEdge) -> None:
@@ -55,12 +79,13 @@ def _dissolve_seams(net: Net) -> None:
         if not seams:
             return
         for he in seams:
-            # Between two regions, or a dead end. Anything else becomes one of these as the others are removed.
+            # Between two regions, or a dead end. A seam with one region on both sides that isn't a dead end stays:
+            # without it, the region would be a ring.
             if he.region is not he.twin.region or he.next is he.twin or he.twin.next is he:
                 remove_edge(net, he)
                 break
         else:
-            raise RuntimeError("seams that can't be removed: the net is inconsistent")
+            return
 
 
 def _remove_inner_vertices(net: Net) -> None:

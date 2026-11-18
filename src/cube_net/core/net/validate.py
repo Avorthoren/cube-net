@@ -8,13 +8,14 @@ from fractions import Fraction
 
 from cube_net.core.body import SurfacePoint
 from cube_net.core.geometry import signed_area
-from cube_net.core.net.elements import EdgeKind
+from cube_net.core.net.elements import EdgeKind, NetVertex, Region
 from cube_net.core.net.net import Net, NetInvariantError
 
 
 def validate_net(net: Net) -> None:
     _check_links(net)
     _check_regions(net)
+    _check_connected(net)
     _check_perimeter(net)
     _check_cuts(net)
 
@@ -64,11 +65,29 @@ def _check_regions(net: Net) -> None:
         _fail(f"the net's area is {total}, expected the body's {net.body.area}")
 
 
+def _check_connected(net: Net) -> None:
+    """One piece of paper: every region reached from the first through the vertices they share (parts may hang
+    together by a point only). It may have holes: a perimeter cycle for each (docs/template_plan.md §8.2)."""
+    regions_at: dict[NetVertex, set[Region]] = {}
+    for region in net.regions:
+        for he in net.region_cycle(region):
+            regions_at.setdefault(he.origin, set()).add(region)
+    found = {net.regions[0]}
+    stack = [net.regions[0]]
+    while stack:
+        for he in net.region_cycle(stack.pop()):
+            for other in regions_at[he.origin] - found:
+                found.add(other)
+                stack.append(other)
+    if len(found) != len(net.regions):
+        _fail(f"the net is in pieces: {len(found)} of its {len(net.regions)} regions hang together")
+
+
 def _check_perimeter(net: Net) -> None:
     cycles = net.perimeters()
-    if len(cycles) != 1:
-        _fail(f"the net has {len(cycles)} perimeter cycles, expected 1")
-    on_perimeter = {he.origin for he in cycles[0]}
+    if not cycles:
+        _fail("the net has no perimeter")
+    on_perimeter = {he.origin for cycle in cycles for he in cycle}
     for vertex in net.vertices:
         name = vertex.point.vertex
         if vertex not in on_perimeter and (name is None or net.body.vertex_angle(name) != 360):
@@ -80,8 +99,8 @@ def _check_perimeter(net: Net) -> None:
 
 def _check_cuts(net: Net) -> None:
     for he in net.half_edges:
-        if he.kind is EdgeKind.SEAM:
-            _fail(f"{he} is a seam: seams must not remain in a finished net")
+        if he.kind is EdgeKind.SEAM and he.region is not he.twin.region:
+            _fail(f"{he} is a seam between two regions: such seams must not remain in a finished net")
     net.reindex()  # every cut has exactly two images
     for he in net.boundary_edges():
         other = net.counterpart(he)

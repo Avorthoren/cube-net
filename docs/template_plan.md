@@ -545,6 +545,18 @@ Done (step 3):
 - Template files: a face's `"number"` and `"hatch"` (only if it has them), the template's `"next_number"`; files
   without them read as before.
 
+Done (step 4, first part: nets with holes):
+- `validate_net`: any number of perimeter cycles (a hole: one more), as long as the net is one piece (its regions
+  hang together, by a point at least). A seam may stay in a finished net if it has one region on both sides: without
+  it that region would be a ring (`Net.inner_seams`); it isn't drawn.
+- Approving glues, after the chosen cut and what follows from its ends, every other pair of counterpart cuts lying on
+  each other (the torus's N-T after gluing R-L), going on from their ends too.
+- Splitting stops at such a seam where the line crosses it (`pieces(..., at_seams=True)`; no point is shown there).
+  `surgery.corner` picks, of a region's corners at one vertex, the one whose angle holds the new edge.
+- Rearranging checks the overlap on every perimeter cycle of each half (holes too).
+- For now a cut line's ends must be on one perimeter cycle (from the outside to a hole it wouldn't divide the net);
+  the new cut rule (second part) lifts that.
+
 ### 8.3 T6c and T7: style per document, built-in templates
 (Asked for on 2026-11-17; it replaces the parts of §7 it contradicts.)
 - **File -> New** offers three: Cube, Cube with a hole (the torus template, once it's finished), and Custom (a

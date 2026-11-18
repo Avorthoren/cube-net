@@ -113,8 +113,9 @@ class Net:
     # --- edges ------------------------------------------------------------------------------------------------------
 
     def perimeters(self) -> list[list[HalfEdge]]:
-        """The outside half-edges, cycle by cycle (each clockwise around its part of the net). A net has one cycle; a
-        net that has just been split along a cut line has two, until the parts are glued."""
+        """The outside half-edges, cycle by cycle (each clockwise around its part of the net). A net has one cycle, and
+        one more for each hole; a net that has just been split along a cut line has those of both its parts, until
+        they're glued."""
         cycles: list[list[HalfEdge]] = []
         seen: set[HalfEdge] = set()
         for he in self.half_edges:
@@ -135,6 +136,11 @@ class Net:
     def fold_edges(self) -> list[HalfEdge]:
         """One half-edge for every body edge lying inside the net."""
         return [he for he in self.half_edges if he.kind is EdgeKind.FOLD and he.id < he.twin.id]
+
+    def inner_seams(self) -> list[HalfEdge]:
+        """One half-edge for every seam left in the net: inside a face, with one region on both sides (without it,
+        that region would be a ring)."""
+        return [he for he in self.half_edges if he.kind is EdgeKind.SEAM and he.id < he.twin.id]
 
     def body_edge_of(self, he: HalfEdge) -> BodyEdge | None:
         """The edge of the body that `he` lies on, if any (seen from a region on one of its sides)."""

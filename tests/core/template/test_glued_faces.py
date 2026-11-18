@@ -16,7 +16,11 @@ PURPLE = "#8B45B5"
 
 @pytest.fixture
 def torus() -> Template:
-    return cube_with_a_hole().state.template
+    """The built-in torus as if never validated or coloured since the counter is kept: no numbers, hatches tied to the
+    grid."""
+    template = cube_with_a_hole().state.template
+    faces = tuple(replace(f, number=None, hatch=Rigid90.identity()) for f in template.faces)
+    return replace(template, faces=faces, next_number=1)
 
 
 def purple_pieces(template: Template) -> list[int]:

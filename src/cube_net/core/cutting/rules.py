@@ -5,7 +5,8 @@
 
 The cut line must lie strictly inside the net, except for its first and last points, which lie on the perimeter. So a
 new segment a-b may touch the perimeter only at a or b, and only if that end is on the perimeter; it may touch the
-cut line only at a, where it continues the previous segment.
+cut line only at a, where it continues the previous segment. In a net with holes, both ends lie on one cycle of the
+perimeter.
 """
 
 from collections.abc import Iterable, Sequence
@@ -91,3 +92,11 @@ def segment_allowed(net: Net, line: CutLine, end: CutPoint) -> bool:
     """May the segment from the line's last point to `end` be added?"""
     points = [*line.points, end]
     return segment_valid(net, points, len(points) - 2)
+
+
+def on_one_perimeter(net: Net, first: CutPoint, last: CutPoint) -> bool:
+    """Do the line's two ends lie on one cycle of the perimeter (the outer one, or one hole's)? Only then does the line
+    divide the net in two (from the outside to a hole, it would only cut a ring open)."""
+    assert first.edge is not None and last.edge is not None
+    cycle = next(c for c in net.perimeters() if first.edge.twin in c)
+    return last.edge.twin in cycle

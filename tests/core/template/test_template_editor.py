@@ -275,10 +275,13 @@ def test_a_refusal_shows_the_fold_it_runs_into_too() -> None:
 
 class TestAlignHatches:
     def test_one_action_and_none_if_nothing_changes(self) -> None:
+
+        from cube_net.core.geometry import Rigid90
         from cube_net.core.history import ActionKind
         from cube_net.core.project.builtin_templates import cube_with_a_hole
 
-        editor = TemplateEditor(cube_with_a_hole().state.template)
+        template = cube_with_a_hole().state.template
+        editor = TemplateEditor(template.with_hatches([Rigid90.identity()] * len(template.faces)))
         editor.align_hatches()
         assert editor.history.done_count == 1 and editor.history.done_entries()[0].kind is ActionKind.ALIGN_HATCHES
         assert sum(not f.hatch.is_identity() for f in editor.template.faces) == 2

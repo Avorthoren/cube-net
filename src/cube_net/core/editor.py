@@ -38,6 +38,7 @@ from cube_net.core.cutting import (
     closest_straight_point,
     invalid_segments,
     line_meets_segment,
+    on_one_perimeter,
     project_onto,
     rearrange,
     segment_allowed,
@@ -343,6 +344,8 @@ class Editor:
         moved = [*line.points[:i], target, *line.points[i + 1 :]]
         inner_over_perimeter = over_perimeter and not line.points[i].on_perimeter
         bad = [i - 1, i] if inner_over_perimeter else invalid_segments(self.net, moved, (i - 1, i))
+        if not bad and not on_one_perimeter(self.net, moved[0], moved[-1]):
+            bad = [j for j in (i - 1, i) if 0 <= j < len(moved) - 1]
         if bad:
             return Rejection(tuple((moved[j].position, moved[j + 1].position) for j in bad))
         if target == line.points[i]:
@@ -444,7 +447,8 @@ class Editor:
         line = self.cut_line
         assert line is not None
         too_many = line.inner_count >= MAX_POINTS_AFTER_FIRST and not point.on_perimeter
-        if too_many or not segment_allowed(self.net, line, point):
+        apart = point.on_perimeter and not on_one_perimeter(self.net, line.points[0], point)
+        if too_many or apart or not segment_allowed(self.net, line, point):
             return Rejection(((line.last.position, point.position),))
         before = self.snapshot()
         line.points.append(point)

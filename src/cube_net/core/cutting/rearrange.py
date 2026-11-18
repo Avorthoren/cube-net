@@ -57,7 +57,9 @@ def rearrange(split: SplitNet, clicked: HalfEdge) -> Rearranged | None:
         vertex.position = motion.apply(vertex.position)
     for region in regions:
         region.placement = motion @ region.placement
-    cycles = copy.net.perimeters()
-    outer_kept = next(c for c in cycles if kept.twin in c)
-    outer_moved = next(c for c in cycles if moved.twin in c)
+    # Each half's perimeter: its outer cycle and those of its holes.
+    outer_kept: list[HalfEdge] = []
+    outer_moved: list[HalfEdge] = []
+    for cycle in copy.net.perimeters():
+        (outer_moved if cycle[0].twin.region in regions else outer_kept).extend(cycle)
     return Rearranged(copy.net, kept, moved, motion, overlapping_cuts(outer_kept, outer_moved))

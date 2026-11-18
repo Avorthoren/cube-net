@@ -185,7 +185,13 @@ def test_a_passed_validate_aligns_the_hatches(qtbot: QtBot, monkeypatch: pytest.
     parent = QWidget()
     qtbot.addWidget(parent)
     mode = TemplateMode(parent, lambda *_: None)
-    mode.show(cube_with_a_hole(), None, DEFAULT_STYLE)
+    from cube_net.core.geometry import Rigid90
+    from cube_net.core.template import TemplateSnapshot
+
+    document = cube_with_a_hole()
+    template = document.state.template
+    plain = template.with_hatches([Rigid90.identity()] * len(template.faces))  # as if never validated
+    mode.show(replace(document, state=TemplateSnapshot(plain, document.state.origin)), None, DEFAULT_STYLE)
     mode.validate()
     assert mode.status() is ValidationStatus.VALID
     assert sum(not f.hatch.is_identity() for f in mode.editor.template.faces) == 2

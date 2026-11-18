@@ -74,7 +74,7 @@ def _create_stops(net: Net, copy: NetCopy, line: CutLine) -> list[NetVertex]:
     positions = [p.position for p in line.points]
     stops: list[NetVertex] = [_endpoint_vertex(net, copy, line.points[0])]
     for segment, (a, b) in enumerate(pairwise(positions)):
-        parts = pieces(net, a, b)
+        parts = pieces(net, a, b, at_seams=True)
         for i, part in enumerate(parts):
             is_last = segment == len(positions) - 2 and i == len(parts) - 1
             if is_last:
@@ -118,7 +118,7 @@ def _inner_vertex(net: Net, position: Vec, point: SurfacePoint) -> NetVertex:
     for vertex in net.vertices:
         if vertex.position == position:
             return vertex
-    for fold in net.fold_edges():
+    for fold in [*net.fold_edges(), *net.inner_seams()]:
         if on_segment(position, fold.origin.position, fold.destination.position):
             return split_edge(net, fold, position, point)
     return new_vertex(net, position, point)
