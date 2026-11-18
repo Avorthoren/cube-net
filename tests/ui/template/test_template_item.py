@@ -55,6 +55,32 @@ def test_a_face_without_a_colour_is_a_chessboard(qtbot: QtBot) -> None:
     assert "#0000ff" not in seen
 
 
+def test_fold_dashes_are_per_unit(qtbot: QtBot) -> None:
+    """With 1 dash per unit, a fold is drawn for half a unit, then left out for half a unit, from its start."""
+    import math
+
+    from cube_net.ui import palette
+    from cube_net.ui.sheet import net_style
+
+    net_style.set_sizes(net_style.EDGE_WIDTH_PX, net_style.VERTEX_RADIUS_PX, 1.0, 1.0, 1.0, 1.0)
+    template = coloured_square()
+    template = template.with_fold(template.vertices[0].id, template.vertices[2].id)  # (10, 10) to (12, 12)
+
+    image = render(TemplateItem(template))
+
+    def on_the_fold(s: float) -> bool:  # at distance s along it, in units (the image has 100 px per unit)
+        x = 10 + s / math.sqrt(2)
+        colour = image.pixelColor(round((x - 9.5) * 100), round((12.5 - x) * 100))
+        fold = palette.TEMPLATE_FOLD
+        return (
+            max(abs(colour.red() - fold.red()), abs(colour.green() - fold.green()), abs(colour.blue() - fold.blue()))
+            < 48
+        )
+
+    assert on_the_fold(0.25) and on_the_fold(1.25)
+    assert not on_the_fold(0.75) and not on_the_fold(1.75)
+
+
 def test_outside_the_loop_nothing(qtbot: QtBot) -> None:
     image = render(TemplateItem(coloured_square()))
     assert image.pixelColor(5, 5).name() == "#808080"

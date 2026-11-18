@@ -6,8 +6,8 @@
 Painted bottom to top:
 1. Faces (once the loop is closed): white, with the hatch in their colour. The hatch is the same everywhere, tied to
    the grid: as if the whole sheet were hatched and only the faces showed it (`Faces tiling` is per unit).
-2. Fold lines, dashed; the loop, solid; the line following the mouse (from the loop's open end, or from a fold's start),
-   dashed and thin; rejected segments, black for a moment.
+2. Fold lines, dashed (`Dashes` per unit, as cuts are); the loop, solid; the line following the mouse (from the loop's
+   open end, or from a fold's start), dashed and thin; rejected segments, black for a moment.
 3. Vertex circles; a highlighted one (what a click would use) gets a ring. The middle circles of the loop's sides, where
    a click inserts a vertex (while the loop is closed).
 4. Every label (always shown in a template), outside the loop.
@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 
-from PyQt6.QtCore import QPointF, QRectF, Qt
+from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 
@@ -30,6 +30,7 @@ from cube_net.core.template import Template
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
+from cube_net.ui.sheet.dashing import dash_length, dash_pieces
 from cube_net.ui.sheet.hatch import cells_around, tiled_chessboard, tiled_hatch
 from cube_net.ui.sheet.net_painting import UP_RIGHT, paint_labels
 from cube_net.ui.template.corners import middle_angle, owned_arcs, shared
@@ -133,7 +134,7 @@ class TemplateItem(QGraphicsItem):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         for fold in template.folds:
             segment = (template.position(fold.start), template.position(fold.end))
-            self._line(painter, world, segment, palette.TEMPLATE_FOLD, net_style.EDGE_WIDTH_PX / 2, dashed=True)
+            self._dashes(painter, world, segment, palette.TEMPLATE_FOLD, net_style.EDGE_WIDTH_PX / 2)
         if self._highlight_fold is not None:
             self._line(painter, world, self._highlight_fold, palette.TEMPLATE_FOLD, net_style.HIGHLIGHT_WIDTH_PX)
         for a, b in template.loop_sides():
@@ -191,6 +192,25 @@ class TemplateItem(QGraphicsItem):
         painter.setPen(pen)
         a, b = segment
         painter.drawLine(world.map(to_qpointf(a)), world.map(to_qpointf(b)))
+
+    @staticmethod
+    def _dashes(painter: QPainter, world: QTransform, segment: Segment, colour: QColor, width: float) -> None:
+        """A fold: dashes and gaps as long as a cut's dashes (`Dashes` per unit), from its start."""
+        a, b = (to_qpointf(p) for p in segment)
+        d = b - a
+        length = math.hypot(d.x(), d.y())
+        if length == 0:
+            return
+        pen = QPen(colour, width)
+        pen.setCapStyle(Qt.PenCapStyle.FlatCap)
+        painter.setPen(pen)
+        painter.drawLines(
+            [
+                QLineF(world.map(a + d * (s0 / length)), world.map(a + d * (s1 / length)))
+                for s0, s1, parity in dash_pieces(length, 0.0, dash_length())
+                if parity == 0
+            ]
+        )
 
     @staticmethod
     def _inner_line(painter: QPainter, world: QTransform, segment: Segment) -> None:

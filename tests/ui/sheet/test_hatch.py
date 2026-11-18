@@ -32,7 +32,7 @@ def test_the_chessboard_halves_every_hatch_rectangle(columns: int, rows: int) ->
     from cube_net.ui.sheet.hatch import tiled_chessboard
 
     net_style.set_sizes(
-        net_style.EDGE_WIDTH_PX, net_style.VERTEX_RADIUS_PX, columns, rows, net_style.DASHES_PER_EDGE, 1.0
+        net_style.EDGE_WIDTH_PX, net_style.VERTEX_RADIUS_PX, columns, rows, net_style.DASHES_PER_UNIT, 1.0
     )
     board = tiled_chessboard(0, 0, 2, 1)
     rects = [board.elementAt(i) for i in range(0, board.elementCount(), 5)]  # 5 elements per closed rectangle
@@ -44,6 +44,19 @@ def test_the_chessboard_halves_every_hatch_rectangle(columns: int, rows: int) ->
     assert (cell.width(), cell.height()) == pytest.approx(small)
     corners = {(round(r.x / small[0]), round(r.y / small[1])) for r in rects}
     assert all((i + j) % 2 == 1 for i, j in corners)  # never two grey ones side by side
+
+
+@pytest.mark.parametrize("columns", [0.5, 2.5])
+def test_any_positive_tiling_lines_up_on_the_grid(columns: float) -> None:
+    """Below 1 a rectangle spans several units; the tiling always starts at the sheet's origin."""
+    net_style.set_sizes(
+        net_style.EDGE_WIDTH_PX, net_style.VERTEX_RADIUS_PX, columns, 1.0, net_style.DASHES_PER_UNIT, 1.0
+    )
+    path = tiled_hatch(3, 0, 4, 1)
+    w = 1 / columns
+    lefts = {round(path.elementAt(i).x / w, 9) for i in range(0, path.elementCount(), 4)}
+    assert all(x == int(x) for x in lefts)  # every triangle starts at a multiple of its width
+    assert path.boundingRect().left() <= 3 and path.boundingRect().right() >= 4  # it covers the unit cell
 
 
 def test_the_cells_around_points() -> None:

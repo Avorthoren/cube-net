@@ -11,6 +11,7 @@ from PyQt6.QtCore import QSettings
 
 from cube_net.core.body import CUBE
 from cube_net.core.body.body import COLOR_PATTERN
+from cube_net.core.style import stored_name
 from cube_net.ui.i18n.language import Language
 from cube_net.ui.sheet.zoom import DEFAULT_MAX_ZOOM, MAX_ZOOM_RANGE
 from cube_net.ui.style import DEFAULT_STYLE, Style, StyleError, fitted
@@ -203,11 +204,11 @@ class AppSettings:
         """Settings -> Style from before it belonged to documents (projects and templates saved before then open with
         it), if one was stored. Never written any more. A stored value that's missing, out of range or not what it
         should be gives that value's default (the others stay)."""
-        if not any(self._settings.contains(_STYLE + field.name) for field in fields(Style)):
+        if not any(self._settings.contains(_STYLE + stored_name(field.name)) for field in fields(Style)):
             return None
         values = {
             field.name: _read_style_value(
-                field.name, self._settings.value(_STYLE + field.name), getattr(DEFAULT_STYLE, field.name)
+                field.name, self._settings.value(_STYLE + stored_name(field.name)), getattr(DEFAULT_STYLE, field.name)
             )
             for field in fields(Style)
         }

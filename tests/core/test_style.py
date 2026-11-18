@@ -11,7 +11,7 @@ from cube_net.core.style import Style, StyleError
 STYLE = Style(
     hatch_columns=8,
     hatch_rows=2,
-    dashes_per_edge=10,
+    dashes_per_unit=10,
     edge_width=4.0,
     vertex_radius=6.0,
     grid_color="#D3D3D3",
@@ -24,9 +24,10 @@ STYLE = Style(
     [
         {"hatch_columns": 0},
         {"hatch_rows": 31},
-        {"hatch_rows": 2.5},
+        {"hatch_rows": 0.0},
+        {"dashes_per_unit": -1.0},
         {"hatch_rows": True},
-        {"dashes_per_edge": 0},
+        {"dashes_per_unit": 0},
         {"edge_width": 0.5},
         {"edge_width": 15.5},
         {"edge_width": "4"},
@@ -47,7 +48,8 @@ def test_out_of_range(values: dict[str, object]) -> None:
     "values",
     [
         {"hatch_columns": 1, "hatch_rows": 30},
-        {"dashes_per_edge": 30},
+        {"dashes_per_unit": 30},
+        {"hatch_columns": 0.01, "hatch_rows": 2.5, "dashes_per_unit": 0.75},  # any positive numbers
         {"edge_width": 1.0},
         {"edge_width": 15},
         {"vertex_radius": 1.0},
@@ -57,3 +59,11 @@ def test_out_of_range(values: dict[str, object]) -> None:
 )
 def test_the_ends_of_the_ranges(values: dict[str, object]) -> None:
     replace(STYLE, **values)  # type: ignore[arg-type]
+
+
+def test_dashes_are_stored_under_their_old_name() -> None:
+    """A cube's edge is a unit long: the number it had per edge is the one per unit."""
+    from cube_net.core.style import stored_name
+
+    assert stored_name("dashes_per_unit") == "dashes_per_edge"
+    assert stored_name("edge_width") == "edge_width"

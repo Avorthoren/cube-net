@@ -12,7 +12,7 @@ def test_the_defaults_are_what_the_style_files_say() -> None:
     assert DEFAULT_STYLE.edge_width == net_style.EDGE_WIDTH_PX
     assert DEFAULT_STYLE.vertex_radius == net_style.VERTEX_RADIUS_PX
     assert (DEFAULT_STYLE.hatch_columns, DEFAULT_STYLE.hatch_rows) == (net_style.HATCH_COLUMNS, net_style.HATCH_ROWS)
-    assert DEFAULT_STYLE.dashes_per_edge == net_style.DASHES_PER_EDGE
+    assert DEFAULT_STYLE.dashes_per_unit == net_style.DASHES_PER_UNIT
     assert DEFAULT_STYLE.grid_color == palette.GRID.name().upper()
 
 

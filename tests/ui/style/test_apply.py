@@ -16,7 +16,7 @@ def test_everything_reads_the_new_values() -> None:
             vertex_radius=12.5,
             hatch_columns=4,
             hatch_rows=3,
-            dashes_per_edge=7,
+            dashes_per_unit=7,
             grid_width=0.0,
             grid_color="#ABCDEF",
         )
@@ -25,7 +25,7 @@ def test_everything_reads_the_new_values() -> None:
     assert net_style.CUT_HITBOX_PX == 8.0 * net_style.CUT_HITBOX_FACTOR
     assert net_style.HIGHLIGHT_WIDTH_PX == net_style.FOLD_HITBOX_PX == net_style.CUT_HITBOX_PX
     assert net_style.VERTEX_RADIUS_PX == 12.5
-    assert (net_style.HATCH_COLUMNS, net_style.HATCH_ROWS, net_style.DASHES_PER_EDGE) == (4, 3, 7)
+    assert (net_style.HATCH_COLUMNS, net_style.HATCH_ROWS, net_style.DASHES_PER_UNIT) == (4, 3, 7)
     assert net_style.GRID_WIDTH_PX == 0.0
     assert palette.GRID.name().upper() == "#ABCDEF"
 

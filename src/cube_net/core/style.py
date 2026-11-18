@@ -10,12 +10,17 @@ from dataclasses import dataclass
 
 from cube_net.core.body.body import COLOR_PATTERN
 
-# The allowed values (docs/idea.txt, settings).
-TILING_RANGE = (1, 30)
-DASHES_RANGE = (1, 30)
+# The allowed values (docs/idea.txt, settings). The tiling and the dashes are any positive numbers up to 30 (with 2
+# decimals in the fields).
+TILING_RANGE = (0.01, 30.0)
+DASHES_RANGE = (0.01, 30.0)
 EDGE_WIDTH_RANGE = (1.0, 15.0)
 VERTEX_RADIUS_RANGE = (1.0, 30.0)
 GRID_WIDTH_RANGE = (0.0, 5.0)
+
+
+# The names some style values are saved under, unlike their fields (see `stored_name`).
+STORED_NAMES = {"dashes_per_unit": "dashes_per_edge"}
 
 
 class StyleError(ValueError):
@@ -24,12 +29,13 @@ class StyleError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Style:
-    # A face is tiled into hatch_columns x hatch_rows rectangles (per unit of the grid, in a template).
-    hatch_columns: int
-    hatch_rows: int
+    # Every unit square of the grid is tiled into hatch_columns x hatch_rows rectangles: a rectangle is
+    # 1 / hatch_columns wide and 1 / hatch_rows high (more than a unit if they're below 1).
+    hatch_columns: float
+    hatch_rows: float
 
-    # A whole cube edge has this many dashes of each of its colours.
-    dashes_per_edge: int
+    # A unit of length of a cut or a fold has this many dashes of each of its colours (a cube's edge is a unit long).
+    dashes_per_unit: float
 
     # Width of cuts and folds, in pixels.
     edge_width: float
@@ -45,18 +51,18 @@ class Style:
     def __post_init__(self) -> None:
         if not isinstance(self.grid_color, str) or not COLOR_PATTERN.fullmatch(self.grid_color):
             raise StyleError(f"a colour must be #RRGGBB with capital letters, got {self.grid_color!r}")
-        _check_int("tiling", self.hatch_columns, TILING_RANGE)
-        _check_int("tiling", self.hatch_rows, TILING_RANGE)
-        _check_int("dashes", self.dashes_per_edge, DASHES_RANGE)
+        _check("tiling", self.hatch_columns, TILING_RANGE)
+        _check("tiling", self.hatch_rows, TILING_RANGE)
+        _check("dashes", self.dashes_per_unit, DASHES_RANGE)
         _check("edge width", self.edge_width, EDGE_WIDTH_RANGE)
         _check("vertex radius", self.vertex_radius, VERTEX_RADIUS_RANGE)
         _check("grid width", self.grid_width, GRID_WIDTH_RANGE)
 
 
-def _check_int(name: str, value: object, allowed: tuple[float, float]) -> None:
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise StyleError(f"{name} must be a whole number, got {value!r}")
-    _check(name, value, allowed)
+def stored_name(field: str) -> str:
+    """The name a style value is saved under (in files and in the application's settings): its field's, except for
+    the dashes, which were per edge when only the cube had them (a cube's edge is a unit long: the same number)."""
+    return STORED_NAMES.get(field, field)
 
 
 def _check(name: str, value: object, allowed: tuple[float, float]) -> None:

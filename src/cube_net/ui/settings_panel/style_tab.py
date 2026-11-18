@@ -10,10 +10,11 @@ default brings back the body's colours, and the style files' values for the rest
 from collections.abc import Sequence
 from dataclasses import replace
 
-from PyQt6.QtCore import QLocale, Qt, pyqtSignal
-from PyQt6.QtWidgets import QDoubleSpinBox, QFrame, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout, QWidget
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from cube_net.core.style import DASHES_RANGE, EDGE_WIDTH_RANGE, GRID_WIDTH_RANGE, TILING_RANGE, VERTEX_RADIUS_RANGE
+from cube_net.ui.decimal_box import DecimalBox
 from cube_net.ui.i18n import bind, tr
 from cube_net.ui.settings_panel.color_field import ColorField
 from cube_net.ui.settings_panel.section import Section
@@ -27,8 +28,14 @@ BY_SIGN = chr(0x00D7)
 # The unit shown after a field in pixels.
 PIXELS = "px"
 
+# Shown after the tiling and the dashes.
+PER_UNIT = "per unit"
+
 # Sizes in pixels have this many decimals.
 PIXEL_DECIMALS = 1
+
+# The tiling and the dashes (per unit) have this many decimals.
+COUNT_DECIMALS = 2
 
 # The names of the sections, as shown (and as the confirmation names them).
 FACE_COLORS = "Faces colors"
@@ -40,31 +47,32 @@ GRID = "Grid"
 # Which values of the style each section restores (the face colours are the project's).
 SECTION_FIELDS = {
     FACE_TILING: ("hatch_columns", "hatch_rows"),
-    CUTS_AND_FOLDS: ("dashes_per_edge", "edge_width"),
+    CUTS_AND_FOLDS: ("dashes_per_unit", "edge_width"),
     VERTICES: ("vertex_radius",),
     GRID: ("grid_color", "grid_width"),
 }
 
 
-def _count_box(allowed: tuple[int, int], parent: QWidget) -> QSpinBox:
-    box = QSpinBox(parent)
-    box.setRange(*allowed)
-    return box
+def _count_box(allowed: tuple[float, float], parent: QWidget) -> DecimalBox:
+    """A positive number of rectangles or dashes per unit: decimals allowed."""
+    return DecimalBox(COUNT_DECIMALS, allowed, 1.0, parent)
 
 
-def _pixels_box(allowed: tuple[float, float], parent: QWidget) -> QDoubleSpinBox:
-    box = QDoubleSpinBox(parent)
-    box.setLocale(QLocale.c())  # 1.5, never 1,5
-    box.setDecimals(PIXEL_DECIMALS)
-    box.setRange(*allowed)
-    box.setSingleStep(0.5)
-    return box
+def _pixels_box(allowed: tuple[float, float], parent: QWidget) -> DecimalBox:
+    return DecimalBox(PIXEL_DECIMALS, allowed, 0.5, parent)
 
 
 def _px(parent: QWidget) -> QLabel:
     """The unit, after a field in pixels."""
     label = QLabel(parent)
     bind(label, label.setText, PIXELS)
+    return label
+
+
+def _per_unit(parent: QWidget) -> QLabel:
+    """After the tiling and the dashes: they're counted per unit of the grid."""
+    label = QLabel(parent)
+    bind(label, label.setText, PER_UNIT)
     return label
 
 
@@ -96,12 +104,12 @@ class StyleTab(QWidget):
 
         tiling = self._section(FACE_TILING)
         self.hatch_columns, self.hatch_rows = _count_box(TILING_RANGE, tiling), _count_box(TILING_RANGE, tiling)
-        tiling.add_row(self.hatch_columns, QLabel(BY_SIGN, tiling), self.hatch_rows)
+        tiling.add_row(self.hatch_columns, QLabel(BY_SIGN, tiling), self.hatch_rows, _per_unit(tiling))
 
         cuts = self._section(CUTS_AND_FOLDS)
         self.dashes = _count_box(DASHES_RANGE, cuts)
         self.edge_width = _pixels_box(EDGE_WIDTH_RANGE, cuts)
-        cuts.add_labelled_row("Dashes", self.dashes)
+        cuts.add_labelled_row("Dashes", self.dashes, _per_unit(cuts))
         cuts.add_labelled_row("Thickness", self.edge_width, _px(cuts))
 
         vertices = self._section(VERTICES)
@@ -119,7 +127,7 @@ class StyleTab(QWidget):
         self._fill(style)
         self.hatch_columns.valueChanged.connect(lambda v: self._change(hatch_columns=v))
         self.hatch_rows.valueChanged.connect(lambda v: self._change(hatch_rows=v))
-        self.dashes.valueChanged.connect(lambda v: self._change(dashes_per_edge=v))
+        self.dashes.valueChanged.connect(lambda v: self._change(dashes_per_unit=v))
         self.edge_width.valueChanged.connect(lambda v: self._change(edge_width=v))
         self.vertex_radius.valueChanged.connect(lambda v: self._change(vertex_radius=v))
         self.grid_width.valueChanged.connect(lambda v: self._change(grid_width=v))
@@ -201,7 +209,7 @@ class StyleTab(QWidget):
         try:
             self.hatch_columns.setValue(style.hatch_columns)
             self.hatch_rows.setValue(style.hatch_rows)
-            self.dashes.setValue(style.dashes_per_edge)
+            self.dashes.setValue(style.dashes_per_unit)
             self.edge_width.setValue(style.edge_width)
             # A vertex circle is at least 140% of the edge width across.
             self.vertex_radius.setMinimum(least_vertex_radius(style.edge_width))

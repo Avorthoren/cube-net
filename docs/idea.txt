@@ -614,8 +614,10 @@ disappear as soon as it leaves (no delay either way).
      the square follow it); OK keeps it, Cancel, Escape and the close button go back to the colour there was.
      It opens with its right edge on the application's right edge, so the net stays in sight on the left (where the
      system lets an application place its windows: not on Wayland, where the system decides).
-   - Faces tiling: the number of columns and rows each face is divided into (now 10 x 5), integers from 1 to 30.
-   - Cuts and folds: number of dashes of each colour along a whole cube edge (1 to 30, now 10), and their thickness
+   - Faces tiling: the number of columns and rows each unit square of the grid (a face of the cube) is divided into
+     (now 10 x 5), per unit, any positive numbers up to 30 with 2 decimals (below 1, a rectangle spans several units).
+   - Cuts and folds: number of dashes of each colour per unit of length (a whole cube edge), any positive number up
+     to 30 with 2 decimals (now 10), the same for a template's folds, and their thickness
      in pixels (1 to 15, now 4). Hovered elements are drawn 1.5 times as thick, as before.
    - Vertices: radius of the vertex circles in pixels (from 0.7 times the edge thickness to 30, now 6).
    - Grid: a white 10x10 square crossed in its middle by a vertical and a horizontal grid line, the colour of the

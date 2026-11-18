@@ -18,13 +18,14 @@
 
 from fractions import Fraction
 
-from PyQt6.QtCore import QEvent, QLocale, QObject, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QFont, QFontMetrics
-from PyQt6.QtWidgets import QApplication, QDoubleSpinBox, QLabel, QToolBar, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QToolBar, QWidget
 
 from cube_net.core.bounding import BoundingRectangle
 from cube_net.core.project_settings import MAX_AREA_THRESHOLD, MIN_AREA_THRESHOLD
 from cube_net.ui import palette
+from cube_net.ui.decimal_box import DecimalBox
 from cube_net.ui.i18n import TRANSLATIONS, bind, tr
 from cube_net.ui.instant_tooltips import InstantTooltips
 from cube_net.ui.instruments.button_look import RADIUS_PX
@@ -75,11 +76,9 @@ class BoundingControls(QObject):
         bind(self.target_label, self.target_label.setText, "Target area")
         self.target_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._toolbar_actions.append(toolbar.addWidget(self.target_label))
-        self.target = QDoubleSpinBox(toolbar)
-        self.target.setLocale(QLocale.c())  # always 7.100, never 7,100
-        self.target.setDecimals(TARGET_DECIMALS)
-        self.target.setRange(float(MIN_AREA_THRESHOLD), float(MAX_AREA_THRESHOLD))
-        self.target.setSingleStep(TARGET_STEP)
+        self.target = DecimalBox(
+            TARGET_DECIMALS, (float(MIN_AREA_THRESHOLD), float(MAX_AREA_THRESHOLD)), TARGET_STEP, toolbar
+        )  # 7.100 (never 7,100), but 7.1 while it's typed
         self.target.setKeyboardTracking(False)  # a value is taken when it's entered, not at every digit typed
         bind(self.target, self.target.setToolTip, "The project's goal: an area below this is a success")
         self.target.valueChanged.connect(self._on_target)

@@ -20,7 +20,7 @@ from cube_net.core.net import Region
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
-from cube_net.ui.sheet.dashing import dash_pieces
+from cube_net.ui.sheet.dashing import dash_length, dash_pieces
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,7 +57,7 @@ def prepare_dashed(body: Body, region: Region, a: Vec, b: Vec) -> DashedSegment 
     layout = dash_layout(body, region.face, local_a, to_local.apply(b))
     colours = [palette.face_color(body, f) if f is not None else palette.WHITE for f in layout.faces]
     start, end = (qa, qb) if layout.start == SurfacePoint(body, region.face, local_a) else (qb, qa)
-    pieces = dash_pieces(length, layout.offset, 1 / (2 * net_style.DASHES_PER_EDGE))
+    pieces = dash_pieces(length, layout.offset, dash_length())
     return DashedSegment(start, end, QPointF(-d.y(), d.x()) / length, length, pieces, (colours[0], colours[1]))
 
 

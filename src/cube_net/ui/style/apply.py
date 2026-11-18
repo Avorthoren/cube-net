@@ -17,7 +17,7 @@ def apply_style(style: Style) -> None:
         style.vertex_radius,
         style.hatch_columns,
         style.hatch_rows,
-        style.dashes_per_edge,
+        style.dashes_per_unit,
         style.grid_width,
     )
     palette.set_grid_color(QColor(style.grid_color))

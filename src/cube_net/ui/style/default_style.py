@@ -34,7 +34,7 @@ def _name(color: object) -> str:
 DEFAULT_STYLE = Style(
     hatch_columns=net_style.HATCH_COLUMNS,
     hatch_rows=net_style.HATCH_ROWS,
-    dashes_per_edge=net_style.DASHES_PER_EDGE,
+    dashes_per_unit=net_style.DASHES_PER_UNIT,
     edge_width=net_style.EDGE_WIDTH_PX,
     vertex_radius=net_style.VERTEX_RADIUS_PX,
     grid_color=_name(palette.GRID),

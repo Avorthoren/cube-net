@@ -151,7 +151,7 @@ def format_style(style: Style) -> str:
     """The style in session recordings, in one word."""
     return (
         f"tiling={style.hatch_columns}x{style.hatch_rows};"
-        f"dashes={style.dashes_per_edge};edge={style.edge_width};radius={style.vertex_radius};"
+        f"dashes={style.dashes_per_unit};edge={style.edge_width};radius={style.vertex_radius};"
         f"grid={style.grid_color}/{style.grid_width}"
     )
 

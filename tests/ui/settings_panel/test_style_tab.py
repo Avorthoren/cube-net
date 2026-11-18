@@ -35,7 +35,7 @@ def test_it_shows_the_style(qtbot: QtBot) -> None:
     assert [f.color() for f in tab.face_fields] == list(CUBE.colors)
     assert (tab.hatch_columns.value(), tab.hatch_rows.value()) == (10, 5)
     shown = (tab.dashes.value(), tab.edge_width.value(), tab.vertex_radius.value())
-    assert shown == (DEFAULT_STYLE.dashes_per_edge, DEFAULT_STYLE.edge_width, DEFAULT_STYLE.vertex_radius)
+    assert shown == (DEFAULT_STYLE.dashes_per_unit, DEFAULT_STYLE.edge_width, DEFAULT_STYLE.vertex_radius)
     assert tab.grid_width.value() == 1.0
     assert tab.edge_width.suffix() == ""
 
@@ -43,9 +43,9 @@ def test_it_shows_the_style(qtbot: QtBot) -> None:
 @pytest.mark.parametrize(
     ("box", "low", "high"),
     [
-        ("hatch_columns", 1, 30),
-        ("hatch_rows", 1, 30),
-        ("dashes", 1, 30),
+        ("hatch_columns", 0.01, 30),
+        ("hatch_rows", 0.01, 30),
+        ("dashes", 0.01, 30),
         ("edge_width", 1, 15),
         ("vertex_radius", least_vertex_radius(DEFAULT_STYLE.edge_width), 30),  # 140% of the default edges across
         ("grid_width", 0, 5),
@@ -56,6 +56,17 @@ def test_ranges(qtbot: QtBot, box: str, low: float, high: float) -> None:
     assert (field.minimum(), field.maximum()) == (low, high)
 
 
+def test_the_tiling_and_the_dashes_take_decimals(qtbot: QtBot) -> None:
+    tab = make(qtbot)
+    seen: list[Style] = []
+    tab.style_changed.connect(seen.append)
+    for field in (tab.hatch_columns, tab.hatch_rows, tab.dashes):
+        assert field.decimals() == 2
+    tab.hatch_columns.setValue(0.25)
+    tab.dashes.setValue(2.5)
+    assert seen[-1].hatch_columns == 0.25 and seen[-1].dashes_per_unit == 2.5
+
+
 def test_every_change_is_told(qtbot: QtBot) -> None:
     tab = make(qtbot)
     seen: list[Style] = []
@@ -64,7 +75,7 @@ def test_every_change_is_told(qtbot: QtBot) -> None:
     tab.dashes.setValue(3)
     tab.grid_width.setValue(0)
     assert [s.hatch_rows for s in seen] == [7, 7, 7]
-    assert seen[-1].dashes_per_edge == 3 and seen[-1].grid_width == 0
+    assert seen[-1].dashes_per_unit == 3 and seen[-1].grid_width == 0
     assert tab.grid_swatch.line_width() == 0
 
 
@@ -76,7 +87,7 @@ def test_restore_puts_back_just_its_section(qtbot: QtBot, monkeypatch: pytest.Mo
     monkeypatch.setattr("cube_net.ui.settings_panel.section.confirm_restore", lambda *_: True)
     tab.sections[CUTS_AND_FOLDS].restore_button.click()
     assert tab.style().edge_width == DEFAULT_STYLE.edge_width
-    assert tab.style().dashes_per_edge == DEFAULT_STYLE.dashes_per_edge
+    assert tab.style().dashes_per_unit == DEFAULT_STYLE.dashes_per_unit
     assert tab.edge_width.value() == DEFAULT_STYLE.edge_width
     assert tab.style().vertex_radius == 20
 

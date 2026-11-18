@@ -27,7 +27,7 @@ from cube_net.core.net import EdgeKind, HalfEdge, Net, NetInvariantError, NetVer
 from cube_net.core.origin import Origin
 from cube_net.core.project.project import Project, ProjectFileError
 from cube_net.core.project_settings import ProjectSettings, format_threshold
-from cube_net.core.style import Style
+from cube_net.core.style import Style, stored_name
 
 # Exact coordinates can have many digits, more than Python turns into text by default (a guard against huge numbers from
 # strangers, which doesn't apply here). A project must be saved and loaded, however complicated it got.
@@ -102,7 +102,9 @@ def read_origin(data: dict[str, Any] | None) -> Origin:
 
 
 def write_style(style: Style | None) -> dict[str, Any] | None:
-    return None if style is None else {field.name: getattr(style, field.name) for field in fields(Style)}
+    if style is None:
+        return None
+    return {stored_name(field.name): getattr(style, field.name) for field in fields(Style)}
 
 
 def read_style(data: object) -> Style | None:
@@ -112,7 +114,7 @@ def read_style(data: object) -> Style | None:
         return None
     if not isinstance(data, dict):
         raise TypeError(f"expected a style, got {data!r}")
-    return Style(**{field.name: data[field.name] for field in fields(Style)})
+    return Style(**{field.name: data[stored_name(field.name)] for field in fields(Style)})
 
 
 def _write_motion(motion: Rigid90) -> dict[str, Any]:
