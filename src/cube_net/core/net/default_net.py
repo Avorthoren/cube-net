@@ -8,6 +8,7 @@ from cube_net.core.body import CUBE, Body
 from cube_net.core.geometry import Vec
 from cube_net.core.net.builder import NetBuildError, RegionSpec, build_net
 from cube_net.core.net.net import Net
+from cube_net.core.net.surgery import dissolve_vertex
 
 
 def starting_net(body: Body) -> Net:
@@ -20,6 +21,7 @@ def starting_net(body: Body) -> Net:
             RegionSpec(piece.face, piece.placement, [piece.placement.apply(c) for c in piece.local_corners(body)])
         )
     net = build_net(body, specs)
+    _dissolve_inner_points(net)
     if body.vertex_order is not None:
         rank: dict[tuple[Vec, str | None], int] = {key: i for i, key in enumerate(body.vertex_order)}
         if set(rank) != {(v.position, v.point.vertex) for v in net.vertices if v.point.vertex is not None}:
@@ -30,6 +32,15 @@ def starting_net(body: Body) -> Net:
             v.id = i
         net.reindex()
     return net
+
+
+def _dissolve_inner_points(net: Net) -> None:
+    """Points inside the net that aren't vertices of the body go (as approving a cut removes them): a template's vertex
+    in the middle of a straight edge (no vertex of its body) may be there, between two folds."""
+    on_perimeter = {he.origin for he in net.half_edges if he.region is None}
+    for vertex in [v for v in net.vertices if v not in on_perimeter and v.point.vertex is None]:
+        dissolve_vertex(net, vertex)
+    net.reindex()
 
 
 def default_net() -> Net:

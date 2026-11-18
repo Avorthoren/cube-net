@@ -3,6 +3,8 @@
 
 """Fixtures for all core tests: bodies other than the cube (docs/template_plan.md, §2.1)."""
 
+from fractions import Fraction as F
+
 import pytest
 
 from cube_net.core.body import Body
@@ -203,3 +205,25 @@ PINWHEEL_FOLDS = [
 @pytest.fixture
 def pinwheel_template() -> Template:
     return drawn_template(PINWHEEL_LOOP, PINWHEEL_FOLDS).template
+
+
+# The cross (doubled), the bottom half of face 5 moved onto the top of face 1 (its A-B side on face 1's): face 5 is in
+# two pieces, glued along X-Y; X and Y are the middles of its sides (and of the sides glued to them).
+HALF_MOVED = [
+    (22, 21, "X", 1), (24, 21, "Y", 1), (24, 22, "F", 1), (24, 24, "G", 1), (26, 24, "F", 2), (26, 25, "Y", 3),
+    (26, 26, "B", 2), (24, 26, "D", 1), (24, 28, "B", 1), (24, 29, "Y", 2), (22, 29, "X", 2), (22, 28, "A", 1),
+    (22, 26, "C", 1), (20, 26, "A", 2), (20, 25, "X", 3), (20, 24, "E", 2), (22, 24, "H", 1), (22, 22, "E", 1),
+]  # fmt: skip
+HALF_MOVED_FOLDS = [("C1", "D1"), ("H1", "G1"), ("E1", "F1"), ("C1", "H1"), ("D1", "G1"), ("A1", "B1")]
+
+
+@pytest.fixture
+def half_moved_template() -> Template:
+    """The cross (doubled), the bottom half of face 5 moved onto the top of face 1, both halves in one colour."""
+    editor = drawn_template(HALF_MOVED, HALF_MOVED_FOLDS)
+    bottom, top = editor.template.face_at(Vec(23, F(43, 2))), editor.template.face_at(Vec(23, F(57, 2)))
+    assert bottom is not None and top is not None
+    color = editor.template.faces[bottom].color
+    assert color is not None
+    editor.set_face_color(top, color)
+    return editor.template

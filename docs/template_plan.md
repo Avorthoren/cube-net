@@ -300,7 +300,7 @@ Each one ends with the app working and all tests green.
 | T6b | Faces in pieces, one face by colour; faces and nets with holes; validation status; tiling across pieces (§8.2) | The torus's purple pieces glue into one ring |
 | T6c | The whole Style belongs to the template or the project, with the origin (§8.3) | Style per document |
 | T7 | File → New with Cube / Cube with a hole / Custom, projects from templates, the Style tab scrolling (§8.3) | The feature complete |
-| T8 | `idea.txt`/`plan.md` updated (once this plan is done), Russian texts | |
+| T8 | Russian texts checked (`idea.txt` and `plan.md` stay as they are: they're history now) | |
 
 Done in T1 beyond the table above: `Net.body_edge_of` / `Net.segment_faces` (a half-edge's body edge and colours,
 found in its region's frame) replace every "the ends share 2 faces" test; `PointLabels(body)`; `starting_net(body)`
@@ -367,8 +367,8 @@ Done in T6 (`ui/template/`):
   "validate", ...) and snapshots of the template (`snapshots.py` extracts them as .nettemplate files).
 - Not in template mode for now: the ruler. Ctrl+T and V are left out of Help's hotkeys (a page of their own later).
 
-- Still to do for other bodies: Help's animation of the cube paints with the open project's colours (it must use the
-  cube's, T7); the Style tab's scroll bar (T7).
+- Done later for other bodies: Help's animation of the cube paints with the cube's colours (T7); the Style tab
+  scrolls when the window is small (checked by the user on 2026-11-18).
 
 T2 is where any cube assumption I've missed would show up: the test bodies aren't cubes, have faces that aren't
 squares (and one that isn't convex), vertices with 4 faces, and two faces sharing several edges.
@@ -545,6 +545,16 @@ Done (step 3):
 - Template files: a face's `"number"` and `"hatch"` (only if it has them), the template's `"next_number"`; files
   without them read as before.
 
+Done (after step 3: no vertices where the line is smooth; decided with the user on 2026-11-19):
+- A labelled vertex of the template that, the faces glued from their pieces, lies in the middle of a straight edge
+  (two corners, both going straight on, between the same two vertices: 360 degrees) is no vertex of the body: its two
+  sides become one in each face (`template_body._drop_straight_vertices`). The half-moved cube's X and Y go; so do the
+  torus's R, S, T and U. Not if that would make two edges of one name, a side from a vertex to itself, or a loop of
+  fewer than 3 corners. The template itself doesn't change.
+- The starting net still has those points where they're corners of its pieces, under the template's names
+  (`PointLabels.named`); one inside the net (between two folds) goes, as approving removes such points. Gluing makes
+  them straight perimeter points, which approving removes too: no ghost is left.
+
 Done (step 4, first part: nets with holes):
 - `validate_net`: any number of perimeter cycles (a hole: one more), as long as the net is one piece (its regions
   hang together, by a point at least). A seam may stay in a finished net if it has one region on both sides: without
@@ -639,6 +649,10 @@ What it would touch, as far as known now:
 - The UI: drawing a second loop, and which loop a click is about.
 
 ### 10.2 Coarser hatching for large faces
+Done (2026-11-17): Faces tiling takes any positive number with 2 decimals (`TILING_RANGE` from 0.01), so a rectangle
+may span several units; the hatch stays tied to the grid (`hatch._indices`), one setting per document (the Style is
+the document's, §8.3). What follows is the idea as it was.
+
 Settings -> Style -> Faces tiling is the number of hatch cells per unit (columns x rows), at least 1 each. A template
 drawn large (the cube's net with faces of 4 x 4 units, say) is looked at zoomed out, and at least one cell per unit
 is a mess there. To consider: tiling below 1 per unit, so that one cell spans several units (e.g. 1/4: a cell 4 units

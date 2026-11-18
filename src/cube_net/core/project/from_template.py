@@ -12,12 +12,12 @@ from cube_net.core.net.default_net import starting_net
 from cube_net.core.project.project import Project
 from cube_net.core.project.template_codec import TemplateDocument
 from cube_net.core.project_settings import ProjectSettings
-from cube_net.core.template import body_from_template
+from cube_net.core.template.template_body import body_and_point_names
 
 
 def project_from_template(document: TemplateDocument) -> Project:
     """The new project. The template must be a valid one (`validate` finds no problem)."""
-    body = body_from_template(document.state.template)
+    body, names = body_and_point_names(document.state.template)
     state = EditorSnapshot(starting_net(body), None, None, 0, document.state.origin)
     settings = ProjectSettings(face_colors=body.colors, style=document.style)
-    return Project(state, History(), settings, PointLabels(body))
+    return Project(state, History(), settings, PointLabels.named(body, names))  # X_1 where the template has X_1

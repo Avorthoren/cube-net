@@ -37,6 +37,17 @@ class PointLabels:
         labels._next = next_index
         return labels
 
+    @classmethod
+    def named(cls, body: Body, names: dict[SurfacePoint, str]) -> PointLabels:
+        """New labels, with these points (not vertices of the body) already named; other points get names after."""
+        labels = cls(body)
+        if len(set(names.values())) != len(names) or set(names.values()) & labels._taken:
+            raise ValueError("two points have the same name")
+        labels._names.update(names)
+        labels._taken.update(names.values())
+        labels._skip_taken()
+        return labels
+
     def saved(self) -> tuple[dict[SurfacePoint, str], int]:
         """What makes them differ from new ones: the names of all but the body's vertices, and the next name's
         number."""

@@ -428,7 +428,8 @@ class TestBodies:
         body = project.state.net.body
         data = encode_project(project)
         assert sum("holes" in face for face in data["body"]["faces"]) == 2
-        assert sum("corners" in piece for piece in data["body"]["start"]) == 4
+        # The rings' 4 pieces, and 2 faces whose sides R, S, T, U (no vertices of the body: straight) divide.
+        assert sum("corners" in piece for piece in data["body"]["start"]) == 6
         again = round_trip(project).state.net.body
         assert all(again.face(n) == body.face(n) for n in body.face_numbers)
         assert again.start == body.start and again.area == body.area
