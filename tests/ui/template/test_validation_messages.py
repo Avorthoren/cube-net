@@ -4,7 +4,8 @@
 import pytest
 
 from cube_net.core.template import ValidationFailure, ValidationProblem
-from cube_net.ui.template.validation_messages import failure_text, groups_listed, listed
+from cube_net.ui import palette
+from cube_net.ui.template.validation_messages import color_square, failure_text, groups_listed, listed
 
 P = ValidationProblem
 
@@ -55,4 +56,47 @@ def test_texts(failure: ValidationFailure, text: str) -> None:
 
 def test_every_problem_has_a_text() -> None:
     for problem in ValidationProblem:
-        assert failure_text(ValidationFailure(problem, ("A", "B"), (("A1-B1", "A1-B2"),)))
+        assert failure_text(ValidationFailure(problem, ("A", "B"), (("A1-B1", "A1-B2"),), colors=("#FFFFFF",)))
+
+
+@pytest.mark.parametrize(
+    ("problem", "one", "many"),
+    [
+        (
+            ValidationProblem.PIECES_APART,
+            "Pieces of this face aren't glued together: {}.",
+            "Pieces of some faces aren't glued together: {}.",
+        ),
+        (
+            ValidationProblem.SELF_INTERSECTING,
+            "This face self-intersects after gluing: {}.",
+            "Some faces self-intersect after gluing: {}.",
+        ),
+    ],
+)
+def test_faces_shown_as_squares_of_their_colours(problem: ValidationProblem, one: str, many: str, qapp: object) -> None:
+    a, b, c = (color_square(color) for color in ("#8B45B5", "#FFFFFF", "#008A4B"))
+    assert failure_text(ValidationFailure(problem, colors=("#8B45B5",))) == one.format(a)
+    text = failure_text(ValidationFailure(problem, colors=("#8B45B5", "#FFFFFF", "#008A4B")))
+    assert text == many.format(f"{a}, {b} and {c}")
+
+
+def test_a_square_is_an_image_of_its_colour(qapp: object) -> None:
+    import base64
+
+    from PyQt6.QtGui import QImage
+
+    square = color_square("#8B45B5")
+    assert square.startswith('<img src="data:image/png;base64,') and square.endswith('">')
+    image = QImage.fromData(base64.b64decode(square.split(",", 1)[1][:-2]))
+    middle = image.pixelColor(image.width() // 2, image.height() // 2)
+    assert middle.name().upper() == "#8B45B5"
+    assert image.pixelColor(0, 0).name() == palette.COLOR_SQUARE_OUTLINE.name()
+
+
+def test_folds_of_one_colour() -> None:
+    failure = ValidationFailure(ValidationProblem.SAME_COLOR_FOLD, ("A1-B1",))
+    assert failure_text(failure) == (
+        "You have a fold between faces of the same color: A1-B1. A fold separates two faces: give them different "
+        "colors."
+    )

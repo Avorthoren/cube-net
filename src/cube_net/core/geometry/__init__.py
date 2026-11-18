@@ -5,7 +5,7 @@
 
 from cube_net.core.geometry.box import Box
 from cube_net.core.geometry.convex_hull import convex_hull
-from cube_net.core.geometry.polygon import polygon_contains, signed_area
+from cube_net.core.geometry.polygon import loops_contain, polygon_contains, signed_area
 from cube_net.core.geometry.predicates import (
     IntersectionKind,
     SegmentIntersection,
@@ -28,6 +28,7 @@ __all__ = [
     "Vec",
     "classify_segments",
     "convex_hull",
+    "loops_contain",
     "on_segment",
     "orient",
     "polygon_contains",

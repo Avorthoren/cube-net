@@ -406,6 +406,16 @@ RUSSIAN: dict[str, str] = {
         "Вершина {name} не склеена сама с собой, а так не бывает."
     ),
     "Net should have at least 4 faces.": "В развёртке должно быть хотя бы 4 грани.",
+    "You have folds between faces of the same color: {list}. A fold separates two faces: give them different "
+    "colors.": "У вас есть сгибы между гранями одного цвета: {list}. Сгиб разделяет две грани: назначьте им разные "
+    "цвета.",
+    "You have a fold between faces of the same color: {list}. A fold separates two faces: give them different "
+    "colors.": "У вас есть сгиб между гранями одного цвета: {list}. Сгиб разделяет две грани: назначьте им разные "
+    "цвета.",
+    "Pieces of some faces aren't glued together: {list}.": "Части некоторых граней не склеены друг с другом: {list}.",
+    "Pieces of this face aren't glued together: {list}.": "Части этой грани не склеены друг с другом: {list}.",
+    "Some faces self-intersect after gluing: {list}.": "Некоторые грани самопересекаются после склеивания: {list}.",
+    "This face self-intersects after gluing: {list}.": "Эта грань самопересекается после склеивания: {list}.",
     "Indices for vertices {list} have gaps. Reindex automatically?": (
         "В индексах вершин {list} есть пропуски. Перенумеровать автоматически?"
     ),

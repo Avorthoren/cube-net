@@ -3,11 +3,17 @@
 
 """What validating a template says (docs/template_idea.txt, Validation): a `ValidationFailure` in words, in the user's
 language. Lists read like "A-CT, AS-QC and Z-R"; cuts and their folds like "A1-B1 and A1-B3; S2-Q3 and S1-Q1, S3-Q5";
-folds named the same like "A1-B1 and A2-B2; S1-Q1, S2-Q3 and S3-Q2"."""
+folds named the same like "A1-B1 and A2-B2; S1-Q1, S2-Q3 and S3-Q2"; faces as squares of their colours (a message
+that has them is rich text)."""
 
 from collections.abc import Sequence
 
+from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
+from PyQt6.QtGui import QColor, QFontMetrics, QImage, QPainter
+from PyQt6.QtWidgets import QApplication
+
 from cube_net.core.template import ValidationFailure, ValidationProblem
+from cube_net.ui import palette
 from cube_net.ui.i18n import tr
 
 # After reindexing, when nothing else was wrong.
@@ -30,6 +36,21 @@ def listed(items: Sequence[str]) -> str:
     if len(items) == 1:
         return items[0]
     return tr("{items} and {last}", items=", ".join(items[:-1]), last=items[-1])
+
+
+def color_square(color: str) -> str:
+    """A square of the colour, outlined, as high as a capital letter of the messages' font, in rich text."""
+    size = QFontMetrics(QApplication.font()).capHeight() + 2
+    image = QImage(size, size, QImage.Format.Format_ARGB32)
+    image.fill(palette.COLOR_SQUARE_OUTLINE)
+    painter = QPainter(image)
+    painter.fillRect(1, 1, size - 2, size - 2, QColor(color))
+    painter.end()
+    data = QByteArray()
+    buffer = QBuffer(data)
+    buffer.open(QIODevice.OpenModeFlag.WriteOnly)
+    image.save(buffer, "PNG")
+    return f'<img src="data:image/png;base64,{bytes(data.toBase64()).decode()}">'
 
 
 def groups_listed(groups: Sequence[Sequence[str]]) -> str:
@@ -107,6 +128,23 @@ def failure_text(failure: ValidationFailure) -> str:
                     list=listed(names),
                 )
             return tr("Vertex {name} is not glued to itself, which is impossible.", name=names[0])
+        case ValidationProblem.SAME_COLOR_FOLD:
+            if many:
+                return tr(
+                    "You have folds between faces of the same color: {list}. A fold separates two faces: give them "
+                    "different colors.",
+                    list=listed(names),
+                )
+            return tr(
+                "You have a fold between faces of the same color: {list}. A fold separates two faces: give them "
+                "different colors.",
+                list=listed(names),
+            )
+        case ValidationProblem.PIECES_APART:
+            squares = [color_square(c) for c in failure.colors]
+            if len(squares) > 1:
+                return tr("Pieces of some faces aren't glued together: {list}.", list=listed(squares))
+            return tr("Pieces of this face aren't glued together: {list}.", list=listed(squares))
         case ValidationProblem.TOO_FEW_FACES:
             return tr("Net should have at least 4 faces.")
         case ValidationProblem.FACE_TOUCHES_ITSELF:
@@ -115,6 +153,11 @@ def failure_text(failure: ValidationFailure) -> str:
                 "itself, must lie between two faces. Divide the face there with a fold.",
                 list=listed(names),
             )
+        case ValidationProblem.SELF_INTERSECTING:
+            squares = [color_square(c) for c in failure.colors]
+            if len(squares) > 1:
+                return tr("Some faces self-intersect after gluing: {list}.", list=listed(squares))
+            return tr("This face self-intersects after gluing: {list}.", list=listed(squares))
         case ValidationProblem.INDEX_GAPS:
             if many:
                 return tr("Indices for vertices {list} have gaps. Reindex automatically?", list=listed(names))

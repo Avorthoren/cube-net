@@ -107,3 +107,55 @@ def test_a_slit_whose_sides_are_one_edge_is_a_fold(draw: Callable[..., TemplateE
     assert len(at_f) == 1  # F_1 and F_2 are one point
     folds = {frozenset((he.origin.position, he.destination.position)) for he in net.fold_edges()}
     assert frozenset((Vec(11, 11), Vec(11, 12))) in folds and frozenset((Vec(11, 10), Vec(11, 11))) in folds
+
+
+# The cross (doubled), the bottom half of face 5 moved onto the top of face 1 (its A-B side on face 1's): face 5 is in
+# two pieces, glued along X-Y; X and Y are the middles of its sides (and of the sides glued to them).
+HALF_MOVED = [
+    (22, 21, "X", 1), (24, 21, "Y", 1), (24, 22, "F", 1), (24, 24, "G", 1), (26, 24, "F", 2), (26, 25, "Y", 3),
+    (26, 26, "B", 2), (24, 26, "D", 1), (24, 28, "B", 1), (24, 29, "Y", 2), (22, 29, "X", 2), (22, 28, "A", 1),
+    (22, 26, "C", 1), (20, 26, "A", 2), (20, 25, "X", 3), (20, 24, "E", 2), (22, 24, "H", 1), (22, 22, "E", 1),
+]  # fmt: skip
+HALF_MOVED_FOLDS = [("C1", "D1"), ("H1", "G1"), ("E1", "F1"), ("C1", "H1"), ("D1", "G1"), ("A1", "B1")]
+
+
+def half_moved(draw: Callable[..., TemplateEditor]) -> Template:
+    editor = draw(HALF_MOVED, HALF_MOVED_FOLDS)
+    bottom, top = editor.template.face_at(Vec(23, F(43, 2))), editor.template.face_at(Vec(23, F(57, 2)))
+    assert bottom is not None and top is not None
+    color = editor.template.faces[bottom].color
+    assert color is not None
+    editor.set_face_color(top, color)
+    return editor.template
+
+
+def test_a_face_in_two_pieces_is_one_face(draw: Callable[..., TemplateEditor]) -> None:
+    template = half_moved(draw)
+    assert validate(template) is None
+    body = body_from_template(template)
+    assert len(body.face_numbers) == 6 and body.area == 24  # the cube, doubled
+    assert {body.vertex_angle(v) for v in body.vertex_names} == {270, 360}  # X and Y: the middles of edges
+    assert {v for v in body.vertex_names if body.vertex_angle(v) == 360} == {"X", "Y"}
+    net = starting_net(body)
+    validate_net(net)
+    assert len(net.regions) == 7  # the pieces, where they are
+    pieces = [r for r in net.regions if r.face == next(f for f in body.face_numbers if len(body.face(f).corners) == 6)]
+    assert len(pieces) == 2
+    # The cut between the pieces is inside the face: on the perimeter twice, coloured by that face alone.
+    inside = [he for he in net.boundary_edges() if len(net.segment_faces(he)) == 1]
+    assert len(inside) == 2
+
+
+def test_a_ring() -> None:
+    from cube_net.core.project.builtin_templates import cube_with_a_hole
+
+    body = body_from_template(cube_with_a_hole().state.template)
+    rings = [f for f in body.face_numbers if len(body.face(f).loops) == 2]
+    assert len(body.face_numbers) == 10 and len(rings) == 2
+    for f in rings:
+        face = body.face(f)
+        middle = sum(face.loops[1], Vec(0, 0)) / len(face.loops[1])  # inside the hole
+        assert not face.contains(middle) and face.contains(face.loops[1][0])
+    net = starting_net(body)
+    validate_net(net)
+    assert len(net.regions) == 12

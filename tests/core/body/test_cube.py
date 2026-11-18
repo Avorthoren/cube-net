@@ -23,7 +23,7 @@ DEFAULT_NET_IMAGES: dict[str, set[Vec]] = {
     "H": {Vec(11, 12)},  # H_1
 }
 
-PLACEMENTS = dict(CUBE.start)
+PLACEMENTS = {p.face: p.placement for p in CUBE.start}
 
 
 def edge(name: str) -> BodyEdge:

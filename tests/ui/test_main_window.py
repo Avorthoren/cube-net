@@ -2023,7 +2023,7 @@ class TestUnsavedChanges:
         window.new_action.trigger()
         body = window.net.body
         template = cube_with_a_hole()
-        assert len(body.face_numbers) == len(template.state.template.faces)
+        assert len(body.face_numbers) == len({face.color for face in template.state.template.faces})  # one per colour
         assert window.editor.origin == template.state.origin
         assert window.project_settings.style == template.style
         assert template.style is not None and template.style.hatch_rows == net_style.HATCH_ROWS

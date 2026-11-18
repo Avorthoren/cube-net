@@ -25,7 +25,10 @@ def test_a_project_of_it_is_a_torus() -> None:
     project = project_from_template(cube_with_a_hole())
     validate_net(project.state.net)
     body = project.state.net.body
-    # A cube with a hole is a torus: V - E + F = 0.
-    assert len(body.vertex_names) - len(body.edges) + len(body.face_numbers) == 0
+    # Its purple and green pieces are glued into rings: 12 pieces, 10 faces, 2 of them with a hole.
+    holes = [len(body.face(n).loops) - 1 for n in body.face_numbers]
+    assert len(holes) == 10 and sorted(holes)[-3:] == [0, 1, 1]
+    # A cube with a hole is a torus: V - E + F = 0, where a face with h holes counts 1 - h.
+    assert len(body.vertex_names) - len(body.edges) + sum(1 - h for h in holes) == 0
     assert project.settings.style == cube_with_a_hole().style
     assert project.state.origin == cube_with_a_hole().state.origin

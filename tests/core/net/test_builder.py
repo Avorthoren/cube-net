@@ -21,7 +21,7 @@ def square(face: int, origin: Vec) -> RegionSpec:
 
 def default_squares(**moved: Vec) -> list[RegionSpec]:
     """The default net's squares; `moved` overrides origins, e.g. default_squares(f5=Vec(20, 20))."""
-    origins = {f: dict(CUBE.start)[f].t for f in FACES}
+    origins = {f: {p.face: p.placement for p in CUBE.start}[f].t for f in FACES}
     for key, origin in moved.items():
         origins[int(key[1:])] = origin
     return [square(f, origins[f]) for f in FACES]
@@ -35,7 +35,7 @@ def test_default_squares_build() -> None:
 def test_shared_side_inside_a_face_is_seam() -> None:
     """Face 2 cut along its diagonal G-C into two triangles: the diagonal is a SEAM, the cube edges stay FOLDs."""
     specs = [s for s in default_squares() if s.face != 2]
-    p = dict(CUBE.start)[2]
+    p = {p.face: p.placement for p in CUBE.start}[2]
     h, g, d, c = (p.apply(corner) for corner in LOCAL_CORNERS)
     specs += [RegionSpec(2, p, [h, g, c]), RegionSpec(2, p, [g, d, c])]
     net = build_net(CUBE, specs)

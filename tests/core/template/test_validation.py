@@ -8,6 +8,7 @@ import pytest
 
 from cube_net.core.geometry import Vec
 from cube_net.core.template import Fold, Label, Template, TemplateEditor, ValidationProblem, reindexed, validate
+from cube_net.core.template.glued_faces import glue_faces
 
 type Draw = Callable[[list[tuple[int, int, str, int]], list[tuple[str, str]]], TemplateEditor]
 
@@ -48,8 +49,35 @@ def test_1_every_face_has_a_colour(cross_template: Template) -> None:
 
 
 def test_white_is_a_colour(cross_template: Template) -> None:
-    faces = tuple(replace(face, color="#FFFFFF") for face in cross_template.faces)
+    faces = tuple(replace(face, color="#FFFFFF") if i == 0 else face for i, face in enumerate(cross_template.faces))
     assert validate(replace(cross_template, faces=faces)) is None
+
+
+# Where the cube's faces are in the cross (`cross_template`), doubled: 1 at the top, 2 in the middle, 3 and 4 right and
+# left of it, 6 below it, 5 at the bottom.
+CROSS_CENTRES = {1: Vec(23, 27), 2: Vec(23, 25), 3: Vec(25, 25), 4: Vec(21, 25), 5: Vec(23, 21), 6: Vec(23, 23)}
+
+
+def coloured_alike(template: Template, *cube_faces: int) -> Template:
+    """The cross with these cube faces in one colour (the first one's)."""
+    pieces = [_face_at(template, CROSS_CENTRES[k]) for k in cube_faces]
+    color = template.faces[pieces[0]].color
+    faces = tuple(replace(face, color=color) if i in pieces else face for i, face in enumerate(template.faces))
+    return replace(template, faces=faces)
+
+
+def _face_at(template: Template, centre: Vec) -> int:
+    index = template.face_at(centre / 2)  # the centres are doubled, as in the fixture
+    assert index is not None
+    return index
+
+
+def test_two_faces_of_one_colour_glued_by_a_pair_are_one(cross_template: Template) -> None:
+    """The left face and the top one share a cube edge, a pair of loop segments: in one colour, they're one face."""
+    template = coloured_alike(cross_template, 4, 1)
+    assert validate(template) is None
+    gluing = glue_faces(template)
+    assert len(gluing.faces) == 5 and not gluing.apart and not gluing.broken
 
 
 def test_2_every_vertex_has_a_label(cross_template: Template) -> None:
@@ -124,7 +152,7 @@ def test_10_through_chains(pinwheel_template: Template) -> None:
     assert validate(pinwheel_template) is None
 
 
-def test_11_at_least_four_faces(
+def test_13_at_least_four_faces(
     draw: Draw, cross_drawing: tuple[list[tuple[int, int, str, int]], list[tuple[str, str]]]
 ) -> None:
     loop, folds = cross_drawing
@@ -132,7 +160,28 @@ def test_11_at_least_four_faces(
     assert failure is not None and failure.problem is ValidationProblem.TOO_FEW_FACES
 
 
-def test_13_indices_without_gaps_and_reindexing(cross_template: Template) -> None:
+def test_11_no_fold_between_faces_of_one_colour(cross_template: Template) -> None:
+    failure = validate(coloured_alike(cross_template, 1, 2))
+    assert failure is not None and failure.problem is ValidationProblem.SAME_COLOR_FOLD
+    assert failure.names == ("C1-D1",)
+
+
+def test_12_pieces_of_one_colour_glued_together(cross_template: Template) -> None:
+    template = coloured_alike(cross_template, 1, 6)  # opposite faces: nothing joins them
+    failure = validate(template)
+    assert failure is not None and failure.problem is ValidationProblem.PIECES_APART
+    assert failure.colors == (template.faces[_face_at(template, CROSS_CENTRES[1])].color,)
+
+
+def test_15_glued_faces_are_flat(cross_template: Template) -> None:
+    """Three faces around a corner of the cube, glued to each other by pairs: flat, they'd go only 270 degrees round."""
+    template = coloured_alike(cross_template, 1, 4, 5)
+    failure = validate(template)
+    assert failure is not None and failure.problem is ValidationProblem.SELF_INTERSECTING
+    assert failure.colors == (template.faces[_face_at(template, CROSS_CENTRES[1])].color,)
+
+
+def test_16_indices_without_gaps_and_reindexing(cross_template: Template) -> None:
     gappy = relabelled(cross_template, A3="A9", E2="E5")
     failure = validate(gappy)
     assert failure is not None and failure.problem is ValidationProblem.INDEX_GAPS

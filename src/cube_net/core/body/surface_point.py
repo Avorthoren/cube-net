@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from cube_net.core.body.body import Body, BodyEdge, Face, VertexName
-from cube_net.core.geometry import Vec, polygon_contains
+from cube_net.core.geometry import Vec
 
 
 class SurfacePointKind(Enum):
@@ -59,7 +59,7 @@ class SurfacePoint:
     forms: tuple[tuple[Face, Vec], ...] = field(compare=False, repr=False)
 
     def __init__(self, body: Body, face: Face, local: Vec) -> None:
-        if not polygon_contains(body.face(face).corners, local):
+        if not body.face(face).contains(local):
             raise ValueError(f"local point {local} is outside face {face}")
 
         sides = body.sides_through(face, local)

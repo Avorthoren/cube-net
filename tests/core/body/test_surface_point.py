@@ -22,7 +22,7 @@ from cube_net.core.geometry import Vec
 inner = st.fractions(min_value=0, max_value=1, max_denominator=1000).filter(lambda t: 0 < t < 1)
 unit = st.fractions(min_value=0, max_value=1, max_denominator=1000)
 edges = st.sampled_from(CUBE.edges)
-PLACEMENTS = dict(CUBE.start)
+PLACEMENTS = {p.face: p.placement for p in CUBE.start}
 
 
 def corner_local(face: int, vertex: str) -> Vec:

@@ -512,6 +512,24 @@ Done (step 1):
 - `ui/template/validate_button.py`: the square button below Net area (after a separator), as wide as the panel.
 - Session logs: "state validation ...".
 
+Done (step 2):
+- `core/body/body.py`: a `BodyFace` may have holes: its corners are loop after loop (`loop_bounds`; the outer one
+  counter-clockwise, holes clockwise), `next_corner` / `previous_corner` go along a loop, `contains` knows the holes
+  (`geometry.loops_contain`). The starting net is `StartPiece`s: a face whole, or in pieces (their corners in the
+  face's frame); a face with holes must be in pieces. Project files: a face's `"holes"` and a piece's `"corners"`,
+  written only when there are any, so files saved before read as they are.
+- `core/template/glued_faces.py`: `glue_faces` puts each colour's pieces into the frame of its basis piece (for now
+  the first one in the template's order; step 3 brings the counter) through the pairs of loop sides between them
+  (seams), and finds the glued face's loops. `body_from_template` makes the body's faces of them: the torus has 10
+  faces, the purple and the green rings. A vertex with only one face's pieces around it would be a point inside that
+  face (`starting_net` numbers such points last).
+- Validation: 11 no fold with one colour on both sides; 12 the pieces of a colour are glued together; 13 at least 4
+  faces counts colours; 14 a piece touching itself (as before); 15 a glued face is one flat piece of paper (every seam
+  falls onto its other side, no overlap, no touching but at seams); 16 reindexing. Faces are listed as squares of
+  their colours (`color_square`: an image in the rich text of the message).
+- The cut between pieces of one face (the torus's T2-N2 and N1-T1) is inside that face: its colour and white. The
+  cube with half of face 5 moved onto face 1 gives the cube (with flat vertices at the middles of the cut's sides).
+
 ### 8.3 T6c and T7: style per document, built-in templates
 (Asked for on 2026-11-17; it replaces the parts of §7 it contradicts.)
 - **File -> New** offers three: Cube, Cube with a hole (the torus template, once it's finished), and Custom (a

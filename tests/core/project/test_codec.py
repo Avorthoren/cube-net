@@ -419,6 +419,20 @@ class TestBodies:
         assert loaded.labels.name(SurfacePoint.at_vertex(again, body.vertex_names[0])) == body.vertex_names[0]
         assert state_contents(loaded.state) == state_contents(project.state)
 
+    def test_a_body_with_rings_and_faces_in_pieces(self) -> None:
+        """The torus: two faces with a hole, each in two pieces in the starting net."""
+        from cube_net.core.project.builtin_templates import cube_with_a_hole
+        from cube_net.core.project.from_template import project_from_template
+
+        project = project_from_template(cube_with_a_hole())
+        body = project.state.net.body
+        data = encode_project(project)
+        assert sum("holes" in face for face in data["body"]["faces"]) == 2
+        assert sum("corners" in piece for piece in data["body"]["start"]) == 4
+        again = round_trip(project).state.net.body
+        assert all(again.face(n) == body.face(n) for n in body.face_numbers)
+        assert again.start == body.start and again.area == body.area
+
     def test_a_cut_of_another_body_after_loading(self, l_prism: Body) -> None:
         editor = Editor(starting_net(l_prism))
         loaded = round_trip(project_of(editor, PointLabels(l_prism)))

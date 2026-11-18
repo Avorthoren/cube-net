@@ -68,6 +68,9 @@ TOOL_BUTTON_DOWN_TOP = QColor("#C6CBD2")
 TOOL_BUTTON_DOWN_BOTTOM = QColor("#E0E3E7")
 TOOL_BUTTON_DOWN_BORDER = QColor("#5F6368")
 
+# The outline of the colour squares that name faces in validation's messages (a white face shows too).
+COLOR_SQUARE_OUTLINE = QColor("#404040")
+
 # The Validate button of a template that's Valid: a muted green, raised like the other buttons.
 VALID_BUTTON_TOP = QColor("#E3F2E1")
 VALID_BUTTON_BOTTOM = QColor("#BFDDB9")

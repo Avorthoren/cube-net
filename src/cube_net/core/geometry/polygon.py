@@ -31,3 +31,20 @@ def polygon_contains(polygon: Sequence[Vec], p: Vec) -> bool:
             if p.x < x_cross:
                 inside = not inside
     return inside
+
+
+def loops_contain(loops: Sequence[Sequence[Vec]], p: Vec) -> bool:
+    """True if `p` is inside the region the loops bound (an outer one and holes inside it), or on one of them (exact;
+    even-odd rule over all their sides)."""
+    inside = False
+    for loop in loops:
+        n = len(loop)
+        for i in range(n):
+            a, b = loop[i], loop[(i + 1) % n]
+            if on_segment(p, a, b):
+                return True
+            if (a.y > p.y) != (b.y > p.y):
+                x_cross = a.x + (p.y - a.y) * (b.x - a.x) / (b.y - a.y)
+                if p.x < x_cross:
+                    inside = not inside
+    return inside

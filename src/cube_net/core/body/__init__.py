@@ -4,7 +4,7 @@
 """The body the net folds into: faces glued along their sides, and points on its surface (docs/template_plan.md, §3).
 The cube is one body."""
 
-from cube_net.core.body.body import Body, BodyEdge, BodyError, BodyFace, Face, Side, VertexName
+from cube_net.core.body.body import Body, BodyEdge, BodyError, BodyFace, Face, Side, StartPiece, VertexName
 from cube_net.core.body.cube import (
     BUILD_ORDER,
     CUBE,
@@ -33,6 +33,7 @@ __all__ = [
     "DashLayout",
     "Face",
     "Side",
+    "StartPiece",
     "SurfacePoint",
     "SurfacePointKind",
     "VertexName",

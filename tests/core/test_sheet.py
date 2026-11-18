@@ -12,5 +12,5 @@ def test_margin_is_five_units() -> None:
 
 def test_default_net_sheet() -> None:
     """The default cross spans [10, 13] x [10, 14], so the sheet is [5, 18] x [5, 19]."""
-    corners = [dict(CUBE.start)[f].apply(c) for f in FACES for c in LOCAL_CORNERS]
+    corners = [{p.face: p.placement for p in CUBE.start}[f].apply(c) for f in FACES for c in LOCAL_CORNERS]
     assert sheet_box(corners) == Box(Vec(5, 5), Vec(18, 19))

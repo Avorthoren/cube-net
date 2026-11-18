@@ -15,9 +15,10 @@ from __future__ import annotations
 import sys
 from dataclasses import fields
 from fractions import Fraction
+from itertools import pairwise
 from typing import Any
 
-from cube_net.core.body import CUBE, Body, SurfacePoint
+from cube_net.core.body import CUBE, Body, BodyFace, StartPiece, SurfacePoint
 from cube_net.core.cutting import CutPoint, Rearranged
 from cube_net.core.editor import EditorSnapshot
 from cube_net.core.geometry import Rigid90, Vec
@@ -129,11 +130,8 @@ def _write_body(body: Body) -> str | dict[str, Any]:
     if body is CUBE:
         return CUBE_BODY
     return {
-        "faces": [
-            {"corners": [write_vec(c) for c in body.face(n).corners], "names": list(body.face(n).names)}
-            for n in body.face_numbers
-        ],
-        "start": [{"face": face, "placement": _write_motion(placement)} for face, placement in body.start],
+        "faces": [_write_face(body.face(n)) for n in body.face_numbers],
+        "start": [_write_start_piece(piece) for piece in body.start],
         "colors": list(body.colors),
         "vertex_order": None if body.vertex_order is None else [[write_vec(p), name] for p, name in body.vertex_order],
     }
@@ -144,14 +142,46 @@ def _read_body(data: object) -> Body:
         return CUBE
     if not isinstance(data, dict):
         raise TypeError(f"expected a body, got {data!r}")
-    faces = {
-        n: ([read_vec(c) for c in face["corners"]], [_read_name(name) for name in face["names"]])
+    faces = {n: _read_loop(face) for n, face in enumerate(data["faces"], start=1)}
+    holes = {
+        n: [_read_loop(hole) for hole in face["holes"]]
         for n, face in enumerate(data["faces"], start=1)
+        if "holes" in face
     }
-    start = [(s["face"], _read_motion(s["placement"])) for s in data["start"]]
+    start = [
+        StartPiece(
+            s["face"],
+            _read_motion(s["placement"]),
+            None if "corners" not in s else tuple(read_vec(c) for c in s["corners"]),
+        )
+        for s in data["start"]
+    ]
     order = data.get("vertex_order")
     vertex_order = None if order is None else [(read_vec(p), _read_name(name)) for p, name in order]
-    return Body(faces, start, [str(c) for c in data["colors"]], vertex_order)
+    return Body(faces, start, [str(c) for c in data["colors"]], vertex_order, holes)
+
+
+def _write_face(face: BodyFace) -> dict[str, Any]:
+    """The outer loop's corners and names, and (only if there are any) the holes'."""
+    loops = [
+        {"corners": [write_vec(c) for c in face.corners[a:b]], "names": list(face.names[a:b])}
+        for a, b in pairwise(face.loop_bounds)
+    ]
+    data = loops[0]
+    if len(loops) > 1:
+        data["holes"] = loops[1:]
+    return data
+
+
+def _read_loop(data: dict[str, Any]) -> tuple[list[Vec], list[str]]:
+    return [read_vec(c) for c in data["corners"]], [_read_name(name) for name in data["names"]]
+
+
+def _write_start_piece(piece: StartPiece) -> dict[str, Any]:
+    data: dict[str, Any] = {"face": piece.face, "placement": _write_motion(piece.placement)}
+    if piece.corners is not None:  # a piece of the face
+        data["corners"] = [write_vec(c) for c in piece.corners]
+    return data
 
 
 def _read_name(name: object) -> str:

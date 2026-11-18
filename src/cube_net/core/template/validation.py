@@ -5,7 +5,9 @@
 rest; it says what to list, and the UI words it.
 
 The checks don't prove that a template is the net of a body, only reject what certainly isn't: every loop segment
-must be glued to exactly one other (its counterpart), and the gluing must keep coordinates rational.
+must be glued to exactly one other (its counterpart), and the gluing must keep coordinates rational. Faces of one
+colour are pieces of one face (docs/template_plan.md, §8.2): no fold between them, all glued together, and glued, one
+flat piece of paper.
 """
 
 from __future__ import annotations
@@ -15,7 +17,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 from cube_net.core.geometry import IntersectionKind, Vec, classify_segments
-from cube_net.core.template.template import Label, LoopVertex, Template
+from cube_net.core.template.glued_faces import glue_faces
+from cube_net.core.template.template import Fold, Label, LoopVertex, Template
 
 # The fewest faces a valid template has.
 MIN_FACES = 4
@@ -52,13 +55,22 @@ class ValidationProblem(Enum):
     # 10. Names whose instances aren't all glued together (`names`: like "A").
     NOT_GLUED = "not glued"
 
-    # 11. Fewer than 4 faces.
+    # 11. Folds with one colour on both sides (`names`: the folds, like "A1-B1"): a fold separates two faces.
+    SAME_COLOR_FOLD = "same color fold"
+
+    # 12. Colours whose pieces aren't all glued together (`colors`).
+    PIECES_APART = "pieces apart"
+
+    # 13. Fewer than 4 faces (colours: the pieces of one colour are one face).
     TOO_FEW_FACES = "too few faces"
 
-    # 12. Faces that touch themselves: a slit (or a point) inside a face (`names`: the vertices where, like "S2").
+    # 14. Faces that touch themselves: a slit (or a point) inside a face (`names`: the vertices where, like "S2").
     FACE_TOUCHES_ITSELF = "face touches itself"
 
-    # 13. Names whose indices don't go 1, 2, 3, ... (`names`); the UI offers to reindex them.
+    # 15. Faces glued from their pieces that aren't one flat piece of paper (`colors`): see `glued_faces`.
+    SELF_INTERSECTING = "self intersecting"
+
+    # 16. Names whose indices don't go 1, 2, 3, ... (`names`); the UI offers to reindex them.
     INDEX_GAPS = "index gaps"
 
 
@@ -74,6 +86,9 @@ class ValidationFailure:
 
     # How many there are, where nothing is listed (check 1: the faces without a colour).
     count: int = 0
+
+    # The faces to show, by their colours (checks 12 and 15), in the template's order.
+    colors: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -161,12 +176,24 @@ def validate(template: Template) -> ValidationFailure | None:
     if apart:
         return ValidationFailure(ValidationProblem.NOT_GLUED, apart)
 
-    if len(template.faces) < MIN_FACES:
+    colors = {i: face.color for i, face in enumerate(template.faces)}
+    one_color = tuple(fold.text for f, fold in zip(template.folds, folds, strict=True) if _same_color(template, f))
+    if one_color:
+        return ValidationFailure(ValidationProblem.SAME_COLOR_FOLD, one_color)
+
+    gluing = glue_faces(template)
+    if gluing.apart:
+        return ValidationFailure(ValidationProblem.PIECES_APART, colors=gluing.apart)
+
+    if len(set(colors.values())) < MIN_FACES:
         return ValidationFailure(ValidationProblem.TOO_FEW_FACES)
 
     touching = _faces_touching_themselves(template)
     if touching:
         return ValidationFailure(ValidationProblem.FACE_TOUCHES_ITSELF, touching)
+
+    if gluing.broken:
+        return ValidationFailure(ValidationProblem.SELF_INTERSECTING, colors=gluing.broken)
 
     gaps = _index_gaps(template)
     if gaps:
@@ -185,6 +212,12 @@ def reindexed(template: Template) -> Template:
         for i, v in enumerate(sorted(vertices, key=_index), start=1):
             result = result.with_label(v.id, Label(name, i))
     return result
+
+
+def _same_color(template: Template, fold: Fold) -> bool:
+    """Has the fold one colour on both sides?"""
+    sides = [f.color for f in template.faces if f.has_side(fold.start, fold.end) or f.has_side(fold.end, fold.start)]
+    return len(sides) == 2 and sides[0] == sides[1]
 
 
 def _first_texts(groups: Iterable[list[_Side]]) -> tuple[str, ...]:

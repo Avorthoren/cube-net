@@ -161,7 +161,7 @@ class TemplateMode(QObject):
             self._note("template", "validate", "ok")
             tell(self._parent, "Cube Net", no_problems_text())
             return
-        self._note("template", "validate", failure.problem.value, *failure.names)
+        self._note("template", "validate", failure.problem.value, *failure.names, *failure.colors)
         if failure.problem is not ValidationProblem.INDEX_GAPS:
             tell(self._parent, "Cube Net", failure_text(failure), icon=MessageIcon.WARNING)
             return
