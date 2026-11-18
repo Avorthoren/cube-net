@@ -66,6 +66,10 @@ class SheetView(QGraphicsView):
     # Left button released at a sheet point (x, y), unless it ended panning.
     left_released = pyqtSignal(float, float)
 
+    # A left press that would pan the sheet was released without moving (a click on what the tools don't claim) at a
+    # sheet point (x, y).
+    pan_clicked = pyqtSignal(float, float)
+
     # Left button double-clicked at a sheet point (x, y): the second press (the first one came as a press, which may
     # have started panning, and a release).
     left_double_clicked = pyqtSignal(float, float)
@@ -101,6 +105,8 @@ class SheetView(QGraphicsView):
         self._max_scale = zoom.DEFAULT_MAX_ZOOM
         self._press_claim: HitTest = lambda _x, _y: False
         self._pan_last: QPoint | None = None
+        # Where a press that pans began, until the mouse goes further than a drag starts (then it's no click).
+        self._pan_start: QPoint | None = None
         self._panning_enabled = True
         self._press_modifiers = Qt.KeyboardModifier.NoModifier
         self._shift_held = False
@@ -320,7 +326,7 @@ class SheetView(QGraphicsView):
         if event.button() == Qt.MouseButton.LeftButton:
             p = self.to_sheet(event.position())
             if self._panning_enabled and not self.press_claimed(p.x(), p.y()):
-                self._pan_last = event.position().toPoint()
+                self._pan_last = self._pan_start = event.position().toPoint()
                 self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
             else:
                 self.left_pressed.emit(p.x(), p.y())
@@ -344,6 +350,10 @@ class SheetView(QGraphicsView):
             return
         self._note_modifiers(event.modifiers())
         pos = event.position()
+        if self._pan_start is not None and (pos.toPoint() - self._pan_start).manhattanLength() >= (
+            QApplication.startDragDistance()
+        ):
+            self._pan_start = None  # a drag: no click
         if self._pan_last is not None:
             delta = pos.toPoint() - self._pan_last
             self._pan_last = pos.toPoint()
@@ -357,6 +367,10 @@ class SheetView(QGraphicsView):
             if self._pan_last is not None:
                 self._pan_last = None
                 self.viewport().unsetCursor()
+                if self._pan_start is not None:
+                    self._pan_start = None
+                    p = self.to_sheet(event.position())
+                    self.pan_clicked.emit(p.x(), p.y())
             else:
                 p = self.to_sheet(event.position())
                 self.left_released.emit(p.x(), p.y())

@@ -394,11 +394,11 @@ def test_cut_points_and_rejections_recorded(qtbot: QtBot, tmp_path: Path) -> Non
     view = window.sheet_view
     inside = net_style.CUT_HITBOX_PX / 2 / view.scale_factor()
     view.left_pressed.emit(11.5, 14 - inside)  # on the cut B_1-A_1
-    view.left_pressed.emit(12.5, 13.5)  # outside: rejected
+    view.left_pressed.emit(12.5, 12)  # on the cut below face 3, through D_1 at (12, 13): rejected
     view.left_pressed.emit(11.5, 13.5)
     assert window.recorder is not None
     lines = session_lines(window.recorder.log.path)
-    assert lines[-3:] == ["cut cutting 11.500,14.000", "cut rejected 12.500,13.500", "cut cutting 11.500,13.500"]
+    assert lines[-3:] == ["cut cutting 11.500,14.000", "cut rejected 12.500,12.000", "cut cutting 11.500,13.500"]
     window.stop_recording("test over")
     window.logging_action.trigger()  # a new file: its state block holds the cut line
     assert window.recorder is not None

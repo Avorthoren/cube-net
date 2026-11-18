@@ -12,13 +12,15 @@ Vertices are created in order along the line, so the names they get later are th
 """
 
 from dataclasses import dataclass
+from fractions import Fraction
 from itertools import pairwise
 
 from cube_net.core.body import SurfacePoint
 from cube_net.core.cutting.cut_line import CutLine, CutPoint
 from cube_net.core.cutting.images import counterpart_image
 from cube_net.core.cutting.pieces import pieces, region_at
-from cube_net.core.geometry import Vec, on_segment
+from cube_net.core.cutting.real_cut import real_cut
+from cube_net.core.geometry import Vec, on_segment, polygon_contains
 from cube_net.core.net import EdgeKind, HalfEdge, Net, NetCopy, NetVertex, Region
 from cube_net.core.net.surgery import add_edge, new_half_edge, new_vertex, outgoing, rotation_from, split_edge
 
@@ -48,15 +50,44 @@ def connected_regions(start: Region) -> set[Region]:
 
 
 def split_net(net: Net, line: CutLine) -> SplitNet:
-    """The net with the closed, valid cut line `line` turned into cuts."""
-    copy = net.copy()
-    stops = _create_stops(net, copy, line)
-    forward = [_connect(copy.net, a, b) for a, b in pairwise(stops)]
-    backward = [he.twin for he in forward]
-    _unzip(copy.net, stops, forward)
-    copy.net.reindex()
-    line_edges = frozenset(forward) | frozenset(backward)
-    return SplitNet(copy.net, line_edges, _same_half_cuts(copy.net, line_edges))
+    """The net with the closed, valid cut line `line` turned into cuts: each of its pieces (its parts on the net,
+    `real_cut`) in turn, the later ones in the net the earlier ones have cut."""
+    real = real_cut(net, line.points)
+    if real is None or not real.divides_at_end:
+        raise ValueError("the line doesn't divide the net at its end")
+    current, line_edges = net, frozenset[HalfEdge]()
+    for k, piece in enumerate(real.piece_lines()):
+        if k > 0:
+            piece = _relocated(current, piece)
+        copy = current.copy()
+        stops = _create_stops(current, copy, piece)
+        forward = [_connect(copy.net, a, b) for a, b in pairwise(stops)]
+        backward = [he.twin for he in forward]
+        _unzip(copy.net, stops, forward)
+        copy.net.reindex()
+        line_edges = frozenset(copy.edges[he] for he in line_edges) | frozenset(forward) | frozenset(backward)
+        current = copy.net
+    return SplitNet(current, line_edges, _same_half_cuts(current, line_edges))
+
+
+def _relocated(net: Net, piece: CutLine) -> CutLine:
+    """The piece with its ends on the cuts (or vertices) of `net`, which earlier pieces have cut: the cut at the same
+    place whose region the piece goes into."""
+    points = list(piece.points)
+    for end, toward in ((0, 1), (len(points) - 1, len(points) - 2)):
+        p = points[end].position
+        step = p + (points[toward].position - p) * Fraction(1, 1_000_000)
+        at_vertex = points[end].vertex is not None
+        for he in net.boundary_edges():
+            a, b = he.origin.position, he.destination.position
+            if (a == p) if at_vertex else on_segment(p, a, b):
+                assert he.region is not None
+                if polygon_contains(net.region_polygon(he.region), step):
+                    points[end] = CutPoint(p, he, he.origin) if at_vertex else CutPoint(p, he)
+                    break
+        else:
+            raise ValueError(f"no cut of the net at {p} for a piece of the line")
+    return CutLine(points)
 
 
 def _same_half_cuts(net: Net, line_edges: frozenset[HalfEdge]) -> frozenset[HalfEdge]:
@@ -90,9 +121,9 @@ def _endpoint_vertex(net: Net, copy: NetCopy, point: CutPoint) -> NetVertex:
     assert point.edge is not None
     region = point.edge.region
     assert region is not None
-    vertex = _vertex_on_cut(copy, point.edge, point.position, _surface_point(net, point.position, region))
     image = counterpart_image(net, point)
     assert image is not None
+    vertex = _vertex_on_cut(copy, point.edge, point.position, _surface_point(net, point.position, region))
     _vertex_on_cut(copy, image.edge, image.position, image.point)
     return vertex
 

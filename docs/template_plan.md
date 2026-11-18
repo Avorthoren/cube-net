@@ -554,8 +554,23 @@ Done (step 4, first part: nets with holes):
 - Splitting stops at such a seam where the line crosses it (`pieces(..., at_seams=True)`; no point is shown there).
   `surgery.corner` picks, of a region's corners at one vertex, the one whose angle holds the new edge.
 - Rearranging checks the overlap on every perimeter cycle of each half (holes too).
-- For now a cut line's ends must be on one perimeter cycle (from the outside to a hole it wouldn't divide the net);
-  the new cut rule (second part) lifts that.
+- (Until the second part, a cut line's ends had to be on one perimeter cycle.)
+
+Done (step 4, second part: the cut rule):
+- Decided with the user (2026-11-18): a line starts on the perimeter only; when it divides the net it ends where it
+  leaves the net (a point clicked beyond is dropped); while cutting, a click off the net adds a point there and a
+  drag there pans; off the net the line is thin, dashed and grey, its points small hollow circles.
+- `cutting/real_cut.py`: the line's stops (its points and where its segments cross cuts, rounded onto them) and its
+  pieces on the net; the first piece whose ends are already joined around the net (one perimeter cycle, or cycles
+  earlier pieces joined) divides it. `cutting/perimeter.py`: `segment_crossings` (a segment may cross cuts, not touch
+  the perimeter otherwise, nor cross a slit) and `project_onto`.
+- Rules: points may be anywhere but on the perimeter (unless put on a cut); at a point on the perimeter the line goes
+  into the net or out of it; the first part goes into it. The editor's state comes from the net: CUT_EDITING once
+  the line divides it exactly at its end; edits that would make it divide earlier, or not at its end, are refused.
+- `split_net` cuts along the pieces in turn, each in the net the earlier ones cut (its ends found again there).
+- UI: `SheetView.pan_clicked` (a press that would pan, released without moving); `CutLineItem` draws the parts off
+  the net grey and the points where the line crosses cuts like endpoints, with their counterpart images; typed points
+  may be off the net (Problem.OUTSIDE_NET is gone). Labels preview only a line that keeps the rules.
 
 ### 8.3 T6c and T7: style per document, built-in templates
 (Asked for on 2026-11-17; it replaces the parts of §7 it contradicts.)

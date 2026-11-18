@@ -9,7 +9,16 @@ import pytest
 from net_checks import overlap_area
 
 from cube_net.core.body import CUBE, SurfacePoint
-from cube_net.core.cutting import CutLine, CutPoint, SplitNet, overlapping_cuts, rearrange, segment_valid, split_net
+from cube_net.core.cutting import (
+    CutLine,
+    CutPoint,
+    SplitNet,
+    overlapping_cuts,
+    real_cut,
+    rearrange,
+    segment_valid,
+    split_net,
+)
 from cube_net.core.geometry import Vec, on_segment
 from cube_net.core.net import EdgeKind, HalfEdge, Net, NetVertex, Region, default_net
 
@@ -187,8 +196,9 @@ class TestOnRealNets:
             a = e1.origin.position + (e1.destination.position - e1.origin.position) * t1
             b = e2.origin.position + (e2.destination.position - e2.origin.position) * t2
             points = [CutPoint(a, e1), CutPoint(b, e2)]
-            if not segment_valid(net, points, 0):
-                continue
+            real = real_cut(net, points)
+            if not segment_valid(net, points, 0) or real is None or not real.divides_at_end:
+                continue  # not a line across the net (it leaves it on the way)
             split = split_net(net, CutLine(points))
             for he in split.net.boundary_edges():
                 if he not in split.line_edges and assert_agrees_with_exact_area(split, he):

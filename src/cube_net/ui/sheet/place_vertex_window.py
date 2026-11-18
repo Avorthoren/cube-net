@@ -45,10 +45,8 @@ from cube_net.ui.sheet.coordinate_row import CoordinateRow
 def problem_text(problem: Problem) -> str:
     """What the window says when the point can't go there."""
     match problem:
-        case Problem.OUTSIDE_NET:
-            return tr("The point is outside the net.")
         case Problem.ON_PERIMETER:
-            return tr("The point is on the perimeter: only the line's ends can be there.")
+            return tr("The point is on the perimeter: only a point put on a cut can be there.")
         case Problem.OFF_EDGE:
             return tr("The point is beyond the ends of its edge.")
         case Problem.OFF_FOLD:
@@ -56,7 +54,7 @@ def problem_text(problem: Problem) -> str:
         case Problem.TOO_MANY_POINTS:
             return tr("The line already has as many points as it can have.")
         case Problem.BREAKS_LINE:
-            return tr("From there, the line would leave the net, or touch or cross itself.")
+            return tr("From there, the line would touch the perimeter, or touch or cross itself.")
 
 
 class PlaceVertexWindow(SmallWindow):

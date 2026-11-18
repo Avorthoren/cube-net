@@ -57,10 +57,20 @@ def test_click_off_any_cut_in_default_does_nothing(net: Net) -> None:
 def test_rejection_keeps_the_line_and_reports_the_segment(net: Net, cut: Callable[[str], HalfEdge]) -> None:
     editor = Editor(net)
     editor.click(v("11.5", "14"), cut("B_1-A_1"))
-    rejection = editor.click(v("12.5", "13.5"), None)  # outside the net
+    rejection = editor.click(v("12.5", "12"), None)  # through the perimeter's vertex D_1 at (12, 13)
     assert rejection is not None
-    assert rejection.segment == (v("11.5", "14"), v("12.5", "13.5"))
+    assert rejection.segment == (v("11.5", "14"), v("12.5", "12"))
     assert positions(editor) == [v("11.5", "14")]
+
+
+def test_points_outside_the_net_and_the_line_ends_where_it_divides_it(net: Net, cut: Callable[[str], HalfEdge]) -> None:
+    """From the top of face 1 down, out of it into the empty corner on the left: the line divides the net where it
+    leaves it, and ends there (the point clicked outside is dropped)."""
+    editor = Editor(net)
+    editor.click(v("11.5", "14"), cut("B_1-A_1"))
+    assert editor.click(v("10.5", "13.5"), None) is None  # outside the net
+    assert editor.state is EditorState.CUT_EDITING
+    assert positions(editor) == [v("11.5", "14"), v("11", "13.75")]  # where it left face 1
 
 
 def test_two_images_of_the_same_point_may_be_the_ends(net: Net, cut: Callable[[str], HalfEdge]) -> None:

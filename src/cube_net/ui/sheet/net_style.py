@@ -48,6 +48,9 @@ CUT_LINE_HALO_PX = 3.0
 # Width of the segment from the cut line's last point to the mouse.
 RUBBER_BAND_PX = 1.5
 
+# Width of the cut line where it's off the net (thin and dashed), and of the outline of its points there.
+OFF_NET_LINE_PX = 1.5
+
 # Width of the ring around a highlighted (hovered) perimeter vertex.
 VERTEX_HIGHLIGHT_PX = 3.0
 

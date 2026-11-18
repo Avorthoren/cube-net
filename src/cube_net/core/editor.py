@@ -4,8 +4,11 @@
 """`Editor`: the state machine of the main feature (docs/idea.txt; docs/plan.md, section 5.1). No Qt.
 
 DEFAULT       click on a cut or a vertex    -> the cut line starts there              -> CUTTING
-CUTTING       click inside the net          -> a new point (if the segment is valid), on the fold line if clicked on one
-              click on a cut or a vertex    -> the last point (if the segment is valid) -> CUT_EDITING
+CUTTING       click anywhere                -> a new point (if the segment is valid), on the fold line if clicked on it;
+                                               off the net too (outside it, in a hole): it cuts nothing there
+              the line divides the net      -> it ends where it leaves the net (the rest dropped) -> CUT_EDITING
+                                               (docs/template_plan.md §8.2: a line from the outside into a hole only
+                                               opens a ring, and goes on)
 CUT_EDITING   click a segment's middle      -> a new point there
               delete an inner point         -> (if the shortcut segment is valid)
               move a point                  -> (if its segments stay valid; endpoints walk along the perimeter;
@@ -24,6 +27,7 @@ returns a `Rejection` with the segments to flash black.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import Enum
 
@@ -31,6 +35,7 @@ from cube_net.core.cutting import (
     MAX_POINTS_AFTER_FIRST,
     CutLine,
     CutPoint,
+    RealCut,
     Rearranged,
     SplitNet,
     along,
@@ -38,11 +43,10 @@ from cube_net.core.cutting import (
     closest_straight_point,
     invalid_segments,
     line_meets_segment,
-    on_one_perimeter,
     project_onto,
+    real_cut,
     rearrange,
     segment_allowed,
-    segment_valid,
     split_net,
     straighten,
 )
@@ -92,6 +96,7 @@ class Editor:
         self.cut_line: CutLine | None = None
         self.rearranged: Rearranged | None = None
         self._split: tuple[tuple[CutPoint, ...], SplitNet] | None = None
+        self._real_cache: tuple[Net, tuple[CutPoint, ...], RealCut | None] | None = None
 
         # How many cuts have been approved so far (0: this is still the net the editor started with).
         self.approved_cuts = 0
@@ -107,7 +112,41 @@ class Editor:
             return EditorState.CUT_APPROVING
         if self.cut_line is None:
             return EditorState.DEFAULT
-        return EditorState.CUT_EDITING if self.cut_line.closed else EditorState.CUTTING
+        return EditorState.CUT_EDITING if self._closed(tuple(self.cut_line.points)) else EditorState.CUTTING
+
+    def real_cut(self) -> RealCut | None:
+        """What the cut line cuts (its parts on the net), if there's a line (docs/template_plan.md §8.2)."""
+        if self.cut_line is None:
+            return None
+        return self._real(tuple(self.cut_line.points))
+
+    def _real(self, points: tuple[CutPoint, ...]) -> RealCut | None:
+        if self._real_cache is None or self._real_cache[0] is not self.net or self._real_cache[1] != points:
+            self._real_cache = (self.net, points, real_cut(self.net, points))
+        return self._real_cache[2]
+
+    def _closed(self, points: tuple[CutPoint, ...]) -> bool:
+        """Does the line divide the net in two, exactly at its last point (it's finished)?"""
+        if len(points) < 2 or not points[-1].on_perimeter:
+            return False
+        real = self._real(points)
+        return real is not None and real.divides_at_end
+
+    def _line_problems(self, points: list[CutPoint], changed: Sequence[int], finished: bool) -> list[int]:
+        """The segments of `points` that break the rules: of `changed` (and their neighbours, whose entering or leaving
+        the net may depend on them), or all of them if the line as a whole doesn't hold (`finished`: it must divide
+        the net exactly at its end; otherwise it mustn't divide it before its end)."""
+        near = sorted({j for i in changed for j in (i - 1, i, i + 1)})
+        bad = invalid_segments(self.net, points, near)
+        if bad:
+            return bad
+        real = self._real(tuple(points))
+        everything = list(range(len(points) - 1))
+        if real is None:
+            return everything
+        if finished and not real.divides_at_end:
+            return [j for j in changed if 0 <= j < len(points) - 1] or everything
+        return []
 
     @property
     def display_net(self) -> Net:
@@ -258,7 +297,10 @@ class Editor:
         if line.inner_count >= MAX_POINTS_AFTER_FIRST:
             return Rejection(((a, b),))
         before = self.snapshot()
-        line.points.insert(i + 1, CutPoint((a + b) / 2))
+        points = [*line.points[: i + 1], CutPoint((a + b) / 2), *line.points[i + 1 :]]
+        if self._line_problems(points, (i, i + 1), finished=True):
+            return Rejection(((a, b),))  # its middle on the perimeter
+        line.points[:] = points
         self._record(ActionKind.ADD_POINT, before)
         return None
 
@@ -269,7 +311,7 @@ class Editor:
         if not 0 < i < len(line.points) - 1:
             raise ValueError(f"only inner points can be deleted, not point {i} of {len(line.points)}")
         remaining = [p for j, p in enumerate(line.points) if j != i]
-        if not segment_valid(self.net, remaining, i - 1):
+        if self._line_problems(remaining, (i - 1,), finished=True):
             return Rejection(((remaining[i - 1].position, remaining[i].position),), tuple(remaining))
         before = self.snapshot()
         line.points[:] = remaining
@@ -343,9 +385,7 @@ class Editor:
         line = self._editing_line()
         moved = [*line.points[:i], target, *line.points[i + 1 :]]
         inner_over_perimeter = over_perimeter and not line.points[i].on_perimeter
-        bad = [i - 1, i] if inner_over_perimeter else invalid_segments(self.net, moved, (i - 1, i))
-        if not bad and not on_one_perimeter(self.net, moved[0], moved[-1]):
-            bad = [j for j in (i - 1, i) if 0 <= j < len(moved) - 1]
+        bad = [i - 1, i] if inner_over_perimeter else self._line_problems(moved, (i - 1, i), finished=True)
         if bad:
             return Rejection(tuple((moved[j].position, moved[j + 1].position) for j in bad))
         if target == line.points[i]:
@@ -447,10 +487,20 @@ class Editor:
         line = self.cut_line
         assert line is not None
         too_many = line.inner_count >= MAX_POINTS_AFTER_FIRST and not point.on_perimeter
-        apart = point.on_perimeter and not on_one_perimeter(self.net, line.points[0], point)
-        if too_many or apart or not segment_allowed(self.net, line, point):
-            return Rejection(((line.last.position, point.position),))
+        rejected = Rejection(((line.last.position, point.position),))
+        if too_many or not segment_allowed(self.net, line, point):
+            return rejected
+        points = [*line.points, point]
+        real = self._real(tuple(points))
+        if real is None:
+            return rejected
+        if real.dividing is not None:  # it divides the net: it ends where it leaves it (beyond is dropped)
+            end = real.stops[real.pieces[real.dividing][1]]
+            if not end.own:
+                points = [*line.points, end.point]
+                if self._line_problems(points, (len(points) - 2,), finished=True):
+                    return rejected
         before = self.snapshot()
-        line.points.append(point)
+        line.points[:] = points
         self._record(ActionKind.ADD_POINT, before)
         return None

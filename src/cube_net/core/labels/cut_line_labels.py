@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 """Development labels for the cut line being drawn: its points, the counterpart images of its endpoints, and the
-points where it crosses cube edges.
+points where it crosses cube edges (on the net only: off it, the line cuts nothing; where it crosses a cut, it gets a
+point like an endpoint).
 
 A new cube point shows the next free name (I, J, ...) in order along the line. These names are only previews: nothing
 is registered, because the line's points move and disappear while it's edited (a dragged point keeps its letter, and
@@ -13,7 +14,15 @@ Points at existing perimeter vertices are not listed: the net already labels the
 """
 
 from cube_net.core.body import SurfacePoint
-from cube_net.core.cutting import CutLine, counterpart_image, crossings, endpoint_point, surface_point_at
+from cube_net.core.cutting import (
+    CutLine,
+    counterpart_image,
+    crossings,
+    endpoint_point,
+    invalid_segments,
+    real_cut,
+    surface_point_at,
+)
 from cube_net.core.geometry import Vec
 from cube_net.core.labels.point_labels import PointLabels
 from cube_net.core.labels.vertex_labels import VertexLabel
@@ -38,8 +47,13 @@ def cut_line_labels(net: Net, line: CutLine, labels: PointLabels) -> list[tuple[
         used[point_name] = used.get(point_name, existing_images) + 1
         result.append((position, VertexLabel(point_name, used[point_name])))
 
-    for i, cut_point in enumerate(line.points):
-        if cut_point.vertex is None:
+    real = real_cut(net, line.points)
+    if real is None or invalid_segments(net, line.points, range(len(line.points) - 1)):
+        return result  # it breaks the rules somewhere (while a point is dragged): nothing to preview
+    for k, stop in enumerate(real.stops):
+        cut_point = stop.point
+        on_net = cut_point.on_perimeter or (k < len(real.inside) and real.inside[k]) or (k > 0 and real.inside[k - 1])
+        if cut_point.vertex is None and on_net:
             point = endpoint_point(net, cut_point)
             name = name_of(point)
             existing = len(net.images(point))
@@ -47,8 +61,8 @@ def cut_line_labels(net: Net, line: CutLine, labels: PointLabels) -> list[tuple[
             image = counterpart_image(net, cut_point)
             if image is not None:
                 add(image.position, name, existing)
-        if i + 1 < len(line.points):  # crossings with cube edges on the way to the next point
-            for crossing in crossings(net, [cut_point.position, line.points[i + 1].position]):
+        if k < len(real.inside) and real.inside[k]:  # crossings with cube edges on the way to the next stop
+            for crossing in crossings(net, [cut_point.position, real.stops[k + 1].point.position]):
                 point = surface_point_at(net, crossing)
                 add(crossing, name_of(point), len(net.images(point)))
     return result

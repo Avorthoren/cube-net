@@ -95,15 +95,14 @@ RUSSIAN: dict[str, str] = {
     "Coordinates of the point were set to:": "Координаты точки были изменены на:",
     "Coordinates of {name} were set to:": "Координаты {name} были изменены на:",
     "Enter whole numbers, with denominators above 0.": "Введите целые числа; знаменатели больше 0.",
-    "The point is outside the net.": "Точка вне развёртки.",
-    "The point is on the perimeter: only the line's ends can be there.": (
-        "Точка на периметре: там могут быть только концы линии."
+    "The point is on the perimeter: only a point put on a cut can be there.": (
+        "Точка на периметре: там может быть только точка, поставленная на разрез."
     ),
     "The point is beyond the ends of its edge.": "Точка за концами своего ребра.",
     "The point is beyond the ends of its fold line.": "Точка за концами своей линии сгиба.",
     "The line already has as many points as it can have.": "В линии уже столько точек, сколько может быть.",
-    "From there, the line would leave the net, or touch or cross itself.": (
-        "Оттуда линия вышла бы за развёртку или коснулась бы себя или пересекла себя."
+    "From there, the line would touch the perimeter, or touch or cross itself.": (
+        "Оттуда линия коснулась бы периметра или коснулась бы себя или пересекла себя."
     ),
     "Auto-start logging": "Автоматически начинать логирование",
     "Blink when target area achieved": "Мигать, когда цель достигнута",

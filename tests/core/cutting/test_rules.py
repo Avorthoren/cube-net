@@ -15,7 +15,7 @@ from cube_net.core.cutting import (
     segment_valid,
     strictly_inside,
 )
-from cube_net.core.cutting.rules import PROJECTION_STEP
+from cube_net.core.cutting.perimeter import PROJECTION_STEP
 from cube_net.core.geometry import Vec, on_segment
 from cube_net.core.net import HalfEdge, Net
 
@@ -76,8 +76,12 @@ def test_segment_valid_checks_any_segment_of_the_line(net: Net, cut: Callable[[s
     good = [CutPoint(v("11.5", "14"), top), CutPoint(v("11.5", "13.5")), CutPoint(v("11.7", "14"), top)]
     assert all(segment_valid(net, good, i) for i in range(2))
     assert invalid_segments(net, good, (0, 1)) == []
-    outside = [good[0], CutPoint(v("10.5", "13.5")), good[2]]  # the middle point is in the empty corner
-    assert invalid_segments(net, outside, (0, 1)) == [0, 1]
+    outside = [good[0], CutPoint(v("10.5", "13.5")), good[2]]  # the middle point is in the empty corner: allowed
+    assert invalid_segments(net, outside, (0, 1)) == []
+    through_a_vertex = [good[0], CutPoint(v("12.5", "12"))]  # through D_1 at (12, 13)
+    assert invalid_segments(net, through_a_vertex, (0,)) == [0]
+    out_at_once = [good[0], CutPoint(v("11.5", "14.5"))]  # straight out of the net from where it starts
+    assert invalid_segments(net, out_at_once, (0,)) == [0]
     crossing = [
         CutPoint(v("11.2", "14"), top),
         CutPoint(v("11.8", "13.5")),

@@ -97,6 +97,9 @@ CUT_LINE_HALO = QColor(255, 214, 0, 170)
 # The segment from the cut line's last point to the mouse.
 RUBBER_BAND = QColor(32, 33, 36, 200)
 
+# The cut line where it's off the net (outside it, or in a hole: it cuts nothing there), and its points there.
+CUT_LINE_OFF_NET = QColor("#8C8C8C")
+
 # A rejected segment is shown in this colour for a moment (docs/idea.txt: black for 200 ms).
 REJECTED = QColor("#000000")
 

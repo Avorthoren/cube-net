@@ -132,13 +132,20 @@ def test_midpoint_circles_are_hollow() -> None:
     assert any(with_circle.pixelColor(q) != without.pixelColor(q) for q in across_the_outline)
 
 
-def test_a_line_off_the_net_while_dragging_is_painted_without_colours() -> None:
+def test_a_line_off_the_net_is_thin_dashed_grey_with_hollow_points() -> None:
     item = CutLineItem(default_net())
     item.set_area(QRectF(5, 5, 13, 14))
     item.set_points([CutPoint(Vec(F(23, 2), F(27, 2))), CutPoint(Vec(9, 14)), CutPoint(Vec(9, 14))])
     image, world = render(item)  # must not raise, even with a zero-length segment
-    assert image.pixelColor(world.map(QPointF(9, 14)).toPoint()) == palette.DERIVED_POINT
+    centre = world.map(QPointF(9, 14))
+    r = net_style.derived_point_radius()
+    ring = [image.pixelColor(int(centre.x() + dx), int(centre.y())) for dx in (-r, r)]
+    grey = palette.CUT_LINE_OFF_NET
+    assert any(abs(c.red() - grey.red()) < 40 and abs(c.blue() - grey.blue()) < 40 for c in ring)
+    assert image.pixelColor(centre.toPoint()) != palette.DERIVED_POINT  # hollow
     assert item.crossings() == []
+    (entry,) = item.entries()  # where it leaves face 1, on its left side
+    assert entry.position.x == 11
 
 
 def test_a_pressed_midpoint_is_all_black_and_the_same_size() -> None:

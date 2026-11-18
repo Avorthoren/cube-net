@@ -16,6 +16,7 @@ from cube_net.core.cutting import (
     Rearranged,
     SplitNet,
     approve,
+    real_cut,
     rearrange,
     segment_valid,
     split_net,
@@ -274,6 +275,9 @@ def _random_line(net: Net, rng: random.Random) -> CutLine | None:
     for i in range(len(points) - 1):
         if not segment_valid(net, points[: i + 2], i):
             return None
+    real = real_cut(net, points)
+    if real is None or not real.divides_at_end:
+        return None  # not a finished line: it doesn't divide the net at its end (it left the net on the way)
     return CutLine(points)
 
 

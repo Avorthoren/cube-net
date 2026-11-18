@@ -257,6 +257,20 @@ class TestReleaseAndModifiers:
         with qtbot.assertNotEmitted(view.left_released):
             qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
 
+    def test_a_click_where_a_press_pans_is_a_pan_click(self, view: SheetView, qtbot: QtBot) -> None:
+        pos = view.from_sheet(QPointF(7, 7)).toPoint()
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        with qtbot.waitSignal(view.pan_clicked) as blocker:
+            qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        assert blocker.args == pytest.approx([7, 7], abs=2 / view.scale_factor())
+
+    def test_a_drag_that_pans_is_no_click(self, view: SheetView, qtbot: QtBot) -> None:
+        start = view.from_sheet(QPointF(7, 7)).toPoint()
+        with qtbot.assertNotEmitted(view.pan_clicked):
+            qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=start)
+            qtbot.mouseMove(view.viewport(), start + QPoint(40, -30))
+            qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=start + QPoint(40, -30))
+
     def test_press_modifiers(self, view: SheetView, qtbot: QtBot) -> None:
         pos = view.from_sheet(QPointF(11.5, 12.5)).toPoint()
         qtbot.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, pos)

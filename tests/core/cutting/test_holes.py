@@ -72,12 +72,36 @@ def test_a_cut_across_the_hidden_seam(ring: Net) -> None:
     validate_net(editor.net)
 
 
-def test_from_the_outside_to_the_hole_is_refused_for_now(ring: Net) -> None:
-    """Such a line wouldn't divide the net in two: it would only cut the ring open."""
+def test_cutting_the_ring_in_two_through_its_hole(ring: Net) -> None:
+    """The plan's example: a straight line up across the ring (x = 42), through the hole. Into the hole it only cuts
+    the ring open; out of it, it divides the net, and ends at the outer side."""
     editor = Editor(ring)
-    start, end = Vec(F(83, 2), 58), Vec(F(83, 2), 59)  # up from the bottom side to the hole's
+    start = Vec(42, 58)
     assert editor.click(start, cut_at(ring, start)) is None
-    assert editor.click(end, cut_at(ring, end)) is not None
+    assert editor.click(Vec(42, 60), None) is None  # in the hole
+    assert editor.state is EditorState.CUTTING  # the ring is only open
+    end = Vec(42, 62)
+    assert editor.click(end, cut_at(ring, end)) is None
+    assert editor.state is EditorState.CUT_EDITING
+    real = editor.real_cut()
+    assert real is not None and len(real.piece_lines()) == 2
+    split = editor.split()
+    assert_consistent(split.net)
+    half = connected_regions(split.net.regions[0])
+    assert 0 < len(half) < len(split.net.regions)
+    choice = next(he for he in split.net.boundary_edges() if he not in split.line_edges | split.same_half_cuts)
+    assert editor.glue(choice) is None and editor.rearranged is not None
+    if editor.rearranged.valid:
+        editor.approve()
+        validate_net(editor.net)
+
+
+def test_the_hole_alone_is_no_place_to_end(ring: Net) -> None:
+    """From the outside straight into the hole and onto its side: the ring is only open, the line goes on."""
+    editor = Editor(ring)
+    start, end = Vec(F(83, 2), 58), Vec(F(83, 2), 59)
+    assert editor.click(start, cut_at(ring, start)) is None
+    assert editor.click(end, cut_at(ring, end)) is None
     assert editor.state is EditorState.CUTTING
 
 

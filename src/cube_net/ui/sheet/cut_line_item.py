@@ -7,13 +7,16 @@ Segments and points follow the usual colouring rules (two-colour dashes, sector 
 as new. Points the user can't edit themselves are drawn as small dots (`net_style.derived_point_radius`) instead: the
 counterpart images of the endpoints (docs/idea.txt: z_3, black, on the counterpart cuts) and the points where the line
 crosses cube edges (grey; they become vertices of the new cuts). Once the line is applied they look like any other
-vertex.
+vertex. Off the net (outside it, or in a hole: docs/template_plan.md §8.2) the line cuts nothing: it's thin, dashed
+and grey there, and its points are small hollow circles; where it crosses a cut, it enters or leaves the net, and that
+point is drawn like an endpoint (with its counterpart image).
 While cutting, a thin line goes from the last point to the mouse. While editing, a hollow circle marks the middle of
 every segment. A rejected segment flashes black. While a point is being dragged, a part of the line may be off the net;
 such a part has no faces to take colours from and is shown without them until the point is released. Optionally,
 debug labels name the new points and images.
 """
 
+import contextlib
 import math
 from collections.abc import Sequence
 from itertools import pairwise
@@ -22,7 +25,15 @@ from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPen, QTransform
 from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 
-from cube_net.core.cutting import CutPoint, counterpart_image, crossings, endpoint_point, pieces
+from cube_net.core.cutting import (
+    CutPoint,
+    counterpart_image,
+    crossings,
+    endpoint_point,
+    on_the_perimeter,
+    pieces,
+    segment_crossings,
+)
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import VertexLabel
 from cube_net.core.net import HalfEdge, Net
@@ -69,22 +80,44 @@ class CutLineItem(QGraphicsItem):
         return self._labels
 
     def images(self) -> list[Vec]:
-        """Positions of the counterpart images of the endpoints."""
-        images = (counterpart_image(self._net, p) for p in self._points if p.on_perimeter)
+        """Positions of the counterpart images of the points on the perimeter (the line's own, and where it crosses
+        cuts)."""
+        images = (counterpart_image(self._net, p) for p in self._perimeter_points())
         return [image.position for image in images if image is not None]
 
+    def entries(self) -> list[CutPoint]:
+        """Where the segments cross cuts: the line enters or leaves the net there."""
+        result: list[CutPoint] = []
+        for a, b in pairwise(p.position for p in self._points):
+            result += segment_crossings(self._net, a, b) or []
+        return result
+
+    def _perimeter_points(self) -> list[CutPoint]:
+        return [*(p for p in self._points if p.on_perimeter), *self.entries()]
+
     def crossings(self) -> list[Vec]:
-        """Where the placed segments cross cube edges (between the line's own points)."""
+        """Where the placed segments cross cube edges on the net (between the line's own points)."""
         result: list[Vec] = []
         for a, b in pairwise(p.position for p in self._points):
             result += self._segment_crossings(a, b)
         return result
 
     def _segment_crossings(self, a: Vec, b: Vec) -> list[Vec]:
-        try:
-            return crossings(self._net, [a, b])
-        except ValueError:  # off the net while a point is being dragged
-            return []
+        result: list[Vec] = []
+        for start, end, on_net in self._parts(a, b):
+            if on_net:
+                with contextlib.suppress(ValueError):  # it can't be on the net after all (it breaks the rules there)
+                    result += crossings(self._net, [start, end])
+        return result
+
+    def _parts(self, a: Vec, b: Vec) -> list[tuple[Vec, Vec, bool]]:
+        """The segment a-b divided where it crosses cuts, each part on the net or off it."""
+        stops = [a, *(c.position for c in segment_crossings(self._net, a, b) or []), b]
+        result = []
+        for start, end in pairwise(stops):
+            m = (start + end) / 2
+            result.append((start, end, self._net.contains(m) and on_the_perimeter(self._net, m) is None))
+        return result
 
     def set_rubber_band(self, segment: tuple[Vec, Vec] | None) -> None:
         if segment != self._rubber:
@@ -144,7 +177,9 @@ class CutLineItem(QGraphicsItem):
             self._paint_segment(painter, world, a, b)
         for point in self._points:
             self._paint_point(painter, world, point)
-        for point in self._points:
+        for entry in self.entries():
+            self._paint_point(painter, world, entry)
+        for point in self._perimeter_points():
             image = counterpart_image(self._net, point)
             if image is not None:
                 self._paint_dot(painter, world, image.position, palette.COUNTERPART_IMAGE)
@@ -164,14 +199,20 @@ class CutLineItem(QGraphicsItem):
 
     def _paint_segment(self, painter: QPainter, world: QTransform, a: Vec, b: Vec) -> None:
         halo = net_style.EDGE_WIDTH_PX + 2 * net_style.CUT_LINE_HALO_PX
-        self._paint_line(painter, world, (a, b), palette.CUT_LINE_HALO, halo)
-        try:
-            parts = pieces(self._net, a, b)
-        except ValueError:  # off the net while a point is being dragged
-            self._paint_line(painter, world, (a, b), palette.RUBBER_BAND, net_style.RUBBER_BAND_PX)
-            return
-        for piece in parts:
-            paint_dashed(painter, world, self._net.body, piece.region, piece.start, piece.end)
+        for start, end, on_net in self._parts(a, b):
+            if not on_net:
+                self._paint_line(
+                    painter, world, (start, end), palette.CUT_LINE_OFF_NET, net_style.OFF_NET_LINE_PX, dashed=True
+                )
+                continue
+            self._paint_line(painter, world, (start, end), palette.CUT_LINE_HALO, halo)
+            try:
+                parts = pieces(self._net, start, end)
+            except ValueError:  # it can't be on the net after all (the line breaks the rules there)
+                self._paint_line(painter, world, (start, end), palette.RUBBER_BAND, net_style.RUBBER_BAND_PX)
+                continue
+            for piece in parts:
+                paint_dashed(painter, world, self._net.body, piece.region, piece.start, piece.end)
 
     def _outward_directions(self, world: QTransform) -> dict[Vec, QPointF]:
         """For points on the perimeter (endpoints and images): the unit device direction away from the net, so their
@@ -221,8 +262,11 @@ class CutLineItem(QGraphicsItem):
     def _paint_point(self, painter: QPainter, world: QTransform, point: CutPoint) -> None:
         try:
             faces = endpoint_point(self._net, point).faces
-        except ValueError:  # off the net while being dragged
-            self._paint_dot(painter, world, point.position, palette.DERIVED_POINT)
+        except ValueError:  # off the net: it cuts nothing there
+            r = net_style.derived_point_radius()
+            painter.setPen(QPen(palette.CUT_LINE_OFF_NET, net_style.OFF_NET_LINE_PX))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(world.map(to_qpointf(point.position)), r, r)
             return
         self._paint_circle(painter, world, point.position, faces)
 
