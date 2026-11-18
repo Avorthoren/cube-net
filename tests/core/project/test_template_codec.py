@@ -13,7 +13,7 @@ from cube_net.core.history import History
 from cube_net.core.origin import Origin
 from cube_net.core.project import ProjectFileError, TemplateDocument, decode_template, encode_template
 from cube_net.core.style import Style
-from cube_net.core.template import Template, TemplateEditor, TemplateSnapshot
+from cube_net.core.template import Template, TemplateEditor, TemplateSnapshot, ValidationStatus
 
 
 def document_of(editor: TemplateEditor) -> TemplateDocument:
@@ -55,6 +55,20 @@ def test_the_style(cross_template: Template) -> None:
     style = Style(3, 4, 7, 2.5, 5.0, "#ABCDEF", 0.5)
     document = TemplateDocument(TemplateSnapshot(cross_template), History(), style)
     assert round_trip(document).style == style
+
+
+@pytest.mark.parametrize("status", list(ValidationStatus))
+def test_the_validation_status(cross_template: Template, status: ValidationStatus) -> None:
+    document = TemplateDocument(TemplateSnapshot(cross_template), History(), validation=status)
+    assert round_trip(document).validation is status
+
+
+def test_a_template_saved_without_a_status_is_undefined(cross_template: Template) -> None:
+    data = encode_template(
+        TemplateDocument(TemplateSnapshot(cross_template), History(), validation=ValidationStatus.VALID)
+    )
+    del data["validation"]
+    assert decode_template(data).validation is ValidationStatus.UNDEFINED
 
 
 def test_a_template_saved_without_a_style_has_none(cross_template: Template) -> None:
@@ -105,6 +119,7 @@ def test_it_is_plain_json(cross_template: Template) -> None:
         lambda d: d.pop("history"),
         lambda d: d.__setitem__("style", {"edge_width": 4.0}),
         lambda d: d.__setitem__("style", "bold"),
+        lambda d: d.__setitem__("validation", "maybe"),
     ],
 )
 def test_damaged(cross_template: Template, change: Callable[[dict[str, Any]], None]) -> None:

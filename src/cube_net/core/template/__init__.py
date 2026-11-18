@@ -14,6 +14,7 @@ from cube_net.core.template.template import Fold, Label, LoopVertex, Template, T
 from cube_net.core.template.template_body import body_from_template
 from cube_net.core.template.template_editor import TemplateEditor, TemplateSnapshot, TemplateState
 from cube_net.core.template.validation import MIN_FACES, ValidationFailure, ValidationProblem, reindexed, validate
+from cube_net.core.template.validation_status import ValidationStatus
 
 __all__ = [
     "MIN_FACES",
@@ -31,6 +32,7 @@ __all__ = [
     "TemplateState",
     "ValidationFailure",
     "ValidationProblem",
+    "ValidationStatus",
     "body_from_template",
     "on_the_sheet",
     "reindexed",

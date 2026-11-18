@@ -483,7 +483,8 @@ the template itself (not Settings -> Style) makes it Undefined again.
   - Valid: inactive, "Validated" in its middle.
   - Invalid: active (to validate again and see the message), "Invalid" in its middle.
   - Inactive while the loop isn't closed.
-- Undo and Redo make it Undefined too, always (even back to a validated state).
+- Undo and Redo make it Undefined too (the user accepted always; as built, going back to the very template last
+  validated brings its status back).
 
 **Cuts in nets with holes.** Gluing the purple pieces along both of their sides makes a net with a hole, so projects
 must allow nets with holes, for every body (a cube's net can have holes too then).
@@ -501,6 +502,15 @@ must allow nets with holes, for every body (a cube's net can have holes too then
 2. Faces glued from pieces: the body's faces with holes, the two new checks, the cut inside a face coloured as one.
 3. Tiling across pieces: the counter, the basis piece, the hatches.
 4. Nets with holes in projects, and the new cut rule.
+
+Done (step 1):
+- `core/template/validation_status.py`: `ValidationStatus` (Undefined, Valid, Invalid), saved in the template's file as
+  `"validation"` (a file without it: Undefined). `TemplateMode` keeps the template the last Validate was about and
+  what it said: any other template is Undefined (so the origin, Settings -> Style, and undoing back to that very
+  template don't change it). Validating changes the status, so the template has changes to save. Closing gaps in
+  indices (the last check) makes it Valid. V and Edit -> Validate are disabled while it's Valid.
+- `ui/template/validate_button.py`: the square button below Net area (after a separator), as wide as the panel.
+- Session logs: "state validation ...".
 
 ### 8.3 T6c and T7: style per document, built-in templates
 (Asked for on 2026-11-17; it replaces the parts of §7 it contradicts.)

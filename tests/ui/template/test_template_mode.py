@@ -10,7 +10,7 @@ from pytestqt.qtbot import QtBot
 
 from cube_net.core.geometry import Vec
 from cube_net.core.project import load_document
-from cube_net.core.template import Label, TemplateState
+from cube_net.core.template import Label, TemplateState, ValidationStatus
 from cube_net.ui.style import DEFAULT_STYLE
 from cube_net.ui.template.template_mode import TemplateMode
 
@@ -107,3 +107,72 @@ def test_save_and_show_again(mode: TemplateMode, tmp_path: Path, qtbot: QtBot) -
     assert mode.editor.state is TemplateState.INITIAL and mode.area() is None and mode.style == DEFAULT_STYLE
     mode.show(document, path, STYLE)  # type: ignore[arg-type]
     assert mode.area() == 6 and mode.style == STYLE and not mode.is_dirty
+
+
+def test_the_status_after_validating(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch) -> None:
+    told(monkeypatch)
+    assert mode.status() is ValidationStatus.UNDEFINED and mode.can_validate()
+    mode.validate()
+    assert mode.status() is ValidationStatus.VALID and not mode.can_validate()  # nothing to validate again
+    assert mode.is_dirty  # the status is saved with the template
+
+
+def test_invalid_can_be_validated_again(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch) -> None:
+    texts = told(monkeypatch)
+    mode.editor.set_label(mode.editor.template.vertices[0].id, None)
+    mode.validate()
+    assert mode.status() is ValidationStatus.INVALID and mode.can_validate()
+    mode.validate()
+    assert len(texts) == 2 and texts[0] == texts[1]  # the message again
+
+
+def test_a_change_makes_it_undefined_and_undo_brings_it_back(
+    mode: TemplateMode, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    told(monkeypatch)
+    mode.validate()
+    mode.editor.set_face_color(0, "#ABCDEF")
+    assert mode.status() is ValidationStatus.UNDEFINED and mode.can_validate()
+    mode.editor.undo()  # the template it was about
+    assert mode.status() is ValidationStatus.VALID
+
+
+def test_moving_the_origin_keeps_the_status(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch) -> None:
+    from cube_net.core.origin import Origin
+
+    told(monkeypatch)
+    mode.validate()
+    mode.editor.move_origin(Origin().moved(Vec(11, 10), Vec(0, 0), "A3"))
+    assert mode.status() is ValidationStatus.VALID  # not a change of the template
+
+
+def test_reindexed_is_valid(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch) -> None:
+    told(monkeypatch)
+    monkeypatch.setattr("cube_net.ui.template.template_mode.ask_yes_no", lambda *_: True)
+    a3 = next(v.id for v in mode.editor.template.vertices if str(v.label) == "A3")
+    mode.editor.set_label(a3, Label("A", 7))
+    mode.validate()
+    assert mode.status() is ValidationStatus.VALID
+
+
+def test_no_closed_loop_no_validating(qtbot: QtBot) -> None:
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    mode = TemplateMode(parent, lambda *_: None)
+    mode.editor.add_point(Vec(1, 1))
+    assert not mode.can_validate()
+
+
+def test_the_status_is_saved_and_shown_again(
+    mode: TemplateMode, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    told(monkeypatch)
+    mode.validate()
+    path = tmp_path / "cross.nettemplate"
+    mode.save_to(path)
+    assert not mode.is_dirty
+    document = load_document(path)
+    mode.show(None, None, DEFAULT_STYLE)
+    assert mode.status() is ValidationStatus.UNDEFINED
+    mode.show(document, path, DEFAULT_STYLE)  # type: ignore[arg-type]
+    assert mode.status() is ValidationStatus.VALID and not mode.is_dirty

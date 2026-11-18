@@ -5,8 +5,9 @@
 and redo go on after reopening). Like a project's (docs/plan.md, section 5.3): exact numbers as strings, and every
 template stored once, in a table, the states referring to it by index.
 
-`{"format_version": 1, "kind": "template", "style": {...}, "templates": [...], "states": [...], "state": i,
-"history": {...}}` (no "style": saved before the style belonged to documents)
+`{"format_version": 1, "kind": "template", "style": {...}, "validation": "valid", "templates": [...], "states": [...],
+"state": i, "history": {...}}` (no "style": saved before the style belonged to documents; no "validation": saved
+before it was kept, Undefined)
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from cube_net.core.project.project import ProjectFileError
 from cube_net.core.style import Style
 from cube_net.core.template.template import Fold, Label, LoopVertex, Template, TemplateFace
 from cube_net.core.template.template_editor import TemplateSnapshot
+from cube_net.core.template.validation_status import ValidationStatus
 
 # Raise it whenever the format changes (and keep reading the older ones, if there's anything worth keeping).
 TEMPLATE_FORMAT_VERSION = 1
@@ -39,6 +41,9 @@ class TemplateDocument:
     # Settings -> Style while the template is made; a project made from it starts with it. None: not chosen yet (a new
     # template, or one saved before the style belonged to documents); the application fills it in.
     style: Style | None = None
+
+    # What the last explicit Validate said about the template in `state`.
+    validation: ValidationStatus = ValidationStatus.UNDEFINED
 
 
 def encode_template(document: TemplateDocument) -> dict[str, Any]:
@@ -73,6 +78,7 @@ def encode_template(document: TemplateDocument) -> dict[str, Any]:
         "format_version": TEMPLATE_FORMAT_VERSION,
         "kind": TEMPLATE_KIND,
         "style": write_style(document.style),
+        "validation": document.validation.value,
         "templates": templates_data,
         "states": states_data,
         "state": state,
@@ -99,7 +105,8 @@ def decode_template(data: object) -> TemplateDocument:
         history: History[TemplateSnapshot] = History.restored(
             [entry(e) for e in data["history"]["done"]], [entry(e) for e in data["history"]["undone"]]
         )
-        return TemplateDocument(states[data["state"]], history, read_style(data.get("style")))
+        validation = ValidationStatus(data.get("validation", ValidationStatus.UNDEFINED.value))
+        return TemplateDocument(states[data["state"]], history, read_style(data.get("style")), validation)
     except (KeyError, IndexError, TypeError, ValueError, AttributeError, ZeroDivisionError) as e:
         raise ProjectFileError("It is damaged ({detail}).", detail=f"{type(e).__name__}: {e}") from e
 

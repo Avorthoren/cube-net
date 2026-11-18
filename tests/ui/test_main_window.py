@@ -4383,6 +4383,25 @@ class TestTemplates:
         window.validate_action.trigger()
         assert told[-1] == "Some vertices don't have assigned labels. Name each vertex."
 
+    def test_the_validate_button(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("cube_net.ui.template.template_mode.tell", lambda *_, **__: None)
+        window = self.make(qtbot, tmp_path)
+        button = window.validate_button.button
+        assert not window.validate_button.action.isVisible()  # a project
+        window.new_template_action.trigger()
+        assert window.validate_button.action.isVisible() and window.validate_button.separator.isVisible()
+        assert not button.isEnabled() and button.text() == "Validate\ntemplate"  # the loop isn't closed
+        self.draw(window)
+        assert button.isEnabled()
+        button.click()
+        assert button.text() == "Invalid" and button.isEnabled()  # to see what's wrong again
+        window.undo_action.trigger()
+        window.redo_action.trigger()  # the same template: still Invalid
+        assert button.text() == "Invalid"
+        window.template_mode.tool.set_face_color(0, "#FFFFFF")
+        assert button.text() == "Validate\ntemplate" and button.isEnabled()
+        window.new_action.trigger()
+
     def test_recorded(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path, record=True)
         window.new_template_action.trigger()

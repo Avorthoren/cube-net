@@ -79,6 +79,7 @@ RUSSIAN: dict[str, str] = {
     "Hotkey: L": "Клавиша: L",
     "Show vertex coordinates": "Показывать координаты вершин",
     "Hotkey: C": "Клавиша: C",
+    "Hotkey: V": "Клавиша: V",
     "Place a vertex": "Поставить вершину",
     "Set slope": "Задать наклон",
     "Set": "Задать",
@@ -331,10 +332,13 @@ RUSSIAN: dict[str, str] = {
     # Templates (docs/template_idea.txt).
     "New &Template": "Новый &шаблон",
     "&Validate": "&Проверить",
+    "Validate\ntemplate": "Проверить\nшаблон",
+    "Validated": "Проверен",
+    "Invalid": "Найдены\nошибки",
     "Save template as": "Сохранить шаблон как",
     "Cube Net templates (*{suffix})": "Шаблоны Cube Net (*{suffix})",
     "Cube Net projects and templates (*{project} *{template})": "Проекты и шаблоны Cube Net (*{project} *{template})",
-    "Net area": "Площадь развёртки",
+    "Net area": "Площадь\nразвёртки",  # two lines: the panel stays narrow
     "Area of the net the loop draws": "Площадь развёртки, которую очерчивает контур",
     "Face color": "Цвет грани",
     "Assign the vertex": "Назначить вершину",
@@ -365,11 +369,13 @@ RUSSIAN: dict[str, str] = {
     ),
     "Segments {list} don't have counterparts. Each segment should appear exactly twice, because that's what gluing "
     "implies.": (
-        "У отрезков {list} нет пары. Каждый отрезок должен встречаться ровно дважды: так получается при склейке."
+        "У отрезков {list} нет пары. Каждый отрезок должен встречаться ровно дважды, потому что это то, что "
+        "подразумевает склеивание."
     ),
     "Segment {list} doesn't have a counterpart. Each segment should appear exactly twice, because that's what gluing "
     "implies.": (
-        "У отрезка {list} нет пары. Каждый отрезок должен встречаться ровно дважды: так получается при склейке."
+        "У отрезка {list} нет пары. Каждый отрезок должен встречаться ровно дважды, потому что это то, что "
+        "подразумевает склеивание."
     ),
     "Counterparts for {list} are neither parallel nor perpendicular. Cube Net accepts only nets with parallel or "
     "perpendicular counterparts, to stay within rational numbers.": (

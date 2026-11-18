@@ -22,10 +22,12 @@ from cube_net.core.history import History
 from cube_net.core.project import TemplateDocument, save_template
 from cube_net.core.sheet import TEMPLATE_SHEET_HEIGHT, TEMPLATE_SHEET_WIDTH
 from cube_net.core.template import (
+    Template,
     TemplateEditor,
     TemplateSnapshot,
     TemplateState,
     ValidationProblem,
+    ValidationStatus,
     template_area,
     validate,
 )
@@ -70,6 +72,11 @@ class TemplateMode(QObject):
         # Settings -> Style while this template is shown (saved with it), and as it was when last saved (or opened).
         self.style: Style = DEFAULT_STYLE
         self._saved_style = self.style
+
+        # The template the last explicit Validate was about, and what it said; and the status when last saved (or
+        # opened). Any other template is Undefined.
+        self._validated: tuple[Template, ValidationStatus] | None = None
+        self._saved_status = ValidationStatus.UNDEFINED
         self.tool.changed.connect(self.changed)
         self.tool.acted.connect(lambda action, p: self._note("template", action, _point(p)))
         self.tool.rejected.connect(lambda p, problem: self._note("template", "rejected", problem.value, _point(p)))
@@ -80,7 +87,7 @@ class TemplateMode(QObject):
     # --- the document -------------------------------------------------------------------------------------------------
 
     def document(self) -> TemplateDocument:
-        return TemplateDocument(self.editor.snapshot(), self.editor.history, self.style)
+        return TemplateDocument(self.editor.snapshot(), self.editor.history, self.style, self.status())
 
     def show(self, document: TemplateDocument | None, path: Path | None, style: Style) -> None:
         """Make `document` (None: a new, empty template) the one shown, from the file `path` (None: none yet), with
@@ -92,6 +99,8 @@ class TemplateMode(QObject):
         self.path = path
         self._saved_revision = document.history.revision
         self.style = self._saved_style = style
+        self._validated = (document.state.template, document.validation)
+        self._saved_status = document.validation
         self.tool.refresh()
         self.tool.origin_changed.emit()
         vertices = self.editor.template.vertices
@@ -100,7 +109,11 @@ class TemplateMode(QObject):
 
     @property
     def is_dirty(self) -> bool:
-        return self.editor.history.revision != self._saved_revision or self.style != self._saved_style
+        return (
+            self.editor.history.revision != self._saved_revision
+            or self.style != self._saved_style
+            or self.status() != self._saved_status
+        )
 
     def set_style(self, style: Style) -> None:
         """Settings -> Style changed while the template is shown (not undoable, like a project's style)."""
@@ -113,6 +126,7 @@ class TemplateMode(QObject):
         self.path = path
         self._saved_revision = self.editor.history.revision
         self._saved_style = self.style
+        self._saved_status = self.status()
         self.changed.emit()
 
     def area(self) -> Fraction | None:
@@ -120,15 +134,29 @@ class TemplateMode(QObject):
 
     # --- validation ---------------------------------------------------------------------------------------------------
 
+    def status(self) -> ValidationStatus:
+        """What the last explicit Validate said about the template as it is now (Undefined if it changed since)."""
+        if self._validated is None or self._validated[0] != self.editor.template:
+            return ValidationStatus.UNDEFINED
+        return self._validated[1]
+
     def can_validate(self) -> bool:
-        return self.editor.state is TemplateState.FINALIZATION and not self.tool.busy()
+        """A closed loop, nothing being dragged, and not Validated already (an Invalid one may be validated again,
+        to see what's wrong)."""
+        return (
+            self.editor.state is TemplateState.FINALIZATION
+            and not self.tool.busy()
+            and self.status() is not ValidationStatus.VALID
+        )
 
     def validate(self) -> None:
-        """Validate (V): the first problem found, in a message; gaps in indices may be closed (Yes) and the rest
-        checked; or that there's no problem."""
+        """Validate (V): the first problem found, in a message (Invalid); gaps in indices, the last check, may be
+        closed (Yes: Valid then); or that there's no problem (Valid)."""
         if not self.can_validate():
             return
-        failure = validate(self.editor.template)
+        template = self.editor.template
+        failure = validate(template)
+        self._set_status(template, ValidationStatus.VALID if failure is None else ValidationStatus.INVALID)
         if failure is None:
             self._note("template", "validate", "ok")
             tell(self._parent, "Cube Net", no_problems_text())
@@ -140,8 +168,13 @@ class TemplateMode(QObject):
         if not ask_yes_no(self._parent, failure_text(failure)):
             return
         self.tool.reindex()
+        self._set_status(self.editor.template, ValidationStatus.VALID)  # nothing else was wrong
         self._note("template", "reindexed")
         tell(self._parent, "Cube Net", reindexed_text())
+
+    def _set_status(self, template: Template, status: ValidationStatus) -> None:
+        self._validated = (template, status)
+        self.changed.emit()
 
     # --- the windows --------------------------------------------------------------------------------------------------
 

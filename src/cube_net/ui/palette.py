@@ -68,6 +68,16 @@ TOOL_BUTTON_DOWN_TOP = QColor("#C6CBD2")
 TOOL_BUTTON_DOWN_BOTTOM = QColor("#E0E3E7")
 TOOL_BUTTON_DOWN_BORDER = QColor("#5F6368")
 
+# The Validate button of a template that's Valid: a muted green, raised like the other buttons.
+VALID_BUTTON_TOP = QColor("#E3F2E1")
+VALID_BUTTON_BOTTOM = QColor("#BFDDB9")
+
+# The Validate button of a template that's Invalid: a muted red; a little darker under the mouse, and pushed in.
+INVALID_BUTTON_TOP = QColor("#F7E1E0")
+INVALID_BUTTON_BOTTOM = QColor("#E4B9B6")
+INVALID_BUTTON_HOVER_BOTTOM = QColor("#D9A6A2")
+INVALID_BUTTON_DOWN_TOP = QColor("#D9A6A2")
+
 # The status bar's word on the project: unsaved changes (it should catch the eye), or all saved (quiet).
 UNSAVED = QColor("#E37400")
 SAVED = QColor("#5F6368")
