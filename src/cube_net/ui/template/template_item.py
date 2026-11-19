@@ -148,7 +148,11 @@ class TemplateItem(QGraphicsItem):
             self._dashes(painter, world, segment, palette.TEMPLATE_FOLD, net_style.EDGE_WIDTH_PX / 2)
         if self._highlight_fold is not None:
             self._line(painter, world, self._highlight_fold, palette.TEMPLATE_FOLD, net_style.HIGHLIGHT_WIDTH_PX)
-        for a, b in template.loop_sides():
+        for hole in template.holes:  # one being drawn: plain lines, like the loop's while it's drawn
+            if not hole.closed:
+                for a, b in hole.sides():
+                    self._line(painter, world, (template.position(a), template.position(b)), palette.TEMPLATE_LOOP)
+        for a, b in template.all_loop_sides():
             segment = (template.position(a), template.position(b))
             if template.closed:  # inside the net, on its own side of the line (as cuts are drawn in a project)
                 self._inner_line(painter, world, segment)
@@ -172,15 +176,19 @@ class TemplateItem(QGraphicsItem):
             if turned:  # drawn in the frame its hatch is tied to the grid in (its basis piece's face frame)
                 painter.save()
                 painter.setTransform(to_qtransform(face.hatch.inverse()), combine=True)
-            self._paint_face(painter, face, [face.hatch.apply(p) for p in template.face_polygon(face)])
+            cycles = [[face.hatch.apply(template.position(c)) for c in cycle] for cycle in face.cycles]
+            self._paint_face(painter, face, cycles)
             if turned:
                 painter.restore()
 
-    def _paint_face(self, painter: QPainter, face: TemplateFace, polygon: list[Vec]) -> None:
-        """A face, its corners given in the frame its hatch is tied to the grid in (the painter's)."""
+    def _paint_face(self, painter: QPainter, face: TemplateFace, cycles: list[list[Vec]]) -> None:
+        """A face, its outer cycle and its holes (left out: the even-odd rule) given in the frame its hatch is tied to
+        the grid in (the painter's)."""
+        polygon = cycles[0]
         outline = QPainterPath()
-        outline.addPolygon(QPolygonF([to_qpointf(p) for p in polygon]))
-        outline.closeSubpath()
+        for cycle in cycles:
+            outline.addPolygon(QPolygonF([to_qpointf(p) for p in cycle]))
+            outline.closeSubpath()
         painter.fillPath(outline, palette.WHITE)
         if face.color is None:  # no colour yet: a chessboard
             brush = chessboard_brush(palette.UNCOLORED_FACE, painter.worldTransform())
@@ -281,7 +289,7 @@ class TemplateItem(QGraphicsItem):
 
     def _paint_midpoints(self, painter: QPainter, world: QTransform, template: Template) -> None:
         r = net_style.midpoint_radius()
-        segments = [*template.loop_sides(), *((f.start, f.end) for f in template.folds)]
+        segments = [*template.all_loop_sides(), *((f.start, f.end) for f in template.folds)]
         for i, (a, b) in enumerate(segments):  # the loop's sides, then the fold segments
             pressed = i == self._pressed_midpoint
             painter.setPen(QPen(palette.PRESSED_MIDPOINT if pressed else palette.VERTEX_OUTLINE, 1))
@@ -316,14 +324,14 @@ def _outward(world: QTransform, template: Template) -> dict[int, QPointF]:
     if not template.closed:
         return {}
     directions: dict[int, QPointF] = {}
-    sides = template.loop_sides()
-    for incoming, outgoing in zip(sides[-1:] + sides[:-1], sides, strict=True):
-        total = QPointF(0, 0)
-        for a, b in (incoming, outgoing):
-            d = world.map(to_qpointf(template.position(b))) - world.map(to_qpointf(template.position(a)))
-            length = math.hypot(d.x(), d.y())
-            total += QPointF(-d.y(), d.x()) / length  # right in sheet = left in device (Y is flipped)
-        length = math.hypot(total.x(), total.y())
-        if length > 1e-9:
-            directions[outgoing[0]] = total / length
+    for sides in (template.loop_sides(), *(h.sides() for h in template.holes if h.closed)):  # holes: into the hole
+        for incoming, outgoing in zip(sides[-1:] + sides[:-1], sides, strict=True):
+            total = QPointF(0, 0)
+            for a, b in (incoming, outgoing):
+                d = world.map(to_qpointf(template.position(b))) - world.map(to_qpointf(template.position(a)))
+                length = math.hypot(d.x(), d.y())
+                total += QPointF(-d.y(), d.x()) / length  # right in sheet = left in device (Y is flipped)
+            length = math.hypot(total.x(), total.y())
+            if length > 1e-9:
+                directions[outgoing[0]] = total / length
     return directions

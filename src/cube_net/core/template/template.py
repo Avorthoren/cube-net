@@ -85,10 +85,36 @@ class TemplateFace:
     # the template's grid) until a Validate makes it continue the basis piece's hatch.
     hatch: Rigid90 = UNTURNED
 
+    # The holes inside it that touch nothing else (a face that is a ring): each a cycle of corners, clockwise.
+    holes: tuple[tuple[int, ...], ...] = ()
+
+    @property
+    def cycles(self) -> tuple[tuple[int, ...], ...]:
+        """Its outer cycle, then its holes'."""
+        return (self.corners, *self.holes)
+
     def has_side(self, a: int, b: int) -> bool:
-        """Does the face go straight from corner `a` to corner `b` (counter-clockwise)?"""
-        n = len(self.corners)
-        return any(self.corners[i] == a and self.corners[(i + 1) % n] == b for i in range(n))
+        """Does the face go straight from corner `a` to corner `b` (along its outer cycle or a hole's)?"""
+        for cycle in self.cycles:
+            n = len(cycle)
+            if any(cycle[i] == a and cycle[(i + 1) % n] == b for i in range(n)):
+                return True
+        return False
+
+
+@dataclass(frozen=True, slots=True)
+class Hole:
+    """An inner loop (docs/template_plan.md, §8.5): clockwise once it's closed, so that the net is on its left."""
+
+    vertices: tuple[LoopVertex, ...] = ()
+    closed: bool = False
+
+    def sides(self) -> list[tuple[int, int]]:
+        ids = [v.id for v in self.vertices]
+        sides = list(pairwise(ids))
+        if self.closed:
+            sides.append((ids[-1], ids[0]))
+        return sides
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,19 +138,44 @@ class Template:
     # The vertices of fold lines inside the loop (not on it), in the order they were made.
     fold_vertices: tuple[LoopVertex, ...] = ()
 
+    # The inner loops, in the order they were drawn; the last may be still open (being drawn).
+    holes: tuple[Hole, ...] = ()
+
     # --- queries ------------------------------------------------------------------------------------------------------
 
     def vertex(self, vertex_id: int) -> LoopVertex:
-        """A vertex of the loop or a fold vertex."""
-        for v in (*self.vertices, *self.fold_vertices):
+        """A vertex of the loop, of a hole, or a fold vertex."""
+        for v in self.all_vertices:
             if v.id == vertex_id:
                 return v
         raise ValueError(f"no vertex with id {vertex_id}")
 
     @property
     def all_vertices(self) -> tuple[LoopVertex, ...]:
-        """The loop's vertices, then the fold vertices."""
-        return (*self.vertices, *self.fold_vertices)
+        """The loop's vertices, then the holes', then the fold vertices."""
+        return (*self.vertices, *(v for hole in self.holes for v in hole.vertices), *self.fold_vertices)
+
+    @property
+    def drawing_hole(self) -> bool:
+        """Is a hole being drawn (the last one still open)?"""
+        return bool(self.holes) and not self.holes[-1].closed
+
+    @property
+    def complete(self) -> bool:
+        """The loop closed and no hole being drawn: what validation needs."""
+        return self.closed and not self.drawing_hole
+
+    def hole_of(self, vertex_id: int) -> int | None:
+        """The index of the hole the vertex belongs to, if it's a hole's."""
+        return next((i for i, h in enumerate(self.holes) if any(v.id == vertex_id for v in h.vertices)), None)
+
+    def hole_sides(self) -> list[tuple[int, int]]:
+        """The sides of the closed holes, hole after hole."""
+        return [side for hole in self.holes if hole.closed for side in hole.sides()]
+
+    def all_loop_sides(self) -> list[tuple[int, int]]:
+        """The outer loop's sides, then the closed holes'."""
+        return [*self.loop_sides(), *self.hole_sides()]
 
     def is_fold_vertex(self, vertex_id: int) -> bool:
         return any(v.id == vertex_id for v in self.fold_vertices)
@@ -148,8 +199,8 @@ class Template:
         return sides
 
     def are_neighbours(self, a: int, b: int) -> bool:
-        """Are the two vertices next to each other along the loop?"""
-        return any({a, b} == set(side) for side in self.loop_sides())
+        """Are the two vertices next to each other along the loop (or a hole)?"""
+        return any({a, b} == set(side) for side in self.all_loop_sides())
 
     def polygon(self) -> list[Vec]:
         return [v.position for v in self.vertices]
@@ -197,12 +248,19 @@ class Template:
         return replace(self, vertices=vertices, closed=True, faces=(face,))
 
     def with_vertex_inserted(self, a: int, b: int, position: Vec) -> Template:
-        """A new vertex at `position` on the loop's side from `a` to `b` (neighbours, in the loop's direction)."""
-        if (a, b) not in self.loop_sides():
+        """A new vertex at `position` on the side from `a` to `b` of the loop or a hole (in its direction)."""
+        if (a, b) not in self.all_loop_sides():
             raise ValueError(f"no loop side from {a} to {b}")
         new = LoopVertex(self.next_id, position)
-        i = self.index_of(a) + 1
         faces = tuple(_insert_corner(face, a, b, new.id) for face in self.faces)
+        hole = self.hole_of(a)
+        if hole is not None:
+            vertices = self.holes[hole].vertices
+            i = next(k for k, v in enumerate(vertices) if v.id == a) + 1
+            changed = replace(self.holes[hole], vertices=(*vertices[:i], new, *vertices[i:]))
+            holes = (*self.holes[:hole], changed, *self.holes[hole + 1 :])
+            return replace(self, holes=holes, faces=faces, next_id=self.next_id + 1)
+        i = self.index_of(a) + 1
         vertices = (*self.vertices[:i], new, *self.vertices[i:])
         return replace(self, vertices=vertices, faces=faces, next_id=self.next_id + 1)
 
@@ -216,6 +274,10 @@ class Template:
         """The loop without a vertex (its two sides become one), and without the folds that end at it (and those left
         hanging then), and without a face it leaves with nothing (two corners: its fold goes too); a fold vertex:
         without the folds at it, and those left hanging."""
+        if self.hole_of(vertex_id) is not None:
+            from cube_net.core.template.holes import without_hole_vertex
+
+            return without_hole_vertex(self, vertex_id)
         template = self
         for fold in self.folds_at(vertex_id):
             if fold in template.folds:
@@ -246,6 +308,10 @@ class Template:
     def with_fold_line(self, start: int, points: Sequence[Vec], end: int) -> Template:
         """A fold line from vertex `start` through new fold vertices at `points` to vertex `end`: it divides the face it
         goes through into two, each in that face's colour (and with its number and hatch)."""
+        if self.holes:
+            from cube_net.core.template.holes import with_fold_line_among_holes
+
+            return with_fold_line_among_holes(self, start, points, end)
         ids = list(range(self.next_id, self.next_id + len(points)))
         chain = [start, *ids, end]
         positions = [self.position(start), *points, self.position(end)]
@@ -275,7 +341,7 @@ class Template:
         )
 
     def with_fold_vertex_inserted(self, fold: Fold, position: Vec) -> Template:
-        """A new fold vertex at `position` on `fold`: its two parts keep its direction."""
+        """A new fold vertex at `position` on `fold`: its two parts keep its direction (in faces' holes too)."""
         new = LoopVertex(self.next_id, position)
         folds = tuple(
             part for f in self.folds for part in ((Fold(f.start, new.id), Fold(new.id, f.end)) if f == fold else (f,))
@@ -290,6 +356,10 @@ class Template:
 
     def without_fold(self, fold: Fold) -> Template:
         """The two faces on its sides become one, in the colour of the one on its left (seen from where it starts)."""
+        if self.holes:
+            from cube_net.core.template.holes import without_fold_among_holes
+
+            return without_fold_among_holes(self, fold)
         left = next(f for f in self.faces if f.has_side(fold.start, fold.end))
         right = next(f for f in self.faces if f.has_side(fold.end, fold.start))
         merged = replace(left, corners=_merge(left.corners, right.corners, fold))
@@ -328,30 +398,45 @@ class Template:
     def face_at(self, p: Vec) -> int | None:
         """The index of the face `p` lies strictly inside (not on a fold or the loop), if any."""
         for i, face in enumerate(self.faces):
-            polygon = self.face_polygon(face)
-            n = len(polygon)
-            on_border = any(on_segment(p, polygon[j], polygon[(j + 1) % n]) for j in range(n))
-            if not on_border and polygon_contains(polygon, p):
+            cycles = [[self.position(c) for c in cycle] for cycle in face.cycles]
+            on_border = any(
+                on_segment(p, cycle[j], cycle[(j + 1) % len(cycle)]) for cycle in cycles for j in range(len(cycle))
+            )
+            if not on_border and polygon_contains(cycles[0], p) and not any(polygon_contains(h, p) for h in cycles[1:]):
                 return i
         return None
 
     def _with_vertex(self, new: LoopVertex) -> Template:
         if self.is_fold_vertex(new.id):
             return replace(self, fold_vertices=tuple(new if v.id == new.id else v for v in self.fold_vertices))
+        hole = self.hole_of(new.id)
+        if hole is not None:
+            vertices = tuple(new if v.id == new.id else v for v in self.holes[hole].vertices)
+            holes = (*self.holes[:hole], replace(self.holes[hole], vertices=vertices), *self.holes[hole + 1 :])
+            return replace(self, holes=holes)
         return replace(self, vertices=tuple(new if v.id == new.id else v for v in self.vertices))
 
 
 def template_area(template: Template) -> Fraction | None:
-    """The area of the net the template draws (None while the loop is open)."""
-    return signed_area(template.polygon()) if template.closed else None
+    """The area of the net the template draws (None while the loop is open): its holes' don't count."""
+    if not template.closed:
+        return None
+    holes = sum(
+        (signed_area([v.position for v in h.vertices]) for h in template.holes if h.closed), Fraction(0)
+    )  # holes run clockwise: negative
+    return signed_area(template.polygon()) + holes
 
 
 def _insert_corner(face: TemplateFace, a: int, b: int, new: int) -> TemplateFace:
-    """The face with `new` between its corners `a` and `b`, if it goes from one straight to the other."""
-    n = len(face.corners)
-    for i in range(n):
-        if face.corners[i] == a and face.corners[(i + 1) % n] == b:
-            return replace(face, corners=(*face.corners[: i + 1], new, *face.corners[i + 1 :]))
+    """The face with `new` between its corners `a` and `b`, if it goes from one straight to the other (along its outer
+    cycle or a hole's)."""
+    cycles = list(face.cycles)
+    for k, cycle in enumerate(cycles):
+        n = len(cycle)
+        for i in range(n):
+            if cycle[i] == a and cycle[(i + 1) % n] == b:
+                cycles[k] = (*cycle[: i + 1], new, *cycle[i + 1 :])
+                return replace(face, corners=cycles[0], holes=tuple(cycles[1:]))
     return face
 
 

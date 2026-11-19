@@ -13,6 +13,8 @@
   - a click on the middle circle of a side or of a fold segment inserts a vertex there (on release, like a button);
   - Ctrl+click on a vertex deletes it (and its folds), on a fold segment deletes it (with whatever is left hanging);
   - a double click inside a face asks for its colour (`face_double_clicked`); a click there drags the sheet.
+- Draw hole (H, `start_hole`): clicks draw a hole as the loop is drawn (its first vertex closes it; SHIFT, a locked
+  slope and Place a vertex as there); meanwhile nothing else reacts (docs/template_plan.md, §8.5).
 - Anything that breaks the rules shows the offending segments in black for a moment and changes nothing; a deletion
   that would leave too few vertices says so (`warned`).
 
@@ -34,6 +36,7 @@ from cube_net.core.template import (
     MIN_VERTICES_TO_CLOSE,
     Fold,
     Label,
+    LoopVertex,
     TemplateEditor,
     TemplateProblem,
     TemplateRejection,
@@ -119,6 +122,8 @@ class TemplateTool(QObject):
         self._fold_points: list[Vec] = []
         # The middle circle pressed on (the index of its side).
         self._armed_midpoint: int | None = None
+        # Draw hole was chosen, and the hole's first point isn't placed yet.
+        self._hole_pending = False
         self._slope: Vec | None = None
         self._frozen = False
         self._placing: Placement | None = None
@@ -150,21 +155,35 @@ class TemplateTool(QObject):
     def slope(self) -> Vec | None:
         return self._slope
 
+    @property
+    def drawing_hole(self) -> bool:
+        """Is a hole being drawn (chosen, or with points already)?"""
+        return self._hole_pending or self._editor.template.drawing_hole
+
+    def can_start_hole(self) -> bool:
+        """Draw hole: the loop closed, and nothing else being drawn or dragged."""
+        return self._editor.state is TemplateState.FINALIZATION and not self.busy() and not self.drawing_hole
+
+    def start_hole(self) -> None:
+        if self.can_start_hole():
+            self._hole_pending = True
+            self.refresh()
+
     def busy(self) -> bool:
         """A drag or a fold line under way (undo and redo wait)."""
         return self._drag is not None or self._fold_start is not None
 
     def claims(self, x: float, y: float) -> bool:
         """Does a press here mean something (so that it can't start panning)?"""
-        if self._editor.state is not TemplateState.FINALIZATION or self._fold_start is not None:
+        if self._editor.state is not TemplateState.FINALIZATION or self._fold_start is not None or self.drawing_hole:
             return True
         return (
             self._vertex_at(x, y) is not None or self._midpoint_at(x, y) is not None or self._fold_at(x, y) is not None
         )
 
     def cursor_at(self, x: float, y: float) -> CursorKind:
-        if self._editor.state is not TemplateState.FINALIZATION:
-            return CursorKind.ARROW  # drawing the loop: the usual mouse (docs/template_idea.txt)
+        if self._editor.state is not TemplateState.FINALIZATION or self.drawing_hole:
+            return CursorKind.ARROW  # drawing the loop or a hole: the usual mouse (docs/template_idea.txt)
         if self._drag is not None or self._fold_start is not None:
             return CursorKind.PENCIL
         ctrl = self._view.ctrl_held()
@@ -215,9 +234,9 @@ class TemplateTool(QObject):
         if self._drag is not None:
             vertex_id, position = self._drag
             return Placement(Action.MOVE, position, Constraint.free(), vertex_id)
-        if self._editor.state is TemplateState.FINALIZATION:
+        if self._editor.state is TemplateState.FINALIZATION and not self.drawing_hole:
             return None
-        vertices = self._editor.template.vertices
+        vertices = self._drawn_loop()
         p = self._next_point(x, y)
         if not vertices:
             return Placement(Action.START, p, Constraint.free())
@@ -232,8 +251,8 @@ class TemplateTool(QObject):
 
     def slope_at(self, x: float, y: float) -> Vec | None:
         """The direction of the segment a click would make (while drawing the loop), for Set slope."""
-        vertices = self._editor.template.vertices
-        if self._editor.state is not TemplateState.LOOPING or not vertices:
+        vertices = self._drawn_loop()
+        if not vertices:
             return None
         d = self._next_point(x, y) - vertices[-1].position
         return None if d.is_zero() else d
@@ -247,6 +266,8 @@ class TemplateTool(QObject):
                 self._drag = None
                 self._pressed_vertex = None
                 self._after_action("move", p)
+        elif self.drawing_hole:
+            rejection = self._add_hole_point(p)
         else:
             rejection = self._editor.add_point(p)
             if rejection is None:
@@ -262,7 +283,8 @@ class TemplateTool(QObject):
     def refresh(self) -> None:
         """Show the editor's template as it is now."""
         self.item.set_template(self._editor.template)
-        self.item.set_midpoints_shown(self._editor.state is TemplateState.FINALIZATION, self._armed_midpoint)
+        editing = self._editor.state is TemplateState.FINALIZATION and not self.drawing_hole
+        self.item.set_midpoints_shown(editing, self._armed_midpoint)
         self._follow_mouse()
 
     def undo(self) -> None:
@@ -279,6 +301,7 @@ class TemplateTool(QObject):
         """Give up a fold line being drawn or a drag (the vertex goes back), and unlock a locked slope (Escape)."""
         self._fold_start = None
         self._fold_points = []
+        self._hole_pending = False  # a hole with points stays: Undo takes them back
         self._drag = None
         self._pressed_vertex = None
         self._armed_midpoint = None
@@ -358,6 +381,12 @@ class TemplateTool(QObject):
             self.unlock_slope()
             self._after_action("close" if self._editor.template.closed else "add", p)
             return
+        if self.drawing_hole:
+            p = self._drawn_loop()[0].position if self._closing_at(x, y) else self._next_point(x, y)
+            rejection = self._add_hole_point(p)
+            if rejection is not None:
+                self._show_rejection(rejection, p)
+            return
         vertex = self._vertex_at(x, y)
         if self._fold_start is not None:
             self._press_while_folding(x, y, vertex)
@@ -372,6 +401,15 @@ class TemplateTool(QObject):
             return
         if vertex is not None:
             self._pressed_vertex = vertex, (x, y)
+
+    def _add_hole_point(self, p: Vec) -> TemplateRejection | None:
+        """The hole's next point at `p` (its first, or the closing one)."""
+        rejection = self._editor.add_hole_point(p)
+        if rejection is None:
+            self._hole_pending = False
+            self.unlock_slope()
+            self._after_action("hole close" if not self._editor.template.drawing_hole else "hole add", p)
+        return rejection
 
     def _press_while_folding(self, x: float, y: float, vertex: int | None) -> None:
         """A fold line is being drawn: a vertex ends it, a point inside a face goes on it, outside the net it's given
@@ -416,10 +454,10 @@ class TemplateTool(QObject):
             if self._midpoint_at(x, y) == side:
                 template = self._editor.template
                 a, b = self._segment(side)
-                if side < len(template.loop_sides()):
+                if side < len(template.all_loop_sides()):
                     self._editor.insert_vertex(a, b)
                 else:
-                    self._editor.insert_fold_vertex(template.folds[side - len(template.loop_sides())])
+                    self._editor.insert_fold_vertex(template.folds[side - len(template.all_loop_sides())])
                 self._after_action("insert", (template.position(a) + template.position(b)) / 2)
             self.refresh()
             return
@@ -467,18 +505,19 @@ class TemplateTool(QObject):
         highlight: int | None = None
         if self._mouse is not None:
             x, y = self._mouse
-            if self._editor.state is TemplateState.LOOPING and not self._view.is_panning():
+            drawn = self._drawn_loop()
+            if drawn and not self._view.is_panning():
                 end = self._placing.position if self._placing is not None else self._next_point(x, y)
                 if self._closing_at(x, y):
-                    end = template.vertices[0].position
-                    highlight = template.vertices[0].id
-                rubber = (template.vertices[-1].position, end)
+                    end = drawn[0].position
+                    highlight = drawn[0].id
+                rubber = (drawn[-1].position, end)
             elif self._fold_start is not None:
                 highlight = self._vertex_at(x, y)
                 end = template.position(highlight) if highlight is not None else self._quantize(x, y)
                 last = self._fold_points[-1] if self._fold_points else template.position(self._fold_start)
                 rubber = (last, end)
-            elif self._editor.state is TemplateState.FINALIZATION and self._drag is None:
+            elif self._editor.state is TemplateState.FINALIZATION and self._drag is None and not self.drawing_hole:
                 highlight = self._vertex_at(x, y)
         fold = self._fold_at(*self._mouse) if self._mouse is not None and self._view.ctrl_held() else None
         self.item.set_rubber(rubber)
@@ -532,11 +571,22 @@ class TemplateTool(QObject):
     def _quantize(self, x: float, y: float) -> Vec:
         return self._editor.origin.quantize(x, y)
 
+    def _drawn_loop(self) -> tuple[LoopVertex, ...]:
+        """The vertices of the loop being drawn: the outer one's while it's open, the hole's while one is drawn (none
+        yet, for a hole chosen but not started); empty otherwise."""
+        template = self._editor.template
+        if self._editor.state is TemplateState.LOOPING:
+            return template.vertices
+        if template.drawing_hole:
+            return template.holes[-1].vertices
+        return ()
+
     def _next_point(self, x: float, y: float) -> Vec:
-        """The loop's next vertex if the mouse were clicked here: SHIFT's or a locked slope's line from the last one."""
+        """The loop's (or the hole's) next vertex if the mouse were clicked here: SHIFT's or a locked slope's line
+        from the last one."""
         p = self._quantize(x, y)
-        vertices = self._editor.template.vertices
-        if self._editor.state is not TemplateState.LOOPING or not vertices:
+        vertices = self._drawn_loop()
+        if not vertices:
             return p
         last = vertices[-1].position
         if self._slope is not None:
@@ -547,15 +597,15 @@ class TemplateTool(QObject):
 
     def _closing_at(self, x: float, y: float) -> bool:
         """Is the mouse in the first vertex's circle, where a click closes the loop?"""
-        vertices = self._editor.template.vertices
-        if self._editor.state is not TemplateState.LOOPING or len(vertices) < MIN_VERTICES_TO_CLOSE:
+        vertices = self._drawn_loop()
+        if len(vertices) < MIN_VERTICES_TO_CLOSE:
             return False
         return self._within(x, y, vertices[0].position, net_style.VERTEX_RADIUS_PX)
 
     def _vertex_at(self, x: float, y: float) -> int | None:
         """The closed loop's vertex whose circle the mouse is in (the nearest one): what a click acts on. (While the
         loop is drawn, a click there doesn't use a vertex: it puts a point, refused unless it closes the loop.)"""
-        if self._editor.state is not TemplateState.FINALIZATION:
+        if self._editor.state is not TemplateState.FINALIZATION or self.drawing_hole:
             return None
         return self._drawn_vertex_at(x, y)
 
@@ -582,7 +632,7 @@ class TemplateTool(QObject):
     def _segment(self, index: int) -> tuple[int, int]:
         """The ends of segment `index` as `_midpoint_at` numbers them: the loop's sides, then the fold segments."""
         template = self._editor.template
-        return [*template.loop_sides(), *((f.start, f.end) for f in template.folds)][index]
+        return [*template.all_loop_sides(), *((f.start, f.end) for f in template.folds)][index]
 
     def _midpoint_at(self, x: float, y: float) -> int | None:
         """The segment whose middle circle the mouse is in: an index of the loop's sides, then of the fold segments
@@ -593,7 +643,7 @@ class TemplateTool(QObject):
             return None  # a fold line is being drawn: a click there is a point of it
         template = self._editor.template
         mouse = self._quantize(x, y)
-        sides = template.loop_sides()
+        sides = template.all_loop_sides()
         found = None
         for i, (a, b) in enumerate([*sides, *((f.start, f.end) for f in template.folds)]):
             pa, pb = template.position(a), template.position(b)

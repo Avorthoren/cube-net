@@ -28,6 +28,7 @@ from cube_net.core.geometry import (
     Vec,
     classify_segments,
     on_segment,
+    polygon_contains,
     signed_area,
 )
 from cube_net.core.sheet import TEMPLATE_SHEET_HEIGHT, TEMPLATE_SHEET_WIDTH
@@ -95,6 +96,9 @@ def check(template: Template, changed: Iterable[tuple[int, int]]) -> TemplateRej
             return TemplateRejection(TemplateProblem.TURNED_OVER, _shown(template, changed_pairs, changed_pairs))
         if pieces(template) != 1:
             return TemplateRejection(TemplateProblem.APART, _shown(template, changed_pairs, changed_pairs))
+        holes = _hole_problems(template)
+        if holes:
+            return TemplateRejection(TemplateProblem.CROSSING, _shown(template, holes, changed_pairs))
         outside, crossing = _fold_problems(template)
         if crossing or outside:
             # Both sides of every conflict: what changed, and the folds it runs into (all was fine before the change).
@@ -162,12 +166,15 @@ def _fold_problems(template: Template) -> tuple[set[tuple[int, int]], set[tuple[
     the loop and the other folds nowhere else (another fold may start at the same point)."""
     outside: set[tuple[int, int]] = set()
     crossing: set[tuple[int, int]] = set()
-    segments = [_ordered(side) for side in template.loop_sides()] + [_ordered((f.start, f.end)) for f in template.folds]
-    loop_positions = {v.position for v in template.vertices}
+    loop_sides = template.all_loop_sides()
+    segments = [_ordered(side) for side in loop_sides] + [_ordered((f.start, f.end)) for f in template.folds]
+    loop_positions = {v.position for v in template.vertices} | {
+        v.position for h in template.holes if h.closed for v in h.vertices
+    }
     strictly_inside = {
         v.id: v.position not in loop_positions
-        and not any(on_segment(v.position, *_positions(template, side)) for side in template.loop_sides())
-        and winding_number(template, v.position) == 1
+        and not any(on_segment(v.position, *_positions(template, side)) for side in loop_sides)
+        and on_the_net(template, v.position)
         for v in template.fold_vertices
     }
     shared = {v.position for v in template.fold_vertices}
@@ -180,6 +187,9 @@ def _fold_problems(template: Template) -> tuple[set[tuple[int, int]], set[tuple[
         for vertex, direction in ((fold.start, b - a), (fold.end, a - b)):
             if vertex in strictly_inside:
                 if not strictly_inside[vertex]:
+                    outside.add(pair)
+            elif template.hole_of(vertex) is not None:
+                if _in_a_hole(template, (a + b) / 2):  # from a hole's vertex into the hole
                     outside.add(pair)
             elif not any(gap.contains(direction) for gap in vertex_gaps(template, vertex)):
                 outside.add(pair)
@@ -199,6 +209,82 @@ def _fold_problems(template: Template) -> tuple[set[tuple[int, int]], set[tuple[
             _ordered((f.start, f.end)) for f in template.folds for v in (f.start, f.end) if template.is_fold_vertex(v)
         )  # two vertices at one point, one of them a fold vertex
     return outside, crossing - outside
+
+
+def on_the_net(template: Template, p: Vec) -> bool:
+    """Is `p` (on no side) inside the outer loop and in no closed hole?"""
+    return winding_number(template, p) == 1 and not _in_a_hole(template, p)
+
+
+def _in_a_hole(template: Template, p: Vec) -> bool:
+    return any(polygon_contains([v.position for v in h.vertices], p) for h in template.holes if h.closed)
+
+
+def _hole_problems(template: Template) -> set[tuple[int, int]]:
+    """The holes' sides that break their rules (docs/template_plan.md, §8.5): a hole's vertices on the net (not on a
+    side, a fold or another vertex), its sides touching nothing but its own neighbours along it (no other loop), and
+    crossing folds only while it's drawn (once it's closed, the crossings are its vertices); a closed hole may not go
+    round another."""
+    bad: set[tuple[int, int]] = set()
+    outer = template.loop_sides()
+    folds = [(f.start, f.end) for f in template.folds]
+    others_positions = {v.position for v in template.all_vertices}
+    for index, hole in enumerate(template.holes):
+        sides = hole.sides()
+        own = {v.id for v in hole.vertices}
+        other_loops = [*outer, *(s for i, h in enumerate(template.holes) if i != index for s in h.sides())]
+        for v in hole.vertices:
+            at_fold_end = any(v.id in f for f in folds)
+            elsewhere = [u for u in template.all_vertices if u.position == v.position and u.id != v.id]
+            on_something = any(
+                on_segment(v.position, *_positions(template, s)) and v.id not in s for s in [*other_loops, *folds]
+            )
+            if elsewhere or on_something or not (at_fold_end or on_the_net_ignoring(template, v.position, index)):
+                bad.update(_ordered(s) for s in sides if v.id in s)
+                if not sides:
+                    bad.add((v.id, v.id))
+        for i, s in enumerate(sides):
+            a, b = _positions(template, s)
+            if a == b:
+                bad.add(_ordered(s))
+                continue
+            for t in sides[i + 1 :]:
+                hit = classify_segments(a, b, *_positions(template, t))
+                if hit.kind is IntersectionKind.DISJOINT:
+                    continue
+                shared = set(s) & set(t)
+                if hit.kind is IntersectionKind.TOUCH and shared and hit.point == template.position(shared.pop()):
+                    continue
+                bad.update((_ordered(s), _ordered(t)))
+            for t in other_loops:
+                if classify_segments(a, b, *_positions(template, t)).kind is not IntersectionKind.DISJOINT:
+                    bad.update((_ordered(s), _ordered(t)))
+            for t in folds:
+                hit = classify_segments(a, b, *_positions(template, t))
+                if hit.kind is IntersectionKind.DISJOINT:
+                    continue
+                if not hole.closed and hit.kind is IntersectionKind.CROSSING and hit.point not in others_positions:
+                    continue  # it will be a vertex of the hole when it's closed
+                if hole.closed and hit.kind is IntersectionKind.TOUCH and set(s) & set(t) & own:
+                    continue  # a fold ends at one of its vertices
+                bad.update((_ordered(s), _ordered(t)))
+        if hole.closed:
+            polygon = [v.position for v in hole.vertices]
+            for i, h in enumerate(template.holes):
+                if i != index and h.vertices and polygon_contains(polygon, h.vertices[0].position):
+                    bad.update(_ordered(s) for s in sides)  # it goes round another hole
+    return bad
+
+
+def on_the_net_ignoring(template: Template, p: Vec, hole: int) -> bool:
+    """Is `p` inside the outer loop and in no closed hole but hole `hole`?"""
+    if winding_number(template, p) != 1:
+        return False
+    return not any(
+        polygon_contains([v.position for v in h.vertices], p)
+        for i, h in enumerate(template.holes)
+        if h.closed and i != hole
+    )
 
 
 def _shown(template: Template, broken: set[tuple[int, int]], changed: set[tuple[int, int]]) -> tuple[Segment, ...]:

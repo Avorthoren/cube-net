@@ -619,6 +619,43 @@ Done (§8.4):
 - In a project, the body's vertices inside the net (with 360 degrees around them: where a fold line bends) have
   vertex circles too, as the user chose on 2026-11-19 (`NetItem`); before, only their labels showed.
 
+### 8.5 Holes in templates (inner loops)
+(Asked for on 2026-11-19; it does §10.1.)
+- **Draw hole** (Hotkey: H): a square button like Validate, above it, with its text only (the icon first asked for, a
+  square with a square hole, was dropped on 2026-11-19). Active when nothing else is being drawn or dragged. Then clicks
+  draw the hole's loop as the outer loop is drawn (every point an action, undone one by one; its first vertex closes
+  it), with Place vertex and Set slope.
+- **Where:** a hole's vertices lie on the net (inside the outer loop, not in another hole, on no side, fold or vertex);
+  its sides touch no other loop (not the outer one, not another hole) and not themselves. No hole in a hole, and a hole
+  may not go round another.
+- **Folds:** a hole's sides may cross fold segments. When it's closed, each crossing becomes a vertex of the hole and
+  the end of what's left of the fold; the folds' parts inside the hole go, with their fold vertices. The new vertices
+  need labels like any other. A hole inside a face that crosses no fold makes that face a ring.
+- **After:** a hole's vertices are dragged, inserted (middle circles) and deleted as the loop's; a vertex dragged so
+  that its sides cross folds cuts them, as drawing the hole there would have (asked for on 2026-11-19). Deleting a vertex of a hole with 3 deletes the hole: the faces round it
+  close up (what was cut off the folds doesn't come back).
+- **Its sides** are glued like the outer loop's (counterparts on any loop); a hole runs clockwise (the net on the left
+  of every loop).
+- **Projects:** a template with holes has a starting net with holes; a face with a hole is one region with a hidden
+  seam to its hole (as rings are after gluing, §8.2).
+
+Done (§8.5):
+- `Template.holes` (`Hole`: its vertices, closed or not; the last may be being drawn), `TemplateFace.holes` (rings),
+  `all_loop_sides` (the outer loop's, then the closed holes'), `complete`, `hole_of`; `template_area` leaves holes out.
+- `core/template/holes.py`: `with_hole_point`, `closed_hole` (clockwise; folds cut at the crossings, their parts and
+  fold vertices inside gone), `without_hole_vertex` (the hole goes with its third-last vertex), and `faces_from_graph`:
+  once there are holes, faces are worked out again from the segments after every change of folds or holes, keeping the
+  colour of the face a point inside them was in (the left one's where a deleted fold merges two).
+- Rules: a hole's vertices on the net, its sides touching no loop, crossing folds only while it's drawn, not round
+  another hole; folds may end at a hole's vertices, not into the hole. `TemplateEditor.add_hole_point` (every point an
+  action; the first vertex closes it); deleting a vertex of a hole being drawn is refused (Undo takes it back).
+- Validation, gluing and the body see every loop; a ring's piece is one region of the starting net with a hidden seam
+  to its hole (`template_body._bridged`); `build_net` takes nets with holes.
+- Template files: `"holes"` (only if there are any), a face's `"holes"`.
+- UI: `DrawHoleButton` above Validate (just its text, in its middle), Edit -> Draw hole (H);
+  `TemplateTool` draws a hole as the loop (SHIFT, a locked slope, Place a vertex), Escape gives up a hole without
+  points; its sides have middle circles like the loop's. H is left out of Help's hotkeys with Ctrl+T and V.
+
 ### 8.3 T6c and T7: style per document, built-in templates
 (Asked for on 2026-11-17; it replaces the parts of §7 it contradicts.)
 - **File -> New** offers three: Cube, Cube with a hole (the torus template, once it's finished), and Custom (a

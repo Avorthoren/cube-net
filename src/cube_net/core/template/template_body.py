@@ -55,7 +55,11 @@ def body_and_point_names(template: Template) -> tuple[Body, dict[SurfacePoint, s
     for number, face in enumerate(glued, start=1):
         outer = [p for p, _ in loops[number][0]]
         for piece, frame in zip(face.pieces, face.frames, strict=True):
-            corners = tuple(frame.apply(template.position(c)) for c in template.faces[piece].corners)
+            piece_face = template.faces[piece]
+            corners = tuple(frame.apply(template.position(c)) for c in piece_face.corners)
+            if piece_face.holes:  # a ring: one region, a hidden seam to each hole (as rings are after gluing)
+                cycles = [[frame.apply(template.position(c)) for c in cycle] for cycle in piece_face.holes]
+                corners = tuple(_bridged(list(corners), cycles))
             whole = len(face.pieces) == 1 and number not in holes and list(corners) == outer
             start.append(StartPiece(number, frame.inverse(), None if whole else corners))
     colors = [face.color for face in glued]
@@ -72,10 +76,44 @@ def body_and_point_names(template: Template) -> tuple[Body, dict[SurfacePoint, s
     points: dict[SurfacePoint, str] = {}
     for number, face in enumerate(glued, start=1):
         for piece, frame in zip(face.pieces, face.frames, strict=True):
-            for c in template.faces[piece].corners:
+            for c in (c for cycle in template.faces[piece].cycles for c in cycle):
                 if name(c) not in names:
                     points[SurfacePoint(body, number, frame.apply(template.position(c)))] = name(c)
     return body, points
+
+
+def _bridged(outer: list[Vec], holes: list[list[Vec]]) -> list[Vec]:
+    """One polygon from an outer cycle and the holes inside it: each hole joined to it by a segment there and back (a
+    vertex of the cycle to one of the hole's that crosses and touches nothing else), so that the region stays one."""
+    polygon = list(outer)
+    for hole in holes:
+        others = [h for h in holes if h is not hole]
+        sides = [(c[i], c[(i + 1) % len(c)]) for c in (polygon, *others, hole) for i in range(len(c))]
+
+        pairs = sorted(
+            ((a - b).length_squared(), i, j)
+            for i, a in enumerate(polygon)
+            for j, b in enumerate(hole)
+            if _clear(a, b, sides)
+        )
+        _, i, j = pairs[0]
+        around = hole[j:] + hole[:j]  # from the hole's vertex, all the way round (clockwise), back to it
+        polygon = [*polygon[: i + 1], *around, around[0], *polygon[i:]]
+    return polygon
+
+
+def _clear(a: Vec, b: Vec, sides: list[tuple[Vec, Vec]]) -> bool:
+    """Does the segment a-b cross or touch none of `sides` (but at its own ends)?"""
+    from cube_net.core.geometry import IntersectionKind, classify_segments
+
+    for c, d in sides:
+        hit = classify_segments(a, b, c, d)
+        if hit.kind is IntersectionKind.DISJOINT:
+            continue
+        if hit.kind is IntersectionKind.TOUCH and hit.point in (a, b):
+            continue
+        return False
+    return True
 
 
 def _drop_straight_vertices(loops: dict[int, list[_Loop]]) -> None:

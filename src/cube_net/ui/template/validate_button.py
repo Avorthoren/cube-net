@@ -48,11 +48,11 @@ class ValidateButton(QObject):
     # Clicked (validate the template).
     clicked = pyqtSignal()
 
-    def __init__(self, toolbar: QToolBar) -> None:
+    def __init__(self, toolbar: QToolBar, with_separator: bool = True) -> None:
         super().__init__(toolbar)
         self._status = ValidationStatus.UNDEFINED
-        # The line between Net area and the button.
-        self.separator: QAction = toolbar.addSeparator()
+        # The line between Net area and the button (None: another button above it has it).
+        self.separator: QAction | None = toolbar.addSeparator() if with_separator else None
         self.button = SquareButton(toolbar)
         bind(self.button, self.button.setToolTip, "Hotkey: V")  # its key (see `MainWindow`)
         self.button.clicked.connect(self.clicked)
@@ -61,7 +61,8 @@ class ValidateButton(QObject):
         self._show()
 
     def set_visible(self, visible: bool) -> None:
-        self.separator.setVisible(visible)
+        if self.separator is not None:
+            self.separator.setVisible(visible)
         self.action.setVisible(visible)
 
     def set_status(self, status: ValidationStatus) -> None:

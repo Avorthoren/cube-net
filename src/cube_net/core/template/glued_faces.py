@@ -101,9 +101,10 @@ def _piece_of_side(template: Template) -> dict[tuple[int, int], int]:
     """The template face each side (loop sides and both ways of the folds) belongs to."""
     owner = {}
     for i, face in enumerate(template.faces):
-        n = len(face.corners)
-        for k in range(n):
-            owner[(face.corners[k], face.corners[(k + 1) % n])] = i
+        for cycle in face.cycles:
+            n = len(cycle)
+            for k in range(n):
+                owner[(cycle[k], cycle[(k + 1) % n])] = i
     return owner
 
 
@@ -112,7 +113,7 @@ def _seams(template: Template) -> list[_Seam]:
     itself along a pair has an edge there)."""
     owner = _piece_of_side(template)
     by_names: dict[frozenset[str], list[tuple[int, int]]] = {}
-    for a, b in template.loop_sides():
+    for a, b in template.all_loop_sides():
         la, lb = template.vertex(a).label, template.vertex(b).label
         assert la is not None and lb is not None  # validation's check 2 passed
         by_names.setdefault(frozenset((la.name, lb.name)), []).append((a, b))
@@ -152,9 +153,8 @@ def _boundary(
     inside = {seam.side for seam in seams}
     starts: dict[Vec, tuple[Corner, Corner]] = {}
     for piece in pieces:
-        corners = template.faces[piece].corners
         frame = frames[piece]
-        for a, b in pairwise((*corners, corners[0])):
+        for a, b in (pair for cycle in template.faces[piece].cycles for pair in pairwise((*cycle, cycle[0]))):
             if (a, b) in inside:
                 continue
             start = Corner(frame.apply(template.position(a)), a)

@@ -38,8 +38,9 @@ def the_applications_keys(qtbot: QtBot, tmp_path: Path) -> list[set[str]]:
     return keys
 
 
-# The keys of making templates: New Template and Validate. They'll have their own help page (docs/template_idea.txt).
-TEMPLATE_KEYS = [{"Ctrl+T"}, {"V"}]
+# The keys of making templates: New Template, Validate and Draw hole. They'll have their own help page
+# (docs/template_idea.txt).
+TEMPLATE_KEYS = [{"Ctrl+T"}, {"V"}, {"H"}]
 
 
 def test_every_shortcut_of_the_application_is_in_the_help(qtbot: QtBot, tmp_path: Path) -> None:

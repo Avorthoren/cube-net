@@ -145,6 +145,8 @@ class TemplateMode(QObject):
         to see what's wrong)."""
         return (
             self.editor.state is TemplateState.FINALIZATION
+            and self.editor.template.complete
+            and not self.tool.drawing_hole
             and not self.tool.busy()
             and self.status() is not ValidationStatus.VALID
         )

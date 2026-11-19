@@ -85,6 +85,7 @@ from cube_net.ui.sheet.coordinates_text import copied_text
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.sheet.workspace import Workspace
 from cube_net.ui.style import DEFAULT_STYLE, Style, apply_style
+from cube_net.ui.template.draw_hole_button import DrawHoleButton
 from cube_net.ui.template.net_area import NetArea
 from cube_net.ui.template.template_mode import TemplateMode
 from cube_net.ui.template.validate_button import ValidateButton
@@ -427,7 +428,10 @@ class MainWindow(QMainWindow):
         self._update_bounding()
         self.net_area = NetArea(toolbar)  # in their place while a template is made
         self.net_area.action.setVisible(False)
-        self.validate_button = ValidateButton(toolbar)  # below it
+        self.draw_hole_button = DrawHoleButton(toolbar)  # below it
+        self.draw_hole_button.set_visible(False)
+        self.draw_hole_button.clicked.connect(self._on_draw_hole)
+        self.validate_button = ValidateButton(toolbar, with_separator=False)  # below that
         self.validate_button.set_visible(False)
         self.validate_button.clicked.connect(self._on_validate)
 
@@ -469,10 +473,11 @@ class MainWindow(QMainWindow):
         self.template_mode.tool.cancel()
         self.stack.setCurrentWidget(self.empty_area)
         self.project_path = None
-        for action in (self.ruler_action, self.net_area.action, self.validate_action):
+        for action in (self.ruler_action, self.net_area.action, self.validate_action, self.draw_hole_action):
             action.setVisible(False)
         self.ruler_total_action.setVisible(False)
         self.validate_button.set_visible(False)
+        self.draw_hole_button.set_visible(False)
         self.bounding.set_shown(False)
         self.approve_action.setVisible(True)
         self.settings_panel.style_tab.setEnabled(False)
@@ -501,6 +506,8 @@ class MainWindow(QMainWindow):
         self.net_area.action.setVisible(template)
         self.validate_action.setVisible(template)
         self.validate_button.set_visible(template)
+        self.draw_hole_action.setVisible(template)
+        self.draw_hole_button.set_visible(template)
         self.approve_action.setVisible(not template)
         self.settings_panel.set_template_mode(template)
         self._mouse = None
@@ -529,6 +536,13 @@ class MainWindow(QMainWindow):
             self.template_mode.tool.cancel()
         else:
             self.cut_tool.unlock_slope()
+
+    def _on_draw_hole(self) -> None:
+        """Draw hole (H): the next clicks draw a hole in the template (docs/template_plan.md, §8.5)."""
+        if self.in_template_mode and self.template_mode.tool.can_start_hole():
+            self.template_mode.tool.start_hole()
+            self._note("template", "draw hole")
+            self._update_edit_actions()
 
     def _on_validate(self) -> None:
         if self.in_template_mode:
@@ -598,6 +612,7 @@ class MainWindow(QMainWindow):
             for action in (
                 self.approve_action,
                 self.validate_action,
+                self.draw_hole_action,
                 self.unlock_slope_action,
                 self.undo_action,
                 self.redo_action,
@@ -615,6 +630,8 @@ class MainWindow(QMainWindow):
             history = self.template_mode.editor.history
             self.approve_action.setEnabled(False)
             self.validate_action.setEnabled(self.template_mode.can_validate())
+            self.draw_hole_action.setEnabled(tool.can_start_hole())
+            self.draw_hole_button.set_enabled(tool.can_start_hole())
             self.validate_button.set_enabled(self.template_mode.can_validate())
             self.unlock_slope_action.setEnabled(True)  # Escape always means something while making a template
         else:
@@ -623,6 +640,7 @@ class MainWindow(QMainWindow):
             rearranged = self.editor.rearranged
             self.approve_action.setEnabled(rearranged is not None and rearranged.valid)
             self.validate_action.setEnabled(False)
+            self.draw_hole_action.setEnabled(False)
             self.unlock_slope_action.setEnabled(self.cut_tool.slope is not None)
         self.undo_action.setEnabled(history.can_undo and not dragging)
         self.redo_action.setEnabled(history.can_redo and not dragging)
@@ -1340,6 +1358,12 @@ class MainWindow(QMainWindow):
         self.validate_action.triggered.connect(self._on_validate)
         self.validate_action.setVisible(False)  # only while a template is made
         edit_menu.addAction(self.validate_action)
+        self.draw_hole_action = QAction(self)
+        bind(self.draw_hole_action, self.draw_hole_action.setText, "Draw &hole")
+        self.draw_hole_action.setShortcut("H")
+        self.draw_hole_action.triggered.connect(self._on_draw_hole)
+        self.draw_hole_action.setVisible(False)  # only while a template is made
+        edit_menu.addAction(self.draw_hole_action)
 
         # The applications menu's entry: only for an AppImage (the installers of the other systems make their own).
         self.menu_entry_action: QAction | None = None

@@ -30,7 +30,7 @@ from cube_net.core.project.codec import (
 )
 from cube_net.core.project.project import ProjectFileError
 from cube_net.core.style import Style
-from cube_net.core.template.template import Fold, Label, LoopVertex, Template, TemplateFace
+from cube_net.core.template.template import Fold, Hole, Label, LoopVertex, Template, TemplateFace
 from cube_net.core.template.template_editor import TemplateSnapshot
 from cube_net.core.template.validation_status import ValidationStatus
 
@@ -132,6 +132,10 @@ def _write_template(template: Template) -> dict[str, Any]:
     }
     if template.fold_vertices:  # written only if there are any (docs/template_plan.md, §8.4)
         data["fold_vertices"] = [_write_vertex(v) for v in template.fold_vertices]
+    if template.holes:  # written only if there are any (docs/template_plan.md, §8.5)
+        data["holes"] = [
+            {"vertices": [_write_vertex(v) for v in h.vertices], "closed": h.closed} for h in template.holes
+        ]
     return data
 
 
@@ -147,6 +151,13 @@ def _read_vertex(v: dict[str, Any]) -> LoopVertex:
     return LoopVertex(_int(v["id"]), read_vec(v["at"]), None if v["label"] is None else Label(*v["label"]))
 
 
+def _read_hole(data: dict[str, Any]) -> Hole:
+    closed = data["closed"]
+    if not isinstance(closed, bool):
+        raise TypeError(f"expected true or false, got {closed!r}")
+    return Hole(tuple(_read_vertex(v) for v in data["vertices"]), closed)
+
+
 def _write_face(face: TemplateFace) -> dict[str, Any]:
     """Its corners and colour; its number and hatch only if it has them (not the identity)."""
     data: dict[str, Any] = {"corners": list(face.corners), "color": face.color}
@@ -154,6 +165,8 @@ def _write_face(face: TemplateFace) -> dict[str, Any]:
         data["number"] = face.number
     if not face.hatch.is_identity():
         data["hatch"] = write_motion(face.hatch)
+    if face.holes:
+        data["holes"] = [list(cycle) for cycle in face.holes]
     return data
 
 
@@ -164,6 +177,7 @@ def _read_face(data: dict[str, Any]) -> TemplateFace:
         _color(data["color"]),
         None if number is None else _int(number),
         read_motion(data["hatch"]) if "hatch" in data else Rigid90.identity(),
+        tuple(tuple(_int(c) for c in cycle) for cycle in data.get("holes", ())),
     )
 
 
@@ -180,6 +194,7 @@ def _read_template(data: dict[str, Any]) -> Template:
         _int(data["next_id"]),
         _int(data.get("next_number", 1)),
         tuple(_read_vertex(v) for v in data.get("fold_vertices", ())),
+        tuple(_read_hole(h) for h in data.get("holes", ())),
     )
     _check(template)
     return template
@@ -195,8 +210,10 @@ def _check(template: Template) -> None:
         raise ValueError("two vertices have the same label")
     if any(f.number is not None and not 1 <= f.number < template.next_number for f in template.faces):
         raise ValueError("a face's number isn't below the next one")
+    if any(not h.closed for h in template.holes[:-1]) or any(len(h.vertices) < 3 for h in template.holes if h.closed):
+        raise ValueError("a hole that isn't the last one is open, or a closed one has fewer than 3 vertices")
     if not template.closed:
-        if template.folds or template.faces or template.fold_vertices:
+        if template.folds or template.faces or template.fold_vertices or template.holes:
             raise ValueError("an open loop with folds or faces")
         return
     if len(template.vertices) < 3:
@@ -204,17 +221,17 @@ def _check(template: Template) -> None:
     if any(len(template.folds_at(v.id)) < 2 for v in template.fold_vertices):
         raise ValueError("a fold vertex that isn't between two fold segments at least")
     sides = [
-        *template.loop_sides(),
+        *template.all_loop_sides(),
         *((f.start, f.end) for f in template.folds),
         *((f.end, f.start) for f in template.folds),
     ]
     for face in template.faces:
-        if len(face.corners) < 3 or not set(face.corners) <= set(ids):
-            raise ValueError(f"a face with wrong corners: {face.corners}")
+        if any(len(c) < 3 or not set(c) <= set(ids) for c in face.cycles):
+            raise ValueError(f"a face with wrong corners: {face.cycles}")
     for a, b in sides:
         if sum(face.has_side(a, b) for face in template.faces) != 1:
             raise ValueError(f"the side {a}-{b} isn't on exactly one face")
-    if sum(len(face.corners) for face in template.faces) != len(sides):
+    if sum(len(c) for face in template.faces for c in face.cycles) != len(sides):
         raise ValueError("the faces have sides that are neither the loop's nor folds")
 
 

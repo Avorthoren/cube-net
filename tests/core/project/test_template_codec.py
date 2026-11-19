@@ -113,6 +113,26 @@ def test_fold_vertices(cross_template: Template) -> None:
         decode_template(data)
 
 
+def test_holes(cross_template: Template) -> None:
+    from fractions import Fraction as F
+
+    from cube_net.core.template.holes import closed_hole, with_hole_point
+
+    template = cross_template
+    for x, y in [(F(45, 4), F(49, 4)), (F(45, 4), F(25, 2)), (F(23, 2), F(25, 2))]:
+        template = with_hole_point(template, Vec(x, y))
+    closed = closed_hole(template)
+    being_drawn = with_hole_point(closed, Vec(F(45, 4), F(53, 4)))
+    for t in (template, closed, being_drawn):  # one being drawn, closed, and another being drawn after it
+        assert round_trip(TemplateDocument(TemplateSnapshot(t), History())).state.template == t
+    data = encode_template(TemplateDocument(TemplateSnapshot(closed), History()))
+    assert len(data["templates"][0]["holes"]) == 1 and any("holes" in f for f in data["templates"][0]["faces"])
+    data = json.loads(json.dumps(data))
+    data["templates"][0]["holes"][0]["closed"] = "yes"
+    with pytest.raises(ProjectFileError, match="damaged"):
+        decode_template(data)
+
+
 def test_a_template_saved_without_a_style_has_none(cross_template: Template) -> None:
     data = json.loads(json.dumps(encode_template(document_of(edited(cross_template)))))
     assert data.pop("style") is None

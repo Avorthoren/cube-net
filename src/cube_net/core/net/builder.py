@@ -103,8 +103,10 @@ def build_net(body: Body, specs: Iterable[RegionSpec]) -> Net:
         out.next, nxt.prev = nxt, out
 
     net = Net(body, vertices.values(), half_edges, regions)
-    if len(net.perimeter()) != len(outside):
-        raise NetBuildError("the net's perimeter must be a single cycle (the net must be connected and have no holes)")
+    if sum(len(cycle) for cycle in net.perimeters()) != len(outside):
+        raise NetBuildError("the net's perimeter is broken")
+    if len(net.perimeters()) > 1 and not _connected(net):
+        raise NetBuildError("the net must be connected (it may have holes)")
     return net
 
 
@@ -133,3 +135,19 @@ def _turn(arriving: HalfEdge, leaving: list[HalfEdge]) -> HalfEdge:
         return (-1 if he.region is None else 3), Fraction(0)  # the same way as d0: through a slit, or a full turn
 
     return min((he for he in leaving if he is not back), key=clockwise)
+
+
+def _connected(net: Net) -> bool:
+    """Do all regions hang together (through vertices they share)?"""
+    at: dict[NetVertex, set[Region]] = {}
+    for region in net.regions:
+        for he in net.region_cycle(region):
+            at.setdefault(he.origin, set()).add(region)
+    found = {net.regions[0]}
+    stack = [net.regions[0]]
+    while stack:
+        for he in net.region_cycle(stack.pop()):
+            for other in at[he.origin] - found:
+                found.add(other)
+                stack.append(other)
+    return len(found) == len(net.regions)

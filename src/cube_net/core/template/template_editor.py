@@ -27,6 +27,7 @@ from cube_net.core.geometry import Vec
 from cube_net.core.history import ActionKind, History
 from cube_net.core.origin import DEFAULT_ORIGIN, Origin
 from cube_net.core.template.glued_faces import aligned_hatches
+from cube_net.core.template.holes import closed_hole, recut, with_hole_point
 from cube_net.core.template.rules import (
     MIN_VERTICES,
     MIN_VERTICES_TO_CLOSE,
@@ -104,8 +105,17 @@ class TemplateEditor:
         """What would be wrong with the vertex at `p` (None: nothing), without moving it."""
         if not on_the_sheet(p):
             return TemplateRejection(TemplateProblem.OFF_THE_SHEET)
-        after = self.template.with_vertex_moved(vertex_id, p)
+        after = self._moved(vertex_id, p)
         return check(after, self._segments_at(after, vertex_id))
+
+    def _moved(self, vertex_id: int, p: Vec) -> Template:
+        """The template with the vertex at `p`: a closed hole's vertex cuts the folds its sides now cross, as drawing
+        the hole there would have (docs/template_plan.md, §8.5)."""
+        after = self.template.with_vertex_moved(vertex_id, p)
+        hole = after.hole_of(vertex_id)
+        if hole is not None and after.holes[hole].closed:
+            after = recut(after, self.template, hole)
+        return after
 
     def move_vertex(self, vertex_id: int, p: Vec) -> TemplateRejection | None:
         self._require_closed()
@@ -113,7 +123,7 @@ class TemplateEditor:
             return None  # released where it was: not an action
         problem = self.move_problem(vertex_id, p)
         if problem is None:
-            self._record(ActionKind.MOVE_VERTEX, self.template.with_vertex_moved(vertex_id, p))
+            self._record(ActionKind.MOVE_VERTEX, self._moved(vertex_id, p))
         return problem
 
     def delete_vertex(self, vertex_id: int) -> TemplateRejection | None:
@@ -123,6 +133,15 @@ class TemplateEditor:
         if self.template.is_fold_vertex(vertex_id):
             self._record(ActionKind.DELETE_VERTEX, self.template.without_vertex(vertex_id))
             return None
+        hole = self.template.hole_of(vertex_id)
+        if hole is not None:
+            if not self.template.holes[hole].closed:
+                return TemplateRejection(TemplateProblem.CROSSING)  # a hole being drawn: Undo takes its points back
+            after = self.template.without_vertex(vertex_id)
+            vertices = self.template.holes[hole].vertices
+            i = next(k for k, v in enumerate(vertices) if v.id == vertex_id)
+            joined = [] if len(vertices) <= 3 else [(vertices[i - 1].id, vertices[(i + 1) % len(vertices)].id)]
+            return self._apply(ActionKind.DELETE_VERTEX, after, joined)
         if len(self.template.vertices) <= MIN_VERTICES:
             return TemplateRejection(TemplateProblem.TOO_FEW_VERTICES)
         i = self.template.index_of(vertex_id)
@@ -132,6 +151,26 @@ class TemplateEditor:
         return self._apply(ActionKind.DELETE_VERTEX, after, [(before, after_id)])
 
     # --- folds, colours, labels ---------------------------------------------------------------------------------------
+
+    def add_hole_point(self, p: Vec) -> TemplateRejection | None:
+        """The next vertex of the hole being drawn at `p`, or the first of a new hole; at the hole's first vertex, the
+        hole is closed (docs/template_plan.md, §8.5)."""
+        self._require_closed()
+        if not on_the_sheet(p):
+            return TemplateRejection(TemplateProblem.OFF_THE_SHEET)
+        template = self.template
+        if template.drawing_hole:
+            vertices = template.holes[-1].vertices
+            if p == vertices[0].position:
+                if len(vertices) < MIN_VERTICES_TO_CLOSE:
+                    return TemplateRejection(TemplateProblem.TOO_EARLY_TO_CLOSE)
+                after = closed_hole(template)
+                return self._apply(ActionKind.ADD_VERTEX, after, after.holes[-1].sides())
+            if p == vertices[-1].position:
+                return TemplateRejection(TemplateProblem.CROSSING)  # a segment of no length
+            after = with_hole_point(template, p)
+            return self._apply(ActionKind.ADD_VERTEX, after, [(vertices[-1].id, after.holes[-1].vertices[-1].id)])
+        return self._apply(ActionKind.ADD_VERTEX, with_hole_point(template, p), [])
 
     def add_fold(self, start: int, end: int) -> TemplateRejection | None:
         """A fold line of one segment."""
@@ -247,5 +286,5 @@ class TemplateEditor:
     @staticmethod
     def _segments_at(template: Template, vertex_id: int) -> list[tuple[int, int]]:
         """The loop's sides and the folds that end at a vertex."""
-        sides = [side for side in template.loop_sides() if vertex_id in side]
+        sides = [side for side in template.all_loop_sides() if vertex_id in side]
         return sides + [(f.start, f.end) for f in template.folds_at(vertex_id)]

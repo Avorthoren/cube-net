@@ -4389,7 +4389,8 @@ class TestTemplates:
         button = window.validate_button.button
         assert not window.validate_button.action.isVisible()  # a project
         window.new_template_action.trigger()
-        assert window.validate_button.action.isVisible() and window.validate_button.separator.isVisible()
+        assert window.validate_button.action.isVisible() and window.draw_hole_button.separator.isVisible()
+        assert window.draw_hole_button.action.isVisible() and window.draw_hole_action.shortcut().toString() == "H"
         assert not button.isEnabled() and button.text() == "Validate\ntemplate"  # the loop isn't closed
         self.draw(window)
         assert button.isEnabled()

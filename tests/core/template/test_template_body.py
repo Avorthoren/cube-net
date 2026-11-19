@@ -175,3 +175,34 @@ def test_a_fold_vertex_needs_a_label(cross_template: Template) -> None:
     template = template.with_fold_line(c1, [Vec(F(23, 2), F(53, 4))], d1)
     failure = validate(template)
     assert failure is not None and failure.problem in (ValidationProblem.NO_COLOR, ValidationProblem.UNLABELLED)
+
+
+def test_a_template_with_a_hole(cross_template: Template) -> None:
+    """The cross with a small square hole in face 2 (docs/template_plan.md, §8.5): its sides glued in pairs, P-Q to
+    Q-P and P-R to R-P (each pair meets at Q or R), so face 2 is a ring glued to itself; the net has a hole."""
+    from cube_net.core.template import Label, TemplateEditor
+    from cube_net.core.template.holes import closed_hole, with_hole_point
+
+    corners = [(F(45, 4), F(49, 4)), (F(45, 4), F(25, 2)), (F(23, 2), F(25, 2)), (F(23, 2), F(49, 4))]
+    template = cross_template
+    for x, y in corners:
+        template = with_hole_point(template, Vec(x, y))
+    template = closed_hole(template)
+    names = {
+        Vec(*corners[0]): ("P", 1),
+        Vec(*corners[1]): ("Q", 1),
+        Vec(*corners[2]): ("P", 2),
+        Vec(*corners[3]): ("R", 1),
+    }
+    for v in template.holes[0].vertices:
+        template = template.with_label(v.id, Label(*names[v.position]))
+    assert validate(template) is None
+    body = body_from_template(template)
+    rings = [n for n in body.face_numbers if len(body.face(n).loops) == 2]
+    assert len(rings) == 1 and body.area == 6 - F(1, 16)
+    assert body.vertex_angle("P") == 540 and body.vertex_angle("Q") == 270
+    net = starting_net(body)
+    validate_net(net)
+    assert len(net.perimeters()) == 2  # the outer one and the hole's
+    editor = TemplateEditor(template)
+    assert editor.template.holes[0].closed

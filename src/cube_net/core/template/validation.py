@@ -121,14 +121,14 @@ class _Side:
 
 def validate(template: Template) -> ValidationFailure | None:
     """The first check that fails, or None if the template is valid. The loop must be closed."""
-    if not template.closed:
+    if not template.complete:
         raise ValueError("only a closed loop can be validated")
     uncoloured = sum(face.color is None for face in template.faces)
     if uncoloured:
         return ValidationFailure(ValidationProblem.NO_COLOR, count=uncoloured)
     if any(v.label is None for v in template.all_vertices):
         return ValidationFailure(ValidationProblem.UNLABELLED)
-    sides = [_Side(template.vertex(a), template.vertex(b)) for a, b in template.loop_sides()]
+    sides = [_Side(template.vertex(a), template.vertex(b)) for a, b in template.all_loop_sides()]
     folds = [_Side(template.vertex(f.start), template.vertex(f.end)) for f in template.folds]
 
     selfish = tuple(s.text for s in (*sides, *folds) if len(s.names) == 1)
@@ -254,9 +254,12 @@ def _not_glued(template: Template) -> tuple[str, ...]:
     """The names whose instances the gluing doesn't bring together: two instances are glued directly when a name is
     next to both along the loop (their segments to it are counterparts), or when they're at the same point (the loop
     touches itself there); gluing goes on through chains of those."""
-    vertices = template.vertices
-    n = len(vertices)
-    neighbours = {v.id: {_name(vertices[i - 1]), _name(vertices[(i + 1) % n])} for i, v in enumerate(vertices)}
+    neighbours: dict[int, set[str]] = {}
+    for vertices in (template.vertices, *(h.vertices for h in template.holes)):  # along each loop
+        n = len(vertices)
+        neighbours.update(
+            {v.id: {_name(vertices[i - 1]), _name(vertices[(i + 1) % n])} for i, v in enumerate(vertices)}
+        )
     neighbours.update({v.id: set() for v in template.fold_vertices})  # one point inside the net: glued to nothing
     by_name: dict[str, list[LoopVertex]] = {}
     for v in template.all_vertices:

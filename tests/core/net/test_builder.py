@@ -80,7 +80,7 @@ def test_parts_touching_at_a_point(pillow: Body) -> None:
 
 
 def test_disconnected_rejected() -> None:
-    with pytest.raises(NetBuildError, match="must be a single cycle"):
+    with pytest.raises(NetBuildError, match="must be connected"):
         build_net(CUBE, default_squares(f5=Vec(20, 20)))
 
 

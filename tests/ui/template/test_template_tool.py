@@ -341,3 +341,57 @@ def test_vertices_at_one_point_are_picked_by_direction(setup: tuple[SheetView, T
     view.mouse_moved.emit(12 + step, 14 - step / 3)
     assert tool.item.highlight_vertex() == Vec(12, 14)
     assert tool.item.highlight_arcs() == owned_arcs(tool.editor.template, t1)
+
+
+class TestHoles:
+    """Draw hole in a 4 x 3 rectangle (docs/template_plan.md, §8.5)."""
+
+    RECTANGLE = ((10, 10), (14, 10), (14, 13), (10, 13))
+
+    def rectangle(self, view: SheetView, tool: TemplateTool) -> None:
+        for x, y in [*self.RECTANGLE, self.RECTANGLE[0]]:
+            view.left_pressed.emit(float(x), float(y))
+        assert tool.editor.state is TemplateState.FINALIZATION
+
+    def test_drawn_and_closed_by_clicks(self, setup: tuple[SheetView, TemplateTool]) -> None:
+        view, tool = setup
+        self.rectangle(view, tool)
+        assert tool.can_start_hole()
+        tool.start_hole()
+        assert tool.drawing_hole and not tool.can_start_hole() and tool.claims(9.0, 9.0)
+        assert not tool.item.midpoints_shown()
+        for x, y in [(11, 11), (13, 11), (13, 12)]:
+            view.left_pressed.emit(float(x), float(y))
+        view.mouse_moved.emit(11.0, 12.0)
+        assert tool.item.rubber() == (Vec(13, 12), Vec(11, 12))  # on from the hole's last point
+        view.left_pressed.emit(11.0, 12.0)
+        assert tool.placement_at(12.0, 12.5) is not None and tool.slope_at(12.0, 12.5) is not None  # Place, Set slope
+        view.left_pressed.emit(11.0, 11.0)  # its first vertex closes it
+        assert not tool.drawing_hole and tool.editor.template.holes[0].closed
+        assert tool.item.midpoints_shown()
+
+    def test_escape_before_the_first_point(self, setup: tuple[SheetView, TemplateTool]) -> None:
+        view, tool = setup
+        self.rectangle(view, tool)
+        tool.start_hole()
+        tool.cancel()
+        assert not tool.drawing_hole
+        view.left_pressed.emit(12.0, 12.0)  # an ordinary click again: nothing
+        assert tool.editor.template.holes == ()
+
+    def test_a_point_outside_the_net_is_refused(self, setup: tuple[SheetView, TemplateTool], qtbot: QtBot) -> None:
+        view, tool = setup
+        self.rectangle(view, tool)
+        tool.start_hole()
+        with qtbot.waitSignal(tool.rejected):
+            view.left_pressed.emit(16.0, 12.0)
+        assert tool.editor.template.holes == () and tool.drawing_hole
+
+    def test_a_typed_point(self, setup: tuple[SheetView, TemplateTool]) -> None:
+        view, tool = setup
+        self.rectangle(view, tool)
+        tool.start_hole()
+        placement = tool.placement_at(11.0, 11.0)
+        assert placement is not None
+        assert tool.place(placement, Vec(F(23, 2), F(23, 2))) is None
+        assert tool.editor.template.holes[0].vertices[0].position == Vec(F(23, 2), F(23, 2))
