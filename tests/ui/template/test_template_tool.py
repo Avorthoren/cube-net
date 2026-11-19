@@ -214,6 +214,22 @@ def test_ctrl_click_deletes(
     assert len(tool.editor.template.vertices) == 6
 
 
+def test_with_ctrl_a_fold_is_highlighted_only_where_a_click_deletes_it(
+    setup: tuple[SheetView, TemplateTool], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Over a fold vertex, Ctrl+click deletes the vertex: none of its segments lights up (2026-11-20)."""
+    view, tool = setup
+    drawn(view, tool)
+    click(view, 11.0, 10.0)
+    view.left_pressed.emit(11.25, 10.5)  # a fold vertex
+    view.left_pressed.emit(11.0, 11.0)
+    monkeypatch.setattr(view, "ctrl_held", lambda: True)
+    view.mouse_moved.emit(11.25, 10.5)  # on the fold vertex
+    assert tool.item.highlight_fold() is None and tool.cursor_at(11.25, 10.5) is CursorKind.DELETE
+    view.mouse_moved.emit(11.125, 10.25)  # in the middle of a segment of the line
+    assert tool.item.highlight_fold() == (Vec(11, 10), Vec(F(45, 4), F(21, 2)))
+
+
 def test_a_double_click_in_a_face_asks_for_its_colour(setup: tuple[SheetView, TemplateTool], qtbot: QtBot) -> None:
     view, tool = setup
     drawn(view, tool)

@@ -540,7 +540,7 @@ class TemplateTool(QObject):
                 rubber = (last, end)
             elif self._editor.state is TemplateState.FINALIZATION and self._drag is None and not self.drawing_hole:
                 highlight = self._vertex_at(x, y)
-        fold = self._fold_at(*self._mouse) if self._mouse is not None and self._view.ctrl_held() else None
+        fold = self._fold_deleted_at(*self._mouse) if self._mouse is not None and self._view.ctrl_held() else None
         self.item.set_rubber(rubber)
         start = self._fold_start
         self.item.set_pending([] if start is None else [template.position(start), *self._fold_points])
@@ -682,6 +682,15 @@ class TemplateTool(QObject):
                     return i  # on its side of the line (where the net is): two sides may lie on each other
                 found = i if found is None else found
         return found
+
+    def _fold_deleted_at(self, x: float, y: float) -> Fold | None:
+        """The fold segment a Ctrl+click here would delete (to highlight it): none over a vertex (the vertex goes,
+        `_delete_at`), nor while something is being drawn or dragged."""
+        if self._editor.state is not TemplateState.FINALIZATION or self.drawing_hole or self.busy():
+            return None
+        if self._vertex_at(x, y) is not None:
+            return None
+        return self._fold_at(x, y)
 
     def _fold_at(self, x: float, y: float) -> Fold | None:
         """The fold line whose hitbox the mouse is in."""

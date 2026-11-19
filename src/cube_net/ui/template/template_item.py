@@ -117,6 +117,9 @@ class TemplateItem(QGraphicsItem):
         self._highlight_fold = segment
         self.update()
 
+    def highlight_fold(self) -> Segment | None:
+        return self._highlight_fold
+
     def set_midpoints_shown(self, shown: bool, pressed: int | None = None) -> None:
         self._midpoints_shown, self._pressed_midpoint = shown, pressed
         self.update()
