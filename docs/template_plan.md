@@ -614,6 +614,8 @@ Done (§8.4):
 - `TemplateTool`: while a fold line is drawn, a click inside a face is its next point (refused, flashing, where the
   line would break the rules), a vertex ends it, a click outside the net gives it up; the middle circles of fold
   segments insert fold vertices; `TemplateItem` draws fold vertices like the loop's, and the line being drawn.
+- Deleting a loop vertex may leave a face with nothing (two corners: its fold lies on the loop's new side): that face
+  goes, with its fold (2026-11-19, weird_cube.nettemplate's X2 then Y2).
 - In a project, the body's vertices inside the net (with 360 degrees around them: where a fold line bends) have
   vertex circles too, as the user chose on 2026-11-19 (`NetItem`); before, only their labels showed.
 

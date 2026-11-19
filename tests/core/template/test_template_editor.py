@@ -323,3 +323,13 @@ class TestFoldLines:
         editor = drawn(PILLOW)
         rejection = editor.add_fold_line(1, [self.BEND, Vec(F(43, 4), F(21, 2))], 1)
         assert rejection is not None and rejection.problem is TemplateProblem.NOT_A_FOLD
+
+
+def test_deleting_a_vertex_may_take_a_face_away() -> None:
+    """A square with a corner folded off (the fold 1-3 cuts off the triangle 1, 2, 3): deleting 2 leaves that triangle
+    nothing, and it goes, with its fold (weird_cube.nettemplate's X2 and Y2, 2026-11-19)."""
+    corner = [Vec(10, 10), Vec(11, 10), Vec(12, 10), Vec(12, 11), Vec(12, 12), Vec(11, 12), Vec(10, 12), Vec(10, 11)]
+    editor = drawn(corner)
+    assert editor.add_fold(1, 3) is None and len(editor.template.faces) == 2
+    assert editor.delete_vertex(2) is None
+    assert editor.template.folds == () and len(editor.template.faces) == 1 and len(editor.template.vertices) == 7

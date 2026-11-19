@@ -214,7 +214,8 @@ class Template:
 
     def without_vertex(self, vertex_id: int) -> Template:
         """The loop without a vertex (its two sides become one), and without the folds that end at it (and those left
-        hanging then); a fold vertex: without the folds at it, and those left hanging."""
+        hanging then), and without a face it leaves with nothing (two corners: its fold goes too); a fold vertex:
+        without the folds at it, and those left hanging."""
         template = self
         for fold in self.folds_at(vertex_id):
             if fold in template.folds:
@@ -225,7 +226,18 @@ class Template:
             replace(face, corners=tuple(c for c in face.corners if c != vertex_id)) for face in template.faces
         )
         vertices = tuple(v for v in template.vertices if v.id != vertex_id)
-        return replace(template, vertices=vertices, faces=faces)
+        return replace(template, vertices=vertices, faces=faces)._without_empty_faces()
+
+    def _without_empty_faces(self) -> Template:
+        """Without the faces a deleted vertex reduced to nothing: two corners left, joined by the loop's new side and
+        by a fold, which goes too (the side is the loop's now); then without what that leaves hanging."""
+        empty = [f for f in self.faces if len(f.corners) < 3]
+        if not empty:
+            return self
+        gone = {frozenset(f.corners) for f in empty}
+        folds = tuple(f for f in self.folds if frozenset((f.start, f.end)) not in gone)
+        faces = tuple(f for f in self.faces if len(f.corners) >= 3)
+        return replace(self, folds=folds, faces=faces)._without_hanging()
 
     def with_fold(self, start: int, end: int) -> Template:
         """A fold of one segment from `start` to `end` (see `with_fold_line`)."""

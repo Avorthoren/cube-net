@@ -177,3 +177,15 @@ class TestFoldLines:
     def test_labels_of_fold_vertices(self) -> None:
         template = self.bent().with_label(6, Label("M", 1))
         assert template.label_owner(Label("M", 1)) == template.vertex(6) and template.first_free_index("M") == 2
+
+
+def test_a_face_reduced_to_nothing_goes_with_its_fold() -> None:
+    """The pillow's right half, its corners 2 and 3 deleted one after another: first a triangle, then nothing left of
+    it; its fold 1-4 becomes the loop's side, and the left half is all."""
+    template = loop(PILLOW).with_fold(1, 4).with_face_color(0, "#AA0000").with_face_color(1, "#00AA00")
+    triangle = template.without_vertex(2)
+    assert len(triangle.faces) == 2 and triangle.folds == (Fold(1, 4),)
+    after = triangle.without_vertex(3)
+    assert after.folds == () and [v.id for v in after.vertices] == [0, 1, 4, 5]
+    (face,) = after.faces
+    assert sorted(face.corners) == [0, 1, 4, 5]
