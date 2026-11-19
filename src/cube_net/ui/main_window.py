@@ -6,6 +6,7 @@
 import datetime
 import os
 from dataclasses import replace
+from enum import Enum
 from fractions import Fraction
 from pathlib import Path
 
@@ -41,6 +42,8 @@ from cube_net.core.project import (
     ProjectFileError,
     TemplateDocument,
     load_document,
+    restorable,
+    restore_document,
     save_project,
 )
 from cube_net.core.project_settings import ProjectSettings, format_threshold
@@ -50,7 +53,7 @@ from cube_net.core.version import newer
 from cube_net.ui import palette
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.desktop_integration import AppImage, DesktopEntry, data_home
-from cube_net.ui.dialogs.message_window import MessageIcon, tell
+from cube_net.ui.dialogs.message_window import MessageIcon, ask_yes_no, tell
 from cube_net.ui.dialogs.new_project_window import NewProjectChoice, Start, builtin_project, choose_new_project
 from cube_net.ui.empty_area import EmptyArea
 from cube_net.ui.help.about_dialog import AboutDialog
@@ -114,6 +117,30 @@ from cube_net.ui.updates.update_dialogs import (
 from cube_net.ui.updates.windows_update import start_installer
 
 APP_TITLE = "Cube Net"
+
+
+class Restoring(Enum):
+    """How offering to restore a file that can't be opened went (`MainWindow._offer_restoring`)."""
+
+    # Nothing to restore it from (no actions to undo, or it can't be read at all).
+    NOT_OFFERED = "not offered"
+
+    # The user said no.
+    DECLINED = "declined"
+
+    # No state of its history opens.
+    FAILED = "failed"
+
+    RESTORED = "restored"
+
+
+def restored_text(actions: int) -> str:
+    """What restoring says it did: "State 1 action ago was restored.", "State 5 actions ago was restored."."""
+    if actions == 1:
+        return tr("State {n} action ago was restored.", n=actions)
+    return tr("State {n} actions ago was restored.", n=actions)
+
+
 NO_COORDINATES = "x: —   y: —"
 
 # How long the status bar says a check for updates is under way, at most (ms).
@@ -764,9 +791,41 @@ class MainWindow(QMainWindow):
         try:
             self._load_and_show(path)
         except ProjectFileError as e:
-            tell(self, APP_TITLE, error_text(e), icon=MessageIcon.ERROR)
+            outcome = self._offer_restoring(path, e)
+            if outcome is Restoring.RESTORED:
+                return True
+            if outcome is Restoring.NOT_OFFERED:
+                tell(self, APP_TITLE, error_text(e), icon=MessageIcon.ERROR)
+            elif outcome is Restoring.FAILED and ask_yes_no(self, tr("Unable to restore the file. Open another?")):
+                self._on_open()
             return False
         return True
+
+    def _offer_restoring(self, path: Path, error: ProjectFileError) -> Restoring:
+        """The file can't be opened: if it has actions to undo, asks whether to try to restore its last state that
+        opens (`restore_document`). Restored, it's shown with unsaved changes (it isn't saved by itself), and the user
+        is told how many actions ago that state was."""
+        if not restorable(path):
+            return Restoring.NOT_OFFERED
+        if not ask_yes_no(self, f"{error_text(error)}\n\n{tr('Try to restore the last valid state?')}"):
+            return Restoring.DECLINED
+        restored = restore_document(path)
+        self._note("file", "restore", path, "failed" if restored is None else f"{restored[1]} actions ago")
+        if restored is None:
+            return Restoring.FAILED
+        document, actions = restored
+        if isinstance(document, TemplateDocument):
+            self._show_template(document, path)
+            self.template_mode.mark_unsaved()
+        else:
+            self._show_project(document, path)
+            self._saved_revision = -1  # restored: not what the file holds
+        self.settings.last_project = path
+        self._update_saved_state()
+        if self.recorder is not None:
+            self._record_state(self.recorder)
+        tell(self, APP_TITLE, restored_text(actions))
+        return Restoring.RESTORED
 
     def _load_and_show(self, path: Path) -> None:
         document = load_document(path)
@@ -788,10 +847,14 @@ class MainWindow(QMainWindow):
         try:
             self._load_and_show(path)
         except ProjectFileError as e:
+            outcome = self._offer_restoring(path, e)
+            if outcome is Restoring.RESTORED:
+                return
             self.settings.last_project = None  # don't ask about it at every start from now on
             if self.recorder is not None:
                 self.recorder.note("project", "reopening failed", path)
-            self._offer_another_project(error_text(e))
+            failed = outcome is Restoring.FAILED
+            self._offer_another_project(tr("Unable to restore the file.") if failed else error_text(e))
 
     # --- updates -------------------------------------------------------------------------------------------------
 

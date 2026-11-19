@@ -4431,3 +4431,73 @@ def test_the_footer_shows_the_files_path(qtbot: QtBot, tmp_path: Path) -> None:
     assert window.path_label.path() == str(template)
     assert window.open_project_from(project)
     assert window.path_label.path() == str(project)
+
+
+class TestRestoring:
+    """A file that can't be opened, but has actions to undo: the user may restore its last state that opens."""
+
+    def damaged(self, tmp_path: Path) -> Path:
+        import json
+
+        from cube_net.core.project import TemplateDocument, encode_template
+        from cube_net.core.project.file import _to_bytes
+        from cube_net.core.template import Template, TemplateEditor
+
+        template = Template()
+        for x, y in [(10, 10), (11, 10), (12, 10), (12, 11), (11, 11), (10, 11)]:
+            template = template.with_vertex_appended(Vec(x, y))
+        editor = TemplateEditor(template.closed_loop())
+        assert editor.add_fold(1, 4) is None
+        data = json.loads(json.dumps(encode_template(TemplateDocument(editor.snapshot(), editor.history))))
+        data["templates"][data["states"][data["state"]]["template"]]["faces"].pop()  # a side on no face
+        path = tmp_path / "damaged.nettemplate"
+        path.write_bytes(_to_bytes(data))
+        return path
+
+    def window(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        return window
+
+    def test_restored_with_unsaved_changes(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        asked: list[str] = []
+        told: list[str] = []
+        monkeypatch.setattr("cube_net.ui.main_window.ask_yes_no", lambda _p, text: asked.append(text) or True)
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda _p, _t, text, **_: told.append(text))
+        path = self.damaged(tmp_path)
+        before = path.read_bytes()
+        window = self.window(qtbot, tmp_path)
+        assert window.open_project_from(path)
+        assert len(asked) == 1 and asked[0].endswith("Try to restore the last valid state?") and "damaged" in asked[0]
+        assert told == ["State 1 action ago was restored."]
+        assert window.in_template_mode and window.is_dirty and window.template_mode.path == path
+        assert path.read_bytes() == before  # not saved by itself
+
+    def test_declined(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        told: list[str] = []
+        monkeypatch.setattr("cube_net.ui.main_window.ask_yes_no", lambda *_: False)
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda _p, _t, text, **_: told.append(text))
+        window = self.window(qtbot, tmp_path)
+        assert not window.open_project_from(self.damaged(tmp_path))
+        assert told == []  # the question said it all
+
+    def test_nothing_to_restore_from(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        asked: list[str] = []
+        told: list[str] = []
+        monkeypatch.setattr("cube_net.ui.main_window.ask_yes_no", lambda _p, text: asked.append(text) or True)
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda _p, _t, text, **_: told.append(text))
+        path = tmp_path / "junk.cubenet"
+        path.write_bytes(b"not a project")
+        window = self.window(qtbot, tmp_path)
+        assert not window.open_project_from(path)
+        assert asked == [] and len(told) == 1  # the old message only
+
+    def test_unable_to_restore(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        asked: list[str] = []
+        opened: list[bool] = []
+        monkeypatch.setattr("cube_net.ui.main_window.ask_yes_no", lambda _p, text: asked.append(text) or True)
+        monkeypatch.setattr("cube_net.ui.main_window.restore_document", lambda _path: None)
+        window = self.window(qtbot, tmp_path)
+        monkeypatch.setattr(window, "_on_open", lambda: opened.append(True))
+        assert not window.open_project_from(self.damaged(tmp_path))
+        assert asked[-1] == "Unable to restore the file. Open another?" and opened == [True]

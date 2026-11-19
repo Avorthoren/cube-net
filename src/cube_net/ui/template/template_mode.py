@@ -107,6 +107,11 @@ class TemplateMode(QObject):
         self.view.show_initial_view(Box.around(v.position for v in vertices).expanded(1) if vertices else FIRST_VIEW)
         self.changed.emit()
 
+    def mark_unsaved(self) -> None:
+        """What's shown isn't what the file holds (a damaged file restored): it has changes to save."""
+        self._saved_revision = -1
+        self.changed.emit()
+
     @property
     def is_dirty(self) -> bool:
         return (

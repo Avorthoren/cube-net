@@ -10,7 +10,7 @@ from PyQt6 import sip
 from PyQt6.QtCore import QCoreApplication, QLibraryInfo, QObject, QTranslator, pyqtSignal
 
 from cube_net.ui.i18n.language import Language
-from cube_net.ui.i18n.russian import RUSSIAN
+from cube_net.ui.i18n.russian import RUSSIAN, RUSSIAN_PLURALS
 
 _TABLES: dict[Language, dict[str, str]] = {Language.ENGLISH: {}, Language.RUSSIAN: RUSSIAN}
 
@@ -42,8 +42,12 @@ class Translations(QObject):
         self.changed.emit()
 
     def tr(self, text: str, **values: object) -> str:
-        """`text` in the current language, with `values` put into its {placeholders}."""
+        """`text` in the current language, with `values` put into its {placeholders}. A text with a number {n} may have
+        its forms for numbers in Russian (`RUSSIAN_PLURALS`): 1 действие, 2 действия, 5 действий."""
         translated = _TABLES[self._language].get(text, text)
+        n = values.get("n")
+        if self._language is Language.RUSSIAN and text in RUSSIAN_PLURALS and isinstance(n, int):
+            translated = RUSSIAN_PLURALS[text][russian_plural(n)]
         return translated.format(**values) if values else translated
 
     def bind(self, owner: QObject, setter: Callable[[str], Any], text: str, **values: object) -> None:
@@ -66,6 +70,16 @@ class Translations(QObject):
         ):
             app.installTranslator(translator)
             self._qt_translator = translator
+
+
+def russian_plural(n: int) -> int:
+    """Which form a Russian noun takes after the number `n`: 0 for 1, 21, 31...; 1 for 2-4, 22-24...; 2 for the rest
+    (5-20, 25-30...)."""
+    if n % 10 == 1 and n % 100 != 11:
+        return 0
+    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
+        return 1
+    return 2
 
 
 def in_every_language(text: str) -> list[str]:

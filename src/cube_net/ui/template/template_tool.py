@@ -223,11 +223,16 @@ class TemplateTool(QObject):
     def can_assign(self) -> bool:
         """Can a vertex get a label now (Assign the vertex)? Once the loop is closed (docs/template_idea.txt: the
         second step), and not while a vertex is dragged."""
-        return self._editor.state is TemplateState.FINALIZATION and self._drag is None
+        return self._editor.state is TemplateState.FINALIZATION and self._drag is None and not self.drawing_hole
 
     def menu_offered(self, vertex: Vec | None) -> bool:
-        """Is there a right click menu here (while drawing the loop, dragging, or over a vertex)?"""
-        return self._editor.state is not TemplateState.FINALIZATION or self._drag is not None or vertex is not None
+        """Is there a right click menu here (while drawing the loop or a hole, dragging, or over a vertex)?"""
+        return (
+            self._editor.state is not TemplateState.FINALIZATION
+            or self.drawing_hole
+            or self._drag is not None
+            or vertex is not None
+        )
 
     def placement_at(self, x: float, y: float) -> Placement | None:
         """What a click (or the drag) would place here, for Place a vertex."""

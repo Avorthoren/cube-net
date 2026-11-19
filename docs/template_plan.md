@@ -656,6 +656,19 @@ Done (§8.5):
   `TemplateTool` draws a hole as the loop (SHIFT, a locked slope, Place a vertex), Escape gives up a hole without
   points; its sides have middle circles like the loop's. H is left out of Help's hotkeys with Ctrl+T and V.
 
+### 8.6 Restoring a damaged file
+(Asked for on 2026-11-19, after a hole drawn in the torus template left it unreadable.)
+- A project or template file that can't be opened, but has actions in its undo list: the message adds "Try to
+  restore the last valid state?". Yes: actions are undone one after another (`core/project/restore.py`: the state
+  before the last action, then the one before that...) until a state opens; it's shown, with the actions before it
+  still to undo and nothing to redo, as unsaved changes (never saved by itself), and "State N actions ago was
+  restored." says how far back. None opens: "Unable to restore the file. Open another?" (at start: the usual New
+  project / Open... question, saying it couldn't be restored).
+- A file that can't be read at all, or has nothing to undo: the message as before.
+- Only what the state and its undo list need is read: the file's tables are cut down to it first, so that a broken
+  entry nothing refers to any more doesn't stand in the way.
+- Russian texts with a number take its form (`RUSSIAN_PLURALS`: 1 действие, 2 действия, 5 действий).
+
 ### 8.3 T6c and T7: style per document, built-in templates
 (Asked for on 2026-11-17; it replaces the parts of §7 it contradicts.)
 - **File -> New** offers three: Cube, Cube with a hole (the torus template, once it's finished), and Custom (a

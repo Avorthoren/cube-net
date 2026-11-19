@@ -447,7 +447,22 @@ RUSSIAN: dict[str, str] = {
     "{path} is a project, not a template.": "{path} — это проект, а не шаблон.",
     "Template is not valid. Open template?": "Шаблон некорректен. Открыть шаблон?",
     "Template is not valid.": "Шаблон некорректен.",
+    "Try to restore the last valid state?": "Попробовать восстановить последнее корректное состояние?",
+    "Unable to restore the file. Open another?": "Не удалось восстановить файл. Открыть другой?",
+    "Unable to restore the file.": "Не удалось восстановить файл.",
+    "State {n} action ago was restored.": "Восстановлено состояние {n} действие назад.",
+    "State {n} actions ago was restored.": "Восстановлено состояние {n} действий назад.",  # see RUSSIAN_PLURALS
     "Draw\nhole": "Нарисовать\nотверстие",
     "Draw &hole": "Нарисовать &отверстие",
     "Hotkey: H": "Клавиша: H",
+}
+
+
+# Texts with a number {n} whose Russian depends on it: the forms for 1 (21, 31...), for 2-4 (22-24...), for the rest.
+RUSSIAN_PLURALS: dict[str, tuple[str, str, str]] = {
+    "State {n} actions ago was restored.": (
+        "Восстановлено состояние {n} действие назад.",
+        "Восстановлено состояние {n} действия назад.",
+        "Восстановлено состояние {n} действий назад.",
+    ),
 }

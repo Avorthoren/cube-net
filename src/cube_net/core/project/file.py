@@ -13,6 +13,7 @@ from pathlib import Path
 
 from cube_net.core.project.codec import decode_project, encode_project
 from cube_net.core.project.project import Project, ProjectFileError
+from cube_net.core.project.restore import can_restore, restore
 from cube_net.core.project.template_codec import TEMPLATE_KIND, TemplateDocument, decode_template, encode_template
 
 # The usual ending of a project file's name.
@@ -47,6 +48,24 @@ def document_from_bytes(content: bytes) -> Project | TemplateDocument:
     if isinstance(data, dict) and data.get("kind") == TEMPLATE_KIND:
         return decode_template(data)
     return decode_project(data)
+
+
+def restorable(path: Path) -> bool:
+    """Can a damaged file be tried to be restored from its history (`restore.py`): it's readable, and has actions to
+    undo?"""
+    try:
+        return can_restore(_data(path.read_bytes()))
+    except OSError, ProjectFileError:
+        return False
+
+
+def restore_document(path: Path) -> tuple[Project | TemplateDocument, int] | None:
+    """The document from `path` as it was the fewest actions ago that it opens, and how many actions ago; None if it
+    can't be restored. The file isn't changed."""
+    try:
+        return restore(_data(path.read_bytes()))
+    except OSError, ProjectFileError:
+        return None
 
 
 def _to_bytes(data: object) -> bytes:

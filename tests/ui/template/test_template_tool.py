@@ -7,6 +7,7 @@ import pytest
 from PyQt6.QtCore import QPointF, Qt
 from pytestqt.qtbot import QtBot
 
+from cube_net.core.cutting.placement import Action
 from cube_net.core.geometry import Box, Vec
 from cube_net.core.template import Fold, TemplateEditor, TemplateProblem, TemplateState
 from cube_net.ui.sheet import net_style
@@ -395,3 +396,23 @@ class TestHoles:
         assert placement is not None
         assert tool.place(placement, Vec(F(23, 2), F(23, 2))) is None
         assert tool.editor.template.holes[0].vertices[0].position == Vec(F(23, 2), F(23, 2))
+
+    def test_the_right_click_menu_while_drawing_a_hole(self, setup: tuple[SheetView, TemplateTool]) -> None:
+        """Place a vertex and Set slope, as while drawing the loop (asked for on 2026-11-19)."""
+        view, tool = setup
+        self.rectangle(view, tool)
+        assert not tool.menu_offered(None)  # inside the net, nothing drawn: no menu
+        tool.start_hole()
+        assert tool.menu_offered(None) and not tool.can_assign()
+        start = tool.placement_at(11.0, 11.0)
+        assert start is not None and start.action is Action.START and tool.slope_at(11.0, 11.0) is None
+        view.left_pressed.emit(11.0, 11.0)
+        assert tool.slope_at(13.0, 12.0) == Vec(2, 1)
+        tool.lock_slope(Vec(2, 1))
+        placement = tool.placement_at(12.0, 13.0)
+        assert placement is not None and placement.action is Action.ADD
+        assert tool.place(placement, Vec(13, 12)) is None  # on the locked slope's line
+        assert [v.position for v in tool.editor.template.holes[0].vertices] == [Vec(11, 11), Vec(13, 12)]
+        assert tool.slope is None  # placing it used the lock up, as for the loop
+        view.left_pressed.emit(12.0, 12.5)
+        assert len(tool.editor.template.holes[0].vertices) == 3
