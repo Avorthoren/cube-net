@@ -24,3 +24,19 @@ def session_logs_in_tmp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
     directory = tmp_path / "sessions"
     monkeypatch.setattr("cube_net.ui.session.start.session_log_directory", lambda: directory)
     return directory
+
+
+# A template with a slit and faces in two pieces: the torus as it was built in until 2026-11-20 (its purple and green
+# faces each in two pieces, glued into rings; the loop going up from S2 to M2 and back down to K2). Tests that need
+# those very things use it, not the built-in Cube with a hole, which the author may draw anew at any time.
+SLIT_TORUS = Path(__file__).parent / "fixtures" / "torus_with_slit.nettemplate"
+
+
+@pytest.fixture
+def slit_torus() -> object:
+    """The template document of `SLIT_TORUS`."""
+    from cube_net.core.project import TemplateDocument, load_document
+
+    document = load_document(SLIT_TORUS)
+    assert isinstance(document, TemplateDocument)
+    return document

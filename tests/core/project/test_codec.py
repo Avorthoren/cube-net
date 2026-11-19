@@ -29,7 +29,7 @@ from cube_net.core.editor import Editor, EditorState
 from cube_net.core.geometry import Vec, on_segment
 from cube_net.core.labels import PointLabels
 from cube_net.core.net import starting_net, validate_net
-from cube_net.core.project import FORMAT_VERSION, ProjectFileError, decode_project, encode_project
+from cube_net.core.project import FORMAT_VERSION, ProjectFileError, TemplateDocument, decode_project, encode_project
 from cube_net.core.project_settings import ProjectSettings
 from cube_net.core.style import Style
 
@@ -419,12 +419,11 @@ class TestBodies:
         assert loaded.labels.name(SurfacePoint.at_vertex(again, body.vertex_names[0])) == body.vertex_names[0]
         assert state_contents(loaded.state) == state_contents(project.state)
 
-    def test_a_body_with_rings_and_faces_in_pieces(self) -> None:
-        """The torus: two faces with a hole, each in two pieces in the starting net."""
-        from cube_net.core.project.builtin_templates import cube_with_a_hole
+    def test_a_body_with_rings_and_faces_in_pieces(self, slit_torus: TemplateDocument) -> None:
+        """The torus with a slit: two faces with a hole, each in two pieces in the starting net."""
         from cube_net.core.project.from_template import project_from_template
 
-        project = project_from_template(cube_with_a_hole())
+        project = project_from_template(slit_torus)
         body = project.state.net.body
         data = encode_project(project)
         assert sum("holes" in face for face in data["body"]["faces"]) == 2

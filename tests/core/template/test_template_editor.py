@@ -8,6 +8,7 @@ import pytest
 from cube_net.core.geometry import Vec
 from cube_net.core.history import ActionKind
 from cube_net.core.origin import Origin
+from cube_net.core.project import TemplateDocument
 from cube_net.core.template import Fold, Label, TemplateEditor, TemplateProblem, TemplateState
 
 # A 2 x 1 rectangle with the middles of its long sides: 6 vertices, ids 0..5, counter-clockwise.
@@ -274,13 +275,12 @@ def test_a_refusal_shows_the_fold_it_runs_into_too() -> None:
 
 
 class TestAlignHatches:
-    def test_one_action_and_none_if_nothing_changes(self) -> None:
+    def test_one_action_and_none_if_nothing_changes(self, slit_torus: TemplateDocument) -> None:
 
         from cube_net.core.geometry import Rigid90
         from cube_net.core.history import ActionKind
-        from cube_net.core.project.builtin_templates import cube_with_a_hole
 
-        template = cube_with_a_hole().state.template
+        template = slit_torus.state.template
         editor = TemplateEditor(template.with_hatches([Rigid90.identity()] * len(template.faces)))
         editor.align_hatches()
         assert editor.history.done_count == 1 and editor.history.done_entries()[0].kind is ActionKind.ALIGN_HATCHES

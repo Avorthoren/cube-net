@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from cube_net.core.geometry import Rigid90
-from cube_net.core.project.builtin_templates import cube_with_a_hole
+from cube_net.core.project import TemplateDocument
 from cube_net.core.template import Template, validate
 from cube_net.core.template.glued_faces import aligned_hatches, basis_piece, glue_faces
 
@@ -15,10 +15,10 @@ PURPLE = "#8B45B5"
 
 
 @pytest.fixture
-def torus() -> Template:
-    """The built-in torus as if never validated or coloured since the counter is kept: no numbers, hatches tied to the
-    grid."""
-    template = cube_with_a_hole().state.template
+def torus(slit_torus: TemplateDocument) -> Template:
+    """The torus with a slit (`SLIT_TORUS`) as if never validated or coloured since the counter is kept: no numbers,
+    hatches tied to the grid."""
+    template = slit_torus.state.template
     faces = tuple(replace(f, number=None, hatch=Rigid90.identity()) for f in template.faces)
     return replace(template, faces=faces, next_number=1)
 

@@ -665,6 +665,11 @@ Done (§8.5):
   gets "template rejected unexpected <point>", "template unexpected error" and a snapshot of the template as it was
   (the refused action's input is logged before them).
 
+- Tests (2026-11-20): those that need a template with a slit and faces in pieces use their own copy of the torus as it
+  was built in until then (`tests/fixtures/torus_with_slit.nettemplate`, the `slit_torus` fixture), not the built-in
+  Cube with a hole, which the author may draw anew at any time (it now has the purple face in one piece, with a hole);
+  the built-in's own tests check only what any version of it is (valid, with a style, a torus, a valid project).
+
 ### 8.6 Restoring a damaged file
 (Asked for on 2026-11-19, after a hole drawn in the torus template left it unreadable.)
 - A project or template file that can't be opened, but has actions in its undo list: the message adds "Try to

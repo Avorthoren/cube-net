@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 
 from cube_net.core.geometry import Vec
-from cube_net.core.project import load_document
+from cube_net.core.project import TemplateDocument, load_document
 from cube_net.core.template import Label, TemplateState, ValidationStatus
 from cube_net.ui.style import DEFAULT_STYLE
 from cube_net.ui.template.template_mode import TemplateMode
@@ -178,9 +178,9 @@ def test_the_status_is_saved_and_shown_again(
     assert mode.status() is ValidationStatus.VALID and not mode.is_dirty
 
 
-def test_a_passed_validate_aligns_the_hatches(qtbot: QtBot, monkeypatch: pytest.MonkeyPatch) -> None:
-    from cube_net.core.project.builtin_templates import cube_with_a_hole
-
+def test_a_passed_validate_aligns_the_hatches(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, slit_torus: TemplateDocument
+) -> None:
     told(monkeypatch)
     parent = QWidget()
     qtbot.addWidget(parent)
@@ -188,7 +188,7 @@ def test_a_passed_validate_aligns_the_hatches(qtbot: QtBot, monkeypatch: pytest.
     from cube_net.core.geometry import Rigid90
     from cube_net.core.template import TemplateSnapshot
 
-    document = cube_with_a_hole()
+    document = slit_torus
     template = document.state.template
     plain = template.with_hatches([Rigid90.identity()] * len(template.faces))  # as if never validated
     mode.show(replace(document, state=TemplateSnapshot(plain, document.state.origin)), None, DEFAULT_STYLE)

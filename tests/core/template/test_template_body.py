@@ -10,6 +10,7 @@ from cube_net.core.body import CUBE, SurfacePoint
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import Net, default_net, starting_net, validate_net
+from cube_net.core.project import TemplateDocument
 from cube_net.core.template import (
     Template,
     TemplateEditor,
@@ -128,10 +129,8 @@ def test_a_face_in_two_pieces_is_one_face(half_moved_template: Template) -> None
     assert len(inside) == 2
 
 
-def test_a_ring() -> None:
-    from cube_net.core.project.builtin_templates import cube_with_a_hole
-
-    body = body_from_template(cube_with_a_hole().state.template)
+def test_a_ring(slit_torus: TemplateDocument) -> None:
+    body = body_from_template(slit_torus.state.template)
     rings = [f for f in body.face_numbers if len(body.face(f).loops) == 2]
     assert len(body.face_numbers) == 10 and len(rings) == 2
     for f in rings:

@@ -9,6 +9,7 @@ from fractions import Fraction as F
 import pytest
 
 from cube_net.core.geometry import Vec
+from cube_net.core.project import TemplateDocument
 from cube_net.core.template import Fold, Template, TemplateEditor, TemplateProblem, template_area
 from cube_net.core.template.holes import closed_hole, faces_from_graph, with_hole_point, without_hole_vertex
 
@@ -137,13 +138,11 @@ def test_a_hole_vertex_dragged_over_a_fold_cuts_it() -> None:
     assert editor.undo() and editor.template.folds == (Fold(1, 4),)
 
 
-def test_a_hole_in_a_template_with_a_slit() -> None:
-    """The torus template (Cube with a hole) has a slit: its loop goes up from S2 to M2 and back down from M2 to K2,
-    two sides leaving M2 the same way. A hole drawn in its purple face used to lose the three faces by the slit when
-    the faces were worked out again (2026-11-19: the file was saved so, and couldn't be opened)."""
-    from cube_net.core.project.builtin_templates import cube_with_a_hole
-
-    template = cube_with_a_hole().state.template
+def test_a_hole_in_a_template_with_a_slit(slit_torus: TemplateDocument) -> None:
+    """The torus template as it was built in (`SLIT_TORUS`) has a slit: its loop goes up from S2 to M2 and back down
+    from M2 to K2, two sides leaving M2 the same way. A hole drawn in its purple face used to lose the three faces by
+    the slit when the faces were worked out again (2026-11-19: the file was saved so, and couldn't be opened)."""
+    template = slit_torus.state.template
     assert {frozenset(c) for c, _ in faces_from_graph(template)} == {frozenset(f.corners) for f in template.faces}
     editor = TemplateEditor(template)
     hole = [(F(173, 4), F(119, 2)), (F(175, 4), F(119, 2)), (F(175, 4), F(121, 2))]  # in the upper purple piece

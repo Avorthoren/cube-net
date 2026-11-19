@@ -14,7 +14,7 @@ from cube_net.core.editor import Editor, EditorState
 from cube_net.core.geometry import Vec, on_segment
 from cube_net.core.labels import vertex_labels
 from cube_net.core.net import HalfEdge, Net, NetVertex, validate_net
-from cube_net.core.project.builtin_templates import cube_with_a_hole
+from cube_net.core.project import TemplateDocument
 from cube_net.core.project.from_template import project_from_template
 
 
@@ -23,10 +23,11 @@ def cut_at(net: Net, p: Vec) -> HalfEdge:
 
 
 @pytest.fixture
-def ring() -> Net:
-    """The torus's starting net, its lower purple piece cut off along its fold E_1-A_2 and glued onto the upper one
-    along R-L: N-T lies on N-T then, and is glued too. The purple is a ring, around a hole."""
-    project = project_from_template(cube_with_a_hole())
+def ring(slit_torus: TemplateDocument) -> Net:
+    """The starting net of the torus with a slit (`SLIT_TORUS`), its lower purple piece cut off along its fold
+    E_1-A_2 and glued onto the upper one along R-L: N-T lies on N-T then, and is glued too. The purple is a ring, around
+    a hole."""
+    project = project_from_template(slit_torus)
     labels: dict[str, NetVertex] = {
         str(label): v for v, label in vertex_labels(project.state.net, project.labels).items()
     }
