@@ -182,7 +182,7 @@ class TemplateMode(QObject):
     # --- the windows --------------------------------------------------------------------------------------------------
 
     def _assign_vertex_at(self, position: Vec) -> None:
-        vertex = next(v for v in self.editor.template.vertices if v.position == position)
+        vertex = next(v for v in self.editor.template.all_vertices if v.position == position)
         template = self.editor.template
         window = AssignVertexWindow(
             vertex.label,
@@ -216,7 +216,7 @@ class TemplateMode(QObject):
             self._note("template", "color", face + 1, color)
 
     def _label_at(self, position: Vec) -> str | None:
-        vertex = next((v for v in self.editor.template.vertices if v.position == position), None)
+        vertex = next((v for v in self.editor.template.all_vertices if v.position == position), None)
         return None if vertex is None or vertex.label is None else str(vertex.label)
 
 

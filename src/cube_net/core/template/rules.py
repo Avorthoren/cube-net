@@ -7,9 +7,10 @@
   itself, as a rearranged net in a project may (docs/template_plan.md, §8.1): at a point, or along a segment with the
   net on opposite sides of it (a slit); several vertices may be at one point, each with its own part of the net there.
   But parts of the net meeting only at a point are two pieces: not allowed.
-- A fold is one straight segment from a loop vertex to another (not a neighbour, not one at the same point, not one
-  already joined by a fold), leaving each of its ends into that vertex's sector of the net, and meeting the loop and the
-  other folds nowhere else.
+- A fold line goes from a vertex (of the loop, or a fold vertex of another line) to another, straight or through fold
+  vertices strictly inside the net (docs/template_plan.md, §8.4); a line of one segment not to a neighbour, a vertex at
+  the same point, or one already joined by a fold. A segment leaves a loop vertex into that vertex's sector of the
+  net, and meets the loop and the other segments nowhere but at its ends.
 - Everything stays on the template sheet.
 
 Each check takes the template as it would be after a change and the segments the change made or moved, and says what
@@ -26,10 +27,11 @@ from cube_net.core.geometry import (
     IntersectionKind,
     Vec,
     classify_segments,
+    on_segment,
     signed_area,
 )
 from cube_net.core.sheet import TEMPLATE_SHEET_HEIGHT, TEMPLATE_SHEET_WIDTH
-from cube_net.core.template.loop_geometry import gaps_at, pieces, vertex_gaps
+from cube_net.core.template.loop_geometry import gaps_at, pieces, vertex_gaps, winding_number
 from cube_net.core.template.template import Template
 
 # The fewest vertices a closed loop keeps.
@@ -161,11 +163,25 @@ def _fold_problems(template: Template) -> tuple[set[tuple[int, int]], set[tuple[
     outside: set[tuple[int, int]] = set()
     crossing: set[tuple[int, int]] = set()
     segments = [_ordered(side) for side in template.loop_sides()] + [_ordered((f.start, f.end)) for f in template.folds]
+    loop_positions = {v.position for v in template.vertices}
+    strictly_inside = {
+        v.id: v.position not in loop_positions
+        and not any(on_segment(v.position, *_positions(template, side)) for side in template.loop_sides())
+        and winding_number(template, v.position) == 1
+        for v in template.fold_vertices
+    }
+    shared = {v.position for v in template.fold_vertices}
     for fold in template.folds:
         pair = _ordered((fold.start, fold.end))
         a, b = template.position(fold.start), template.position(fold.end)
+        if a == b:
+            crossing.add(pair)
+            continue
         for vertex, direction in ((fold.start, b - a), (fold.end, a - b)):
-            if not any(gap.contains(direction) for gap in vertex_gaps(template, vertex)):
+            if vertex in strictly_inside:
+                if not strictly_inside[vertex]:
+                    outside.add(pair)
+            elif not any(gap.contains(direction) for gap in vertex_gaps(template, vertex)):
                 outside.add(pair)
         for other in segments:
             if other == pair:
@@ -176,6 +192,12 @@ def _fold_problems(template: Template) -> tuple[set[tuple[int, int]], set[tuple[
                 continue
             if hit.kind is not IntersectionKind.TOUCH or hit.point not in (a, b):
                 crossing.update((pair, other))
+            elif hit.point in shared and not set(pair) & set(other):
+                crossing.update((pair, other))  # at a fold vertex's point, but not at that vertex: not allowed
+    if len(shared) != len(template.fold_vertices) or shared & loop_positions:
+        crossing.update(
+            _ordered((f.start, f.end)) for f in template.folds for v in (f.start, f.end) if template.is_fold_vertex(v)
+        )  # two vertices at one point, one of them a fold vertex
     return outside, crossing - outside
 
 

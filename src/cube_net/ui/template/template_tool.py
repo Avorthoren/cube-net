@@ -7,10 +7,11 @@
   vertex is active: a click in its circle closes the loop, once that makes 3 segments at least. While SHIFT is held, the
   new segment is horizontal or vertical; a locked slope (right click -> Set slope) holds it to that slope instead.
 - FINALIZATION:
-  - a vertex can be dragged; a click on one (no drag) starts a fold line, which a click on another vertex ends (a click
-    anywhere else, or Escape, gives it up);
-  - a click on a side's middle circle inserts a vertex there (on release, like a button);
-  - Ctrl+click on a vertex deletes it (and its folds), on a fold deletes the fold;
+  - a vertex can be dragged (a fold vertex too); a click on one (no drag) starts a fold line: a click inside a face puts
+    a fold vertex there, a click on another vertex ends it (a click outside the net, or Escape, gives it up;
+    docs/template_plan.md, §8.4);
+  - a click on the middle circle of a side or of a fold segment inserts a vertex there (on release, like a button);
+  - Ctrl+click on a vertex deletes it (and its folds), on a fold segment deletes it (with whatever is left hanging);
   - a double click inside a face asks for its colour (`face_double_clicked`); a click there drags the sheet.
 - Anything that breaks the rules shows the offending segments in black for a moment and changes nothing; a deletion
   that would leave too few vertices says so (`warned`).
@@ -113,8 +114,9 @@ class TemplateTool(QObject):
         self._pressed_vertex: tuple[int, tuple[float, float]] | None = None
         # The vertex being dragged and where it is now.
         self._drag: tuple[int, Vec] | None = None
-        # The vertex a fold line is being drawn from.
+        # The vertex a fold line is being drawn from, and the points put on the way so far.
         self._fold_start: int | None = None
+        self._fold_points: list[Vec] = []
         # The middle circle pressed on (the index of its side).
         self._armed_midpoint: int | None = None
         self._slope: Vec | None = None
@@ -186,7 +188,7 @@ class TemplateTool(QObject):
             return self._editor.template.position(vertex)
         side = self._midpoint_at(x, y)
         if side is not None:
-            a, b = self._editor.template.loop_sides()[side]
+            a, b = self._segment(side)
             return (self._editor.template.position(a) + self._editor.template.position(b)) / 2
         return self._next_point(x, y)
 
@@ -276,6 +278,7 @@ class TemplateTool(QObject):
     def cancel(self) -> None:
         """Give up a fold line being drawn or a drag (the vertex goes back), and unlock a locked slope (Escape)."""
         self._fold_start = None
+        self._fold_points = []
         self._drag = None
         self._pressed_vertex = None
         self._armed_midpoint = None
@@ -357,16 +360,7 @@ class TemplateTool(QObject):
             return
         vertex = self._vertex_at(x, y)
         if self._fold_start is not None:
-            start, self._fold_start = self._fold_start, None
-            self.item.set_rubber(None)
-            if vertex is not None and vertex != start:
-                rejection = self._editor.add_fold(start, vertex)
-                end = self._editor.template.position(vertex)
-                if rejection is not None:
-                    self._show_rejection(rejection, end)
-                else:
-                    self._after_action("fold", end)
-            self.refresh()
+            self._press_while_folding(x, y, vertex)
             return
         if self._view.press_modifiers() & Qt.KeyboardModifier.ControlModifier:
             self._delete_at(x, y)
@@ -378,6 +372,34 @@ class TemplateTool(QObject):
             return
         if vertex is not None:
             self._pressed_vertex = vertex, (x, y)
+
+    def _press_while_folding(self, x: float, y: float, vertex: int | None) -> None:
+        """A fold line is being drawn: a vertex ends it, a point inside a face goes on it, outside the net it's given
+        up."""
+        start, points = self._fold_start, self._fold_points
+        assert start is not None
+        template = self._editor.template
+        if vertex is not None and not (vertex == start and not points):
+            rejection = self._editor.add_fold_line(start, points, vertex)
+            end = template.position(vertex)
+            if rejection is not None:
+                self._show_rejection(rejection, end)
+                return  # the line stays: another vertex may do
+            self._fold_start, self._fold_points = None, []
+            self._after_action("fold", end)
+            return
+        p = self._quantize(x, y)
+        if vertex is None and template.face_at(p) is not None:
+            rejection = self._editor.fold_line_problem(start, [*points, p], None)
+            if rejection is not None:
+                self._show_rejection(rejection, p)
+            else:
+                points.append(p)
+                self.acted.emit("fold point", p)
+            self.refresh()
+            return
+        self._fold_start, self._fold_points = None, []  # given up
+        self.refresh()
 
     def _on_left_double_clicked(self, x: float, y: float) -> None:
         """Inside a face (not on anything there, nor while a fold or a drag is under way): ask for its colour."""
@@ -392,11 +414,13 @@ class TemplateTool(QObject):
         if self._armed_midpoint is not None:
             side, self._armed_midpoint = self._armed_midpoint, None
             if self._midpoint_at(x, y) == side:
-                a, b = self._editor.template.loop_sides()[side]
-                self._editor.insert_vertex(a, b)
-                self._after_action(
-                    "insert", (self._editor.template.position(a) + self._editor.template.position(b)) / 2
-                )
+                template = self._editor.template
+                a, b = self._segment(side)
+                if side < len(template.loop_sides()):
+                    self._editor.insert_vertex(a, b)
+                else:
+                    self._editor.insert_fold_vertex(template.folds[side - len(template.loop_sides())])
+                self._after_action("insert", (template.position(a) + template.position(b)) / 2)
             self.refresh()
             return
         if self._drag is not None:
@@ -452,11 +476,14 @@ class TemplateTool(QObject):
             elif self._fold_start is not None:
                 highlight = self._vertex_at(x, y)
                 end = template.position(highlight) if highlight is not None else self._quantize(x, y)
-                rubber = (template.position(self._fold_start), end)
+                last = self._fold_points[-1] if self._fold_points else template.position(self._fold_start)
+                rubber = (last, end)
             elif self._editor.state is TemplateState.FINALIZATION and self._drag is None:
                 highlight = self._vertex_at(x, y)
         fold = self._fold_at(*self._mouse) if self._mouse is not None and self._view.ctrl_held() else None
         self.item.set_rubber(rubber)
+        start = self._fold_start
+        self.item.set_pending([] if start is None else [template.position(start), *self._fold_points])
         if highlight is None:
             self.item.set_highlight_vertex(None)
         else:
@@ -538,7 +565,7 @@ class TemplateTool(QObject):
         that's outside the net."""
         template = self._editor.template
         best: tuple[float, int] | None = None
-        for v in template.vertices:
+        for v in template.all_vertices:
             d = self._distance_px(x, y, v.position)
             if d <= net_style.VERTEX_RADIUS_PX and (best is None or d < best[0]):
                 best = d, v.id
@@ -552,17 +579,26 @@ class TemplateTool(QObject):
             return candidates[0]
         return vertex_toward(template, candidates, direction)
 
+    def _segment(self, index: int) -> tuple[int, int]:
+        """The ends of segment `index` as `_midpoint_at` numbers them: the loop's sides, then the fold segments."""
+        template = self._editor.template
+        return [*template.loop_sides(), *((f.start, f.end) for f in template.folds)][index]
+
     def _midpoint_at(self, x: float, y: float) -> int | None:
-        """The loop's side whose middle circle the mouse is in."""
+        """The segment whose middle circle the mouse is in: an index of the loop's sides, then of the fold segments
+        after them (as `TemplateItem` draws them)."""
         if self._editor.state is not TemplateState.FINALIZATION or self._vertex_at(x, y) is not None:
             return None
+        if self._fold_start is not None:
+            return None  # a fold line is being drawn: a click there is a point of it
         template = self._editor.template
         mouse = self._quantize(x, y)
+        sides = template.loop_sides()
         found = None
-        for i, (a, b) in enumerate(template.loop_sides()):
+        for i, (a, b) in enumerate([*sides, *((f.start, f.end) for f in template.folds)]):
             pa, pb = template.position(a), template.position(b)
             if self._within(x, y, (pa + pb) / 2, net_style.midpoint_radius()):
-                if (pb - pa).cross(mouse - pa) > 0:
+                if i >= len(sides) or (pb - pa).cross(mouse - pa) > 0:
                     return i  # on its side of the line (where the net is): two sides may lie on each other
                 found = i if found is None else found
         return found

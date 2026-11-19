@@ -582,6 +582,41 @@ Done (step 4, second part: the cut rule):
   the net grey and the points where the line crosses cuts like endpoints, with their counterpart images; typed points
   may be off the net (Problem.OUTSIDE_NET is gone). Labels preview only a line that keeps the rules.
 
+### 8.4 Fold lines of several segments
+(Asked for on 2026-11-19.) A fold line is drawn like a cut line in a project: from a vertex, through points inside a
+face, to a vertex.
+- **Vertices:** a fold line's inner points are vertices of the template too, *fold vertices* (inside the loop, not on
+  it), with labels like the loop's: Assign the vertex works on them, and validation's check 2 covers them. One that
+  goes straight on between two segments is no vertex of the body (§8.2's straight vertices); one where the line bends
+  is a vertex of the body with 360 degrees around it.
+- **Folds are segments** between any two vertices (of the loop or fold vertices). A fold line starts and ends at any
+  vertex (a loop vertex, or a fold vertex of another line), not in the middle of a segment (insert a vertex there
+  first), and divides the face it goes through in two, as a one-segment fold does.
+- **Editing:** a middle circle on a fold segment inserts a fold vertex there; a fold vertex is dragged like a loop
+  vertex; Ctrl+click deletes a fold vertex or a fold segment.
+- **Deleting:** a loop vertex: its two sides become one (as now). A fold vertex: the segments at it go. A segment: it
+  goes. Then, each time, every segment left hanging (an end at a fold vertex that no other segment reaches) goes too,
+  and so on; fold vertices without segments go. The faces a deleted segment divided merge, in the colour of the face on
+  its left (seen from where it was drawn), as now.
+- **File:** template files get the fold vertices (`"fold_vertices"`); folds stay pairs of vertex ids. Templates saved
+  before open as they are; ones saved after can't be opened by older versions (agreed).
+
+Done (§8.4):
+- `Template.fold_vertices` (with `all_vertices`, `is_fold_vertex`); `with_fold_line` (the face divided along the line),
+  `with_fold_vertex_inserted`, and deleting (`without_fold`, `without_vertex`) followed by `_without_hanging`: hanging
+  segments go one after another (their spikes out of the face), then fold vertices without segments.
+- Rules: a fold vertex strictly inside the net (winding number 1, on no side of the loop), alone at its point; a
+  segment meets others only at its own ends. `TemplateEditor.add_fold_line` / `fold_line_problem` (also for a line not
+  finished yet), `insert_fold_vertex`; `delete_vertex` and `move_vertex` take fold vertices too.
+- Validation and the body see every vertex (labels, gluing, indices); a bent fold vertex is a vertex of the body with
+  360 degrees around it, inside the starting net; a straight one isn't (§8.2's straight vertices).
+- Template files: `"fold_vertices"` (only if there are any); a fold vertex must be between 2 segments at least.
+- `TemplateTool`: while a fold line is drawn, a click inside a face is its next point (refused, flashing, where the
+  line would break the rules), a vertex ends it, a click outside the net gives it up; the middle circles of fold
+  segments insert fold vertices; `TemplateItem` draws fold vertices like the loop's, and the line being drawn.
+- In a project, the body's vertices inside the net (with 360 degrees around them: where a fold line bends) have
+  vertex circles too, as the user chose on 2026-11-19 (`NetItem`); before, only their labels showed.
+
 ### 8.3 T6c and T7: style per document, built-in templates
 (Asked for on 2026-11-17; it replaces the parts of §7 it contradicts.)
 - **File -> New** offers three: Cube, Cube with a hole (the torus template, once it's finished), and Custom (a

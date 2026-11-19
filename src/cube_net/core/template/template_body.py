@@ -60,7 +60,7 @@ def body_and_point_names(template: Template) -> tuple[Body, dict[SurfacePoint, s
             start.append(StartPiece(number, frame.inverse(), None if whole else corners))
     colors = [face.color for face in glued]
     body = Body(faces, start, colors, None, holes)
-    order = sorted(template.vertices, key=lambda v: (v.label.name, v.label.index) if v.label else ("", 0))
+    order = sorted(template.all_vertices, key=lambda v: (v.label.name, v.label.index) if v.label else ("", 0))
     keys: list[tuple[Vec, str]] = []
     for v in order:
         key = (v.position, name(v.id))

@@ -131,6 +131,58 @@ def test_a_fold_given_up(setup: tuple[SheetView, TemplateTool]) -> None:
     assert tool.editor.template.folds == ()
 
 
+def test_a_fold_line_through_points(setup: tuple[SheetView, TemplateTool]) -> None:
+    """From the bottom middle up through a point inside, to the top middle (docs/template_plan.md, §8.4)."""
+    view, tool = setup
+    drawn(view, tool)
+    click(view, 11.0, 10.0)
+    view.left_pressed.emit(11.25, 10.5)  # a fold vertex
+    assert tool.item.pending() == (Vec(11, 10), Vec(F(45, 4), F(21, 2)))
+    view.mouse_moved.emit(11.0, 10.75)
+    assert tool.item.rubber() == (Vec(F(45, 4), F(21, 2)), Vec(11, F(43, 4)))  # on from the last point
+    assert tool.busy()
+    view.left_pressed.emit(11.0, 11.0)
+    template = tool.editor.template
+    assert template.folds == (Fold(1, 6), Fold(6, 4)) and len(template.faces) == 2
+    assert tool.item.pending() == () and not tool.busy()
+
+
+def test_the_coordinates_over_a_fold_segments_middle(setup: tuple[SheetView, TemplateTool]) -> None:
+    """Over the middle circle of a fold (its index past the loop's sides), the hint shows that middle: it used to
+    look the segment up among the loop's sides only, and crash (weird_cube.nettemplate, 2026-11-19)."""
+    view, tool = setup
+    drawn(view, tool)
+    click(view, 11.0, 10.0)
+    view.left_pressed.emit(11.0, 11.0)
+    assert tool.coordinates_at(11.0, 10.5) == Vec(11, F(21, 2))
+
+
+def test_a_fold_point_outside_gives_the_line_up(setup: tuple[SheetView, TemplateTool]) -> None:
+    view, tool = setup
+    drawn(view, tool)
+    click(view, 11.0, 10.0)
+    view.left_pressed.emit(11.25, 10.5)
+    view.left_pressed.emit(11.0, 12.0)  # outside the net
+    assert not tool.busy() and tool.editor.template.folds == ()
+
+
+def test_a_fold_vertex_inserted_dragged_and_deleted(setup: tuple[SheetView, TemplateTool]) -> None:
+    view, tool = setup
+    drawn(view, tool)
+    click(view, 11.0, 10.0)
+    view.left_pressed.emit(11.0, 11.0)
+    assert tool.cursor_at(11.0, 10.5) is CursorKind.PLUS  # the fold's middle circle
+    click(view, 11.0, 10.5)
+    template = tool.editor.template
+    assert len(template.fold_vertices) == 1 and len(template.folds) == 2
+    view.left_pressed.emit(11.0, 10.5)  # drag the new fold vertex right
+    view.mouse_moved.emit(11.25, 10.5)
+    view.left_released.emit(11.25, 10.5)
+    assert tool.editor.template.fold_vertices[0].position == Vec(F(45, 4), F(21, 2))
+    tool._delete_at(11.25, 10.5)  # Ctrl+click on it
+    assert tool.editor.template.folds == () and len(tool.editor.template.faces) == 1
+
+
 def test_the_middle_circle_inserts_a_vertex(setup: tuple[SheetView, TemplateTool]) -> None:
     view, tool = setup
     drawn(view, tool)

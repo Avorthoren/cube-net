@@ -128,3 +128,52 @@ class TestColourNumbers:
     def test_a_fold_keeps_the_number_and_hatch_on_both_sides(self) -> None:
         template = loop(PILLOW).with_face_color(0, "#AA0000").with_hatches([self.TURNED]).with_fold(1, 4)
         assert [(f.number, f.hatch) for f in template.faces] == [(1, self.TURNED)] * 2
+
+
+class TestFoldLines:
+    """Fold lines of several segments (docs/template_plan.md, §8.4), in the pillow: 2 x 1, vertices 0..5 from (0, 0)
+    counter-clockwise; 1 is (1, 0), 3 is (2, 1), 4 is (1, 1)."""
+
+    BEND = Vec(F(5, 4), F(1, 2))
+
+    def bent(self) -> Template:
+        """From 1 up through a fold vertex (id 6) to 4: the pillow's middle, bent."""
+        return loop(PILLOW).with_face_color(0, "#AA0000").with_fold_line(1, [self.BEND], 4)
+
+    def test_a_line_through_a_fold_vertex_divides_its_face(self) -> None:
+        template = self.bent()
+        assert [v.position for v in template.fold_vertices] == [self.BEND] and template.next_id == 7
+        assert template.folds == (Fold(1, 6), Fold(6, 4))
+        assert sorted(f.corners for f in template.faces) == sorted([(1, 2, 3, 4, 6), (4, 5, 0, 1, 6)])
+        assert all(f.color == "#AA0000" for f in template.faces) and template.vertex(6).position == self.BEND
+
+    def test_deleting_the_fold_vertex_deletes_its_segments(self) -> None:
+        template = self.bent().without_vertex(6)
+        assert template.folds == () and template.fold_vertices == ()
+        (face,) = template.faces
+        k = face.corners.index(0)
+        assert face.corners[k:] + face.corners[:k] == (0, 1, 2, 3, 4, 5)
+
+    def test_deleting_a_segment_deletes_what_is_left_hanging(self) -> None:
+        template = self.bent().without_fold(Fold(1, 6))
+        assert template.folds == () and template.fold_vertices == () and len(template.faces) == 1
+
+    def test_deleting_a_loop_vertex_deletes_its_line(self) -> None:
+        template = self.bent().without_vertex(1)
+        assert template.folds == () and template.fold_vertices == () and len(template.faces) == 1
+
+    def test_a_fold_vertex_inserted_in_a_segment(self) -> None:
+        template = loop(PILLOW).with_fold(1, 4).with_fold_vertex_inserted(Fold(1, 4), Vec(1, F(1, 2)))
+        assert template.folds == (Fold(1, 6), Fold(6, 4))
+        assert all(6 in f.corners for f in template.faces)
+
+    def test_a_line_ending_at_another_lines_fold_vertex(self) -> None:
+        template = self.bent().with_fold_line(6, [], 3)  # from the bend to (2, 1)
+        assert len(template.faces) == 3
+        after = template.without_fold(Fold(1, 6))  # 6 is still between two segments: nothing more goes
+        assert after.folds == (Fold(6, 4), Fold(6, 3)) and len(after.faces) == 2
+        assert after.fold_vertices == template.fold_vertices
+
+    def test_labels_of_fold_vertices(self) -> None:
+        template = self.bent().with_label(6, Label("M", 1))
+        assert template.label_owner(Label("M", 1)) == template.vertex(6) and template.first_free_index("M") == 2

@@ -288,3 +288,38 @@ class TestAlignHatches:
         editor.align_hatches()
         assert editor.history.done_count == 1
         assert editor.undo() and all(f.hatch.is_identity() for f in editor.template.faces)
+
+
+class TestFoldLines:
+    BEND = Vec(F(45, 4), F(21, 2))  # inside the pillow, right of its middle
+
+    def test_drawn_inserted_and_deleted(self) -> None:
+        editor = drawn(PILLOW)
+        assert editor.add_fold_line(1, [self.BEND], 4) is None
+        assert len(editor.template.faces) == 2 and len(editor.template.fold_vertices) == 1
+        fold = editor.template.folds[0]
+        editor.insert_fold_vertex(fold)
+        assert len(editor.template.fold_vertices) == 2 and len(editor.template.folds) == 3
+        bend = editor.template.fold_vertices[0].id
+        assert editor.move_vertex(bend, Vec(F(23, 2), F(21, 2))) is None
+        assert editor.delete_vertex(bend) is None
+        assert editor.template.folds == () and editor.template.fold_vertices == ()
+        assert editor.undo() and len(editor.template.folds) == 3
+
+    def test_a_fold_vertex_outside_the_net_or_a_line_crossing_is_refused(self) -> None:
+        editor = drawn(PILLOW)
+        rejection = editor.add_fold_line(1, [Vec(11, 12)], 4)  # above the pillow (out through its top side)
+        assert rejection is not None and rejection.problem in (
+            TemplateProblem.OUTSIDE_THE_LOOP,
+            TemplateProblem.CROSSING,
+        )
+        assert editor.template.fold_vertices == ()
+        assert editor.add_fold_line(1, [self.BEND], 4) is None
+        rejection = editor.add_fold_line(0, [Vec(F(23, 2), F(41, 4))], 3)  # across the first line
+        assert rejection is not None and rejection.problem is TemplateProblem.CROSSING
+        assert editor.fold_line_problem(1, [Vec(F(21, 2), F(21, 2))], None) is None  # unfinished: fine so far
+
+    def test_a_line_from_a_vertex_to_itself_is_refused(self) -> None:
+        editor = drawn(PILLOW)
+        rejection = editor.add_fold_line(1, [self.BEND, Vec(F(43, 4), F(21, 2))], 1)
+        assert rejection is not None and rejection.problem is TemplateProblem.NOT_A_FOLD

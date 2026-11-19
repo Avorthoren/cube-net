@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
+from itertools import pairwise
 
 from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QPolygonF, QTransform
@@ -45,6 +46,8 @@ class TemplateItem(QGraphicsItem):
         # What the tool shows on top of the template (see the setters).
         self._moved: tuple[int, Vec] | None = None
         self._rubber: Segment | None = None
+        # A fold line being drawn: its start and the points placed so far (the rubber band goes on from the last).
+        self._pending: tuple[Vec, ...] = ()
         self._flash: tuple[Segment, ...] = ()
         self._highlight_vertex: Vec | None = None
         # The parts of its circle the highlighted vertex owns, where several are at its point (None: all of it).
@@ -80,6 +83,14 @@ class TemplateItem(QGraphicsItem):
 
     def rubber(self) -> Segment | None:
         return self._rubber
+
+    def set_pending(self, points: Sequence[Vec]) -> None:
+        """A fold line being drawn: its start and the points placed so far (empty: none)."""
+        self._pending = tuple(points)
+        self.update()
+
+    def pending(self) -> tuple[Vec, ...]:
+        return self._pending
 
     def midpoints_shown(self) -> bool:
         return self._midpoints_shown
@@ -143,6 +154,8 @@ class TemplateItem(QGraphicsItem):
                 self._inner_line(painter, world, segment)
             else:
                 self._line(painter, world, segment, palette.TEMPLATE_LOOP)
+        for segment in pairwise(self._pending):
+            self._dashes(painter, world, segment, palette.TEMPLATE_FOLD, net_style.EDGE_WIDTH_PX / 2)
         if self._rubber is not None:
             self._line(painter, world, self._rubber, palette.RUBBER_BAND, net_style.RUBBER_BAND_PX, dashed=True)
         for segment in self._flash:
@@ -250,8 +263,10 @@ class TemplateItem(QGraphicsItem):
         r = net_style.VERTEX_RADIUS_PX
         painter.setPen(QPen(palette.VERTEX_OUTLINE, 1))
         painter.setBrush(palette.WHITE)
-        for v in template.vertices:
+        for v in template.all_vertices:
             painter.drawEllipse(world.map(to_qpointf(v.position)), r, r)
+        for p in self._pending[1:]:  # the fold vertices of a line being drawn
+            painter.drawEllipse(world.map(to_qpointf(p)), r, r)
         if self._highlight_vertex is not None:
             ring = r + net_style.VERTEX_HIGHLIGHT_PX / 2
             painter.setPen(QPen(palette.VERTEX_HIGHLIGHT, net_style.VERTEX_HIGHLIGHT_PX))
@@ -266,7 +281,8 @@ class TemplateItem(QGraphicsItem):
 
     def _paint_midpoints(self, painter: QPainter, world: QTransform, template: Template) -> None:
         r = net_style.midpoint_radius()
-        for i, (a, b) in enumerate(template.loop_sides()):
+        segments = [*template.loop_sides(), *((f.start, f.end) for f in template.folds)]
+        for i, (a, b) in enumerate(segments):  # the loop's sides, then the fold segments
             pressed = i == self._pressed_midpoint
             painter.setPen(QPen(palette.PRESSED_MIDPOINT if pressed else palette.VERTEX_OUTLINE, 1))
             painter.setBrush(palette.PRESSED_MIDPOINT if pressed else Qt.BrushStyle.NoBrush)
@@ -288,7 +304,7 @@ class TemplateItem(QGraphicsItem):
                     directions.get(v.id, UP_RIGHT),
                     VertexLabel(v.label.name, v.label.index),
                 )
-                for v in template.vertices
+                for v in template.all_vertices
                 if v.label is not None
             ),
         )

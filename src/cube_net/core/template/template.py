@@ -3,8 +3,10 @@
 
 """`Template`: a body described by one of its nets (docs/template_idea.txt; docs/template_plan.md, §4.1).
 
-A closed loop of vertices, fold lines between them (chords of the loop) and the faces they divide the loop into,
-each with a colour. Vertices get labels: the name of the body's vertex they are an image of, and an index.
+A closed loop of vertices, fold lines and the faces they divide the loop into, each with a colour. A fold line goes
+from a vertex to a vertex (of the loop, or of another fold line) through points inside the loop, its *fold vertices*;
+it's kept as its segments (`folds`). Vertices get labels: the name of the body's vertex they are an image of, and an
+index (docs/template_plan.md, §8.4).
 
 Immutable: every change gives a new `Template`, so the editor's history can keep them as its states. The changes here
 only keep the structure consistent; whether a change is allowed geometrically is for `rules.py` to say.
@@ -107,13 +109,25 @@ class Template:
     # The colour counter: the number the next face given a colour gets.
     next_number: int = 1
 
+    # The vertices of fold lines inside the loop (not on it), in the order they were made.
+    fold_vertices: tuple[LoopVertex, ...] = ()
+
     # --- queries ------------------------------------------------------------------------------------------------------
 
     def vertex(self, vertex_id: int) -> LoopVertex:
-        for v in self.vertices:
+        """A vertex of the loop or a fold vertex."""
+        for v in (*self.vertices, *self.fold_vertices):
             if v.id == vertex_id:
                 return v
         raise ValueError(f"no vertex with id {vertex_id}")
+
+    @property
+    def all_vertices(self) -> tuple[LoopVertex, ...]:
+        """The loop's vertices, then the fold vertices."""
+        return (*self.vertices, *self.fold_vertices)
+
+    def is_fold_vertex(self, vertex_id: int) -> bool:
+        return any(v.id == vertex_id for v in self.fold_vertices)
 
     def index_of(self, vertex_id: int) -> int:
         """Where the vertex is along the loop."""
@@ -151,11 +165,11 @@ class Template:
 
     def label_owner(self, label: Label) -> LoopVertex | None:
         """The vertex with this label, if any."""
-        return next((v for v in self.vertices if v.label == label), None)
+        return next((v for v in self.all_vertices if v.label == label), None)
 
     def first_free_index(self, name: str) -> int:
         """The smallest index no vertex named `name` has."""
-        taken = {v.label.index for v in self.vertices if v.label is not None and v.label.name == name}
+        taken = {v.label.index for v in self.all_vertices if v.label is not None and v.label.name == name}
         return next(i for i in range(MIN_INDEX, MAX_INDEX + 2) if i not in taken)
 
     # --- changes ------------------------------------------------------------------------------------------------------
@@ -199,10 +213,14 @@ class Template:
         return self._with_vertex(replace(self.vertex(vertex_id), label=label))
 
     def without_vertex(self, vertex_id: int) -> Template:
-        """The loop without a vertex (its two sides become one), and without the folds that end at it."""
+        """The loop without a vertex (its two sides become one), and without the folds that end at it (and those left
+        hanging then); a fold vertex: without the folds at it, and those left hanging."""
         template = self
         for fold in self.folds_at(vertex_id):
-            template = template.without_fold(fold)
+            if fold in template.folds:
+                template = template.without_fold(fold)
+        if self.is_fold_vertex(vertex_id):
+            return template._without_hanging()
         faces = tuple(
             replace(face, corners=tuple(c for c in face.corners if c != vertex_id)) for face in template.faces
         )
@@ -210,19 +228,53 @@ class Template:
         return replace(template, vertices=vertices, faces=faces)
 
     def with_fold(self, start: int, end: int) -> Template:
-        """A fold from `start` to `end`: it divides the face both lie on into two, each in that face's colour."""
-        face = next((f for f in self.faces if start in f.corners and end in f.corners), None)
+        """A fold of one segment from `start` to `end` (see `with_fold_line`)."""
+        return self.with_fold_line(start, (), end)
+
+    def with_fold_line(self, start: int, points: Sequence[Vec], end: int) -> Template:
+        """A fold line from vertex `start` through new fold vertices at `points` to vertex `end`: it divides the face it
+        goes through into two, each in that face's colour (and with its number and hatch)."""
+        ids = list(range(self.next_id, self.next_id + len(points)))
+        chain = [start, *ids, end]
+        positions = [self.position(start), *points, self.position(end)]
+        inside = self.face_at((positions[0] + positions[1]) / 2)
+        candidates = [f for f in self.faces if start in f.corners and end in f.corners]
+        face = self.faces[inside] if inside is not None and self.faces[inside] in candidates else None
+        if face is None:
+            face = next(iter(candidates), None)
         if face is None:
             raise ValueError(f"no face has both {start} and {end}")
         corners = list(face.corners)
         k = corners.index(start)
         corners = corners[k:] + corners[:k]  # from `start`
         m = corners.index(end)
-        right = replace(face, corners=(*corners[: m + 1],))  # start ... end, then back along the fold
-        left = replace(face, corners=(*corners[m:], corners[0]))  # end ... start, then along the fold
+        right = replace(face, corners=(*corners[: m + 1], *reversed(ids)))  # start ... end, then back along the line
+        left = replace(face, corners=(*corners[m:], corners[0], *ids))  # end ... start, then along the line
         i = self.faces.index(face)
         faces = (*self.faces[:i], right, left, *self.faces[i + 1 :])
-        return replace(self, folds=(*self.folds, Fold(start, end)), faces=faces)
+        folds = (*self.folds, *(Fold(a, b) for a, b in pairwise(chain)))
+        new = tuple(LoopVertex(i, p) for i, p in zip(ids, points, strict=True))
+        return replace(
+            self,
+            folds=folds,
+            faces=faces,
+            fold_vertices=(*self.fold_vertices, *new),
+            next_id=self.next_id + len(points),
+        )
+
+    def with_fold_vertex_inserted(self, fold: Fold, position: Vec) -> Template:
+        """A new fold vertex at `position` on `fold`: its two parts keep its direction."""
+        new = LoopVertex(self.next_id, position)
+        folds = tuple(
+            part for f in self.folds for part in ((Fold(f.start, new.id), Fold(new.id, f.end)) if f == fold else (f,))
+        )
+        faces = tuple(
+            _insert_corner(_insert_corner(face, fold.start, fold.end, new.id), fold.end, fold.start, new.id)
+            for face in self.faces
+        )
+        return replace(
+            self, folds=folds, faces=faces, fold_vertices=(*self.fold_vertices, new), next_id=self.next_id + 1
+        )
 
     def without_fold(self, fold: Fold) -> Template:
         """The two faces on its sides become one, in the colour of the one on its left (seen from where it starts)."""
@@ -232,7 +284,22 @@ class Template:
         i = min(self.faces.index(left), self.faces.index(right))
         faces = [f for f in self.faces if f is not left and f is not right]
         faces.insert(i, merged)
-        return replace(self, folds=tuple(f for f in self.folds if f != fold), faces=tuple(faces))
+        return replace(self, folds=tuple(f for f in self.folds if f != fold), faces=tuple(faces))._without_hanging()
+
+    def _without_hanging(self) -> Template:
+        """Without the fold segments left hanging (an end at a fold vertex no other segment reaches), one after another,
+        and without fold vertices that no segment reaches."""
+        template = self
+        while True:
+            degree = {v.id: len(template.folds_at(v.id)) for v in template.fold_vertices}
+            hanging = next((v for v, n in degree.items() if n == 1), None)
+            if hanging is None:
+                break
+            (fold,) = template.folds_at(hanging)
+            faces = tuple(_without_spike(face, hanging) for face in template.faces)
+            template = replace(template, folds=tuple(f for f in template.folds if f != fold), faces=faces)
+        kept = tuple(v for v in template.fold_vertices if template.folds_at(v.id))
+        return replace(template, fold_vertices=kept) if kept != template.fold_vertices else template
 
     def with_face_color(self, face_index: int, color: str) -> Template:
         """The face in `color` (even the one it has), numbered by the counter (which goes on), its hatch tied to the
@@ -257,6 +324,8 @@ class Template:
         return None
 
     def _with_vertex(self, new: LoopVertex) -> Template:
+        if self.is_fold_vertex(new.id):
+            return replace(self, fold_vertices=tuple(new if v.id == new.id else v for v in self.fold_vertices))
         return replace(self, vertices=tuple(new if v.id == new.id else v for v in self.vertices))
 
 
@@ -271,6 +340,17 @@ def _insert_corner(face: TemplateFace, a: int, b: int, new: int) -> TemplateFace
     for i in range(n):
         if face.corners[i] == a and face.corners[(i + 1) % n] == b:
             return replace(face, corners=(*face.corners[: i + 1], new, *face.corners[i + 1 :]))
+    return face
+
+
+def _without_spike(face: TemplateFace, tip: int) -> TemplateFace:
+    """The face without the hanging segment that ends at `tip` (its corners go ..., p, tip, p, ...: one p stays)."""
+    corners = face.corners
+    n = len(corners)
+    for i in range(n):
+        if corners[i] == tip and corners[i - 1] == corners[(i + 1) % n]:
+            gone = {i, (i + 1) % n}
+            return replace(face, corners=tuple(c for j, c in enumerate(corners) if j not in gone))
     return face
 
 

@@ -14,6 +14,7 @@ from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import HalfEdge, default_net
 from cube_net.ui import palette
+from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
 from cube_net.ui.sheet.net_item import NetItem
 
@@ -279,3 +280,52 @@ class TestHiddenCut:
         item.set_hidden_cut(self.bottom_cut(split))
         item.set_net(default_net())
         assert item.hidden_cut() is None
+
+
+def test_a_vertex_of_the_body_inside_the_net_has_its_circle() -> None:
+    """The cube's cross as a template, the fold between faces 1 and 2 bent through a fold vertex M (11.5, 13.25): in a
+    project of it, M is inside the net, and its circle is drawn there (docs/template_plan.md, §8.4)."""
+    from cube_net.core.history import History
+    from cube_net.core.project.from_template import project_from_template
+    from cube_net.core.project.template_codec import TemplateDocument
+    from cube_net.core.template import Label, TemplateEditor, TemplateSnapshot, validate
+
+    cross = [
+        (11, 10, "A", 3), (12, 10, "B", 3), (12, 11, "F", 1), (12, 12, "G", 1), (13, 12, "F", 2), (13, 13, "B", 2),
+        (12, 13, "D", 1), (12, 14, "B", 1), (11, 14, "A", 1), (11, 13, "C", 1), (10, 13, "A", 2), (10, 12, "E", 2),
+        (11, 12, "H", 1), (11, 11, "E", 1),
+    ]  # fmt: skip
+    editor = TemplateEditor()
+    for x, y, *_ in [*cross, cross[0]]:
+        editor.add_point(Vec(x, y))
+    for i, (_, _, name, index) in enumerate(cross):
+        editor.set_label(i, Label(name, index))
+    ids = {str(v.label): v.id for v in editor.template.vertices}
+    for a, b in [("H1", "G1"), ("E1", "F1"), ("C1", "H1"), ("D1", "G1")]:
+        assert editor.add_fold(ids[a], ids[b]) is None
+    m = Vec(Fraction(23, 2), Fraction(53, 4))
+    assert editor.add_fold_line(ids["C1"], [m], ids["D1"]) is None
+    editor.set_label(editor.template.fold_vertices[0].id, Label("M", 1))
+    for i in range(len(editor.template.faces)):
+        editor.set_face_color(i, f"#{40 * i:02X}{200 - 30 * i:02X}80")
+    assert validate(editor.template) is None
+    net = project_from_template(TemplateDocument(TemplateSnapshot(editor.template), History())).state.net
+    (inner,) = [v for v in net.vertices if v.point.vertex == "M"]
+    image = QImage(500, 600, QImage.Format.Format_RGB32)
+    image.fill(QColor("black"))
+    world = QTransform().scale(SCALE, -SCALE).translate(-ORIGIN.x(), -ORIGIN.y())
+    painter = QPainter(image)
+    painter.setTransform(world)
+    NetItem(net).paint(painter, None)
+    painter.end()
+    centre = world.map(to_qpointf(inner.position))
+    import math
+
+    r = net_style.VERTEX_RADIUS_PX
+    ring = [
+        image.pixelColor(
+            round(centre.x() + r * math.cos(t / 8 * math.pi)), round(centre.y() + r * math.sin(t / 8 * math.pi))
+        )
+        for t in range(16)
+    ]
+    assert sum(c.lightness() < 110 for c in ring) >= 8  # the circle's dark outline all round, where the hatch would be

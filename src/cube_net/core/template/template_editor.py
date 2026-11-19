@@ -18,8 +18,10 @@ changes nothing isn't an action. The editor never touches Qt.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
+from itertools import pairwise
 
 from cube_net.core.geometry import Vec
 from cube_net.core.history import ActionKind, History
@@ -34,7 +36,7 @@ from cube_net.core.template.rules import (
     fold_problem,
     on_the_sheet,
 )
-from cube_net.core.template.template import Fold, Label, Template
+from cube_net.core.template.template import Fold, Label, LoopVertex, Template
 from cube_net.core.template.validation import reindexed
 
 
@@ -115,8 +117,12 @@ class TemplateEditor:
         return problem
 
     def delete_vertex(self, vertex_id: int) -> TemplateRejection | None:
-        """Delete a vertex: its two sides become one, and the folds that end at it go too."""
+        """Delete a vertex: its two sides become one, and the folds that end at it go too (and those left hanging); a
+        fold vertex: the folds at it go (and those left hanging)."""
         self._require_closed()
+        if self.template.is_fold_vertex(vertex_id):
+            self._record(ActionKind.DELETE_VERTEX, self.template.without_vertex(vertex_id))
+            return None
         if len(self.template.vertices) <= MIN_VERTICES:
             return TemplateRejection(TemplateProblem.TOO_FEW_VERTICES)
         i = self.template.index_of(vertex_id)
@@ -128,13 +134,46 @@ class TemplateEditor:
     # --- folds, colours, labels ---------------------------------------------------------------------------------------
 
     def add_fold(self, start: int, end: int) -> TemplateRejection | None:
+        """A fold line of one segment."""
+        return self.add_fold_line(start, (), end)
+
+    def add_fold_line(self, start: int, points: Sequence[Vec], end: int) -> TemplateRejection | None:
+        """A fold line from vertex `start` through new fold vertices at `points` to vertex `end` (docs/template_plan.md,
+        §8.4)."""
         self._require_closed()
-        problem = fold_problem(self.template, start, end) or check(
-            replace(self.template, folds=(*self.template.folds, Fold(start, end))), [(start, end)]
-        )  # where it goes first: one that crosses another fold has no face to divide
+        problem = self.fold_line_problem(start, points, end)
         if problem is None:
-            self._record(ActionKind.ADD_FOLD, self.template.with_fold(start, end))
+            self._record(ActionKind.ADD_FOLD, self.template.with_fold_line(start, points, end))
         return problem
+
+    def fold_line_problem(self, start: int, points: Sequence[Vec], end: int | None) -> TemplateRejection | None:
+        """What's wrong with the fold line (None: nothing); `end` None: it isn't finished yet, its last point is the
+        last of `points`. Where it goes is checked first: one that crosses another fold has no face to divide."""
+        template = self.template
+        if not points and end is not None:
+            problem = fold_problem(template, start, end)
+            if problem is not None:
+                return problem
+        if end is not None and end == start:
+            return TemplateRejection(TemplateProblem.NOT_A_FOLD)
+        if not all(on_the_sheet(p) for p in points):
+            return TemplateRejection(TemplateProblem.OFF_THE_SHEET)
+        ids = list(range(template.next_id, template.next_id + len(points)))
+        chain = [start, *ids] + ([end] if end is not None else [])
+        folds = tuple(Fold(a, b) for a, b in pairwise(chain))
+        drawn = replace(
+            template,
+            folds=(*template.folds, *folds),
+            fold_vertices=(*template.fold_vertices, *(LoopVertex(i, p) for i, p in zip(ids, points, strict=True))),
+            next_id=template.next_id + len(points),
+        )
+        return check(drawn, [(f.start, f.end) for f in folds])
+
+    def insert_fold_vertex(self, fold: Fold) -> None:
+        """A new fold vertex in the middle of a fold segment (always allowed)."""
+        self._require_closed()
+        middle = (self.template.position(fold.start) + self.template.position(fold.end)) / 2
+        self._record(ActionKind.ADD_VERTEX, self.template.with_fold_vertex_inserted(fold, middle))
 
     def delete_fold(self, fold: Fold) -> None:
         self._require_closed()

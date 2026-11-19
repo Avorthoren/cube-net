@@ -10,7 +10,8 @@ Painted bottom to top:
    CUT_EDITING, while the user hovers the perimeter, the cuts are drawn as the line divides them, and the parts that
    can't be chosen for gluing are thin and black. The counterpart of a hovered cut that can be chosen blinks: one cut
    can be left out.
-4. Vertex circles on the perimeter, one equal sector per face of the vertex; a highlighted vertex gets a ring.
+4. Vertex circles on the perimeter (and at the body's vertices inside the net), one equal sector per face of the
+   vertex; a highlighted vertex gets a ring.
 5. Optional debug labels (A_1, B_2, ...) next to all vertices, placed outside the net.
 Hatch is drawn in sheet units; lines and circles have constant pixel sizes, so they are drawn in device pixels.
 
@@ -271,7 +272,10 @@ class NetItem(QGraphicsItem):
 
     def _paint_vertices(self, painter: QPainter, world: QTransform) -> None:
         if self._centers is None:
-            vertices = {v.id: v for v in self._net.boundary_vertices()}.values()
+            # The perimeter's, and the body's vertices inside the net (with 360 degrees around them: where a template's
+            # fold line bends, docs/template_plan.md §8.4).
+            inside = (v for v in self._net.vertices if v.point.vertex is not None)
+            vertices = {v.id: v for v in (*self._net.boundary_vertices(), *inside)}.values()
             self._centers = [(to_qpointf(v.position), v.point.faces) for v in vertices]
         for center, faces in self._centers:
             paint_vertex(painter, self._net.body, world.map(center), faces, net_style.VERTEX_RADIUS_PX)

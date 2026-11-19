@@ -141,3 +141,37 @@ def test_a_ring() -> None:
     net = starting_net(body)
     validate_net(net)
     assert len(net.regions) == 12
+
+
+def test_a_bent_fold_line(cross_template: Template) -> None:
+    """The cross with the fold C_1-D_1 (between faces 1 and 2) bent up through a fold vertex M: M is a vertex of the
+    body with 360 degrees around it, inside the net; the faces are a pentagon and a square with a notch."""
+    from dataclasses import replace
+
+    from cube_net.core.template import Fold, Label
+
+    c1, d1 = (next(v.id for v in cross_template.vertices if str(v.label) == name) for name in ("C1", "D1"))
+    template = cross_template.without_fold(next(f for f in cross_template.folds if f.joins(c1, d1)))
+    template = template.with_fold_line(c1, [Vec(F(23, 2), F(53, 4))], d1)
+    m = template.fold_vertices[0].id
+    template = template.with_label(m, Label("M", 1))
+    sides = [i for i, f in enumerate(template.faces) if m in f.corners]
+    template = template.with_face_color(sides[0], "#123456").with_face_color(sides[1], "#654321")
+    assert validate(template) is None
+    body = body_from_template(template)
+    assert body.vertex_angle("M") == 360 and len(body.face_numbers) == 6 and body.area == 6
+    assert {"".join(sorted(e.names)) for e in body.edges} >= {"CM", "DM"}
+    net = starting_net(body)
+    validate_net(net)
+    assert [v for v in net.vertices if v.point.vertex == "M"]  # inside the net, between the two folds
+    assert Fold(c1, m) in template.folds and replace(template, fold_vertices=()) != template
+
+
+def test_a_fold_vertex_needs_a_label(cross_template: Template) -> None:
+    from cube_net.core.template import ValidationProblem
+
+    c1, d1 = (next(v.id for v in cross_template.vertices if str(v.label) == name) for name in ("C1", "D1"))
+    template = cross_template.without_fold(next(f for f in cross_template.folds if f.joins(c1, d1)))
+    template = template.with_fold_line(c1, [Vec(F(23, 2), F(53, 4))], d1)
+    failure = validate(template)
+    assert failure is not None and failure.problem in (ValidationProblem.NO_COLOR, ValidationProblem.UNLABELLED)

@@ -122,21 +122,29 @@ def decode_template(data: object) -> TemplateDocument:
 
 
 def _write_template(template: Template) -> dict[str, Any]:
-    return {
-        "vertices": [
-            {
-                "id": v.id,
-                "at": write_vec(v.position),
-                "label": None if v.label is None else [v.label.name, v.label.index],
-            }
-            for v in template.vertices
-        ],
+    data: dict[str, Any] = {
+        "vertices": [_write_vertex(v) for v in template.vertices],
         "closed": template.closed,
         "folds": [[f.start, f.end] for f in template.folds],
         "faces": [_write_face(f) for f in template.faces],
         "next_id": template.next_id,
         "next_number": template.next_number,
     }
+    if template.fold_vertices:  # written only if there are any (docs/template_plan.md, §8.4)
+        data["fold_vertices"] = [_write_vertex(v) for v in template.fold_vertices]
+    return data
+
+
+def _write_vertex(v: LoopVertex) -> dict[str, Any]:
+    return {
+        "id": v.id,
+        "at": write_vec(v.position),
+        "label": None if v.label is None else [v.label.name, v.label.index],
+    }
+
+
+def _read_vertex(v: dict[str, Any]) -> LoopVertex:
+    return LoopVertex(_int(v["id"]), read_vec(v["at"]), None if v["label"] is None else Label(*v["label"]))
 
 
 def _write_face(face: TemplateFace) -> dict[str, Any]:
@@ -160,10 +168,7 @@ def _read_face(data: dict[str, Any]) -> TemplateFace:
 
 
 def _read_template(data: dict[str, Any]) -> Template:
-    vertices = tuple(
-        LoopVertex(_int(v["id"]), read_vec(v["at"]), None if v["label"] is None else Label(*v["label"]))
-        for v in data["vertices"]
-    )
+    vertices = tuple(_read_vertex(v) for v in data["vertices"])
     closed = data["closed"]
     if not isinstance(closed, bool):
         raise TypeError(f"expected true or false, got {closed!r}")
@@ -174,6 +179,7 @@ def _read_template(data: dict[str, Any]) -> Template:
         tuple(_read_face(f) for f in data["faces"]),
         _int(data["next_id"]),
         _int(data.get("next_number", 1)),
+        tuple(_read_vertex(v) for v in data.get("fold_vertices", ())),
     )
     _check(template)
     return template
@@ -181,20 +187,22 @@ def _read_template(data: dict[str, Any]) -> Template:
 
 def _check(template: Template) -> None:
     """What every template the editor makes is like (a damaged file may say otherwise)."""
-    ids = [v.id for v in template.vertices]
+    ids = [v.id for v in template.all_vertices]
     if len(set(ids)) != len(ids) or (ids and template.next_id <= max(ids)):
         raise ValueError("vertex ids aren't distinct and below the next one")
-    labels = [v.label for v in template.vertices if v.label is not None]
+    labels = [v.label for v in template.all_vertices if v.label is not None]
     if len(set(labels)) != len(labels):
         raise ValueError("two vertices have the same label")
     if any(f.number is not None and not 1 <= f.number < template.next_number for f in template.faces):
         raise ValueError("a face's number isn't below the next one")
     if not template.closed:
-        if template.folds or template.faces:
+        if template.folds or template.faces or template.fold_vertices:
             raise ValueError("an open loop with folds or faces")
         return
-    if len(ids) < 3:
+    if len(template.vertices) < 3:
         raise ValueError("a closed loop of fewer than 3 vertices")
+    if any(len(template.folds_at(v.id)) < 2 for v in template.fold_vertices):
+        raise ValueError("a fold vertex that isn't between two fold segments at least")
     sides = [
         *template.loop_sides(),
         *((f.start, f.end) for f in template.folds),

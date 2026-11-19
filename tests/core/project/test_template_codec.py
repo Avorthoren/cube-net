@@ -92,6 +92,27 @@ def test_a_template_saved_before_the_counter(cross_template: Template) -> None:
     assert loaded.next_number == 1 and all(f.number is None and f.hatch.is_identity() for f in loaded.faces)
 
 
+def test_fold_vertices(cross_template: Template) -> None:
+    from fractions import Fraction as F
+
+    from cube_net.core.template import Label
+
+    c1, d1 = (next(v.id for v in cross_template.vertices if str(v.label) == name) for name in ("C1", "D1"))
+    template = cross_template.without_fold(next(f for f in cross_template.folds if f.joins(c1, d1)))
+    template = template.with_fold_line(c1, [Vec(F(23, 2), F(53, 4))], d1)
+    template = template.with_label(template.fold_vertices[0].id, Label("M", 1))
+    data = encode_template(TemplateDocument(TemplateSnapshot(template), History()))
+    assert len(data["templates"][0]["fold_vertices"]) == 1
+    assert round_trip(TemplateDocument(TemplateSnapshot(template), History())).state.template == template
+    assert "fold_vertices" not in encode_template(document_of(edited(cross_template)))["templates"][0]
+    data = json.loads(json.dumps(data))
+    data["templates"][0]["folds"] = [f for f in data["templates"][0]["folds"] if template.fold_vertices[0].id not in f][
+        :-1
+    ]
+    with pytest.raises(ProjectFileError, match="damaged"):
+        decode_template(data)
+
+
 def test_a_template_saved_without_a_style_has_none(cross_template: Template) -> None:
     data = json.loads(json.dumps(encode_template(document_of(edited(cross_template)))))
     assert data.pop("style") is None

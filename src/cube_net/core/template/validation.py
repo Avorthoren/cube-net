@@ -126,7 +126,7 @@ def validate(template: Template) -> ValidationFailure | None:
     uncoloured = sum(face.color is None for face in template.faces)
     if uncoloured:
         return ValidationFailure(ValidationProblem.NO_COLOR, count=uncoloured)
-    if any(v.label is None for v in template.vertices):
+    if any(v.label is None for v in template.all_vertices):
         return ValidationFailure(ValidationProblem.UNLABELLED)
     sides = [_Side(template.vertex(a), template.vertex(b)) for a, b in template.loop_sides()]
     folds = [_Side(template.vertex(f.start), template.vertex(f.end)) for f in template.folds]
@@ -204,7 +204,7 @@ def validate(template: Template) -> ValidationFailure | None:
 def reindexed(template: Template) -> Template:
     """Every name's indices made 1, 2, 3, ... in the order they were in (A2, A4, A5, A10 -> A1, A2, A3, A4)."""
     by_name: dict[str, list[LoopVertex]] = {}
-    for v in template.vertices:
+    for v in template.all_vertices:
         if v.label is not None:
             by_name.setdefault(v.label.name, []).append(v)
     result = template
@@ -257,8 +257,9 @@ def _not_glued(template: Template) -> tuple[str, ...]:
     vertices = template.vertices
     n = len(vertices)
     neighbours = {v.id: {_name(vertices[i - 1]), _name(vertices[(i + 1) % n])} for i, v in enumerate(vertices)}
+    neighbours.update({v.id: set() for v in template.fold_vertices})  # one point inside the net: glued to nothing
     by_name: dict[str, list[LoopVertex]] = {}
-    for v in vertices:
+    for v in template.all_vertices:
         by_name.setdefault(_name(v), []).append(v)
     apart = []
     for name, instances in by_name.items():
@@ -295,12 +296,12 @@ def _faces_touching_themselves(template: Template) -> tuple[str, ...]:
                 if neighbours and hit.kind is IntersectionKind.TOUCH and hit.point == shared:
                     continue
                 places.update(hit.points)
-    return tuple(str(v.label) for v in template.vertices if v.position in places and v.label is not None)
+    return tuple(str(v.label) for v in template.all_vertices if v.position in places and v.label is not None)
 
 
 def _index_gaps(template: Template) -> tuple[str, ...]:
     by_name: dict[str, list[int]] = {}
-    for v in template.vertices:
+    for v in template.all_vertices:
         by_name.setdefault(_name(v), []).append(_index(v))
     return tuple(name for name, indices in by_name.items() if sorted(indices) != list(range(1, len(indices) + 1)))
 
