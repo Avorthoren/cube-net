@@ -51,6 +51,12 @@ from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.template.corners import owned_arcs, shared, vertex_toward
 from cube_net.ui.template.template_item import TemplateItem
 
+# What the user is told when an action was refused because it would corrupt the template: a bug of the application.
+UNEXPECTED_ERROR = (
+    "Application encountered an unexpected error and refused your action, because it would corrupt the project. If "
+    "you want, you can turn on logging, reproduce the action, stop logging and contact the author providing logs."
+)
+
 # How long a rejected segment stays black (as for cuts).
 FLASH_MS = 200
 
@@ -71,6 +77,8 @@ def template_problem_text(problem: TemplateProblem) -> str:
             return tr("The net would come apart: its parts may touch, but it must stay one piece.")
         case TemplateProblem.OUTSIDE_THE_LOOP:
             return tr("A fold would be outside the loop.")
+        case TemplateProblem.UNEXPECTED:
+            return tr(UNEXPECTED_ERROR)
         case _:
             return tr("The loop would touch or cross itself, or a fold.")
 
@@ -103,6 +111,10 @@ class TemplateTool(QObject):
 
     # A deletion that isn't allowed: what to tell the user.
     warned = pyqtSignal(str)
+
+    # An action was refused because it would have made the template inconsistent: a bug of the application (the window
+    # tells the user, and a session log being recorded gets what it needs to reproduce it).
+    unexpected = pyqtSignal()
 
     def __init__(self, view: SheetView, editor: TemplateEditor) -> None:
         super().__init__(view)
@@ -459,11 +471,15 @@ class TemplateTool(QObject):
             if self._midpoint_at(x, y) == side:
                 template = self._editor.template
                 a, b = self._segment(side)
+                middle = (template.position(a) + template.position(b)) / 2
                 if side < len(template.all_loop_sides()):
-                    self._editor.insert_vertex(a, b)
+                    rejection = self._editor.insert_vertex(a, b)
                 else:
-                    self._editor.insert_fold_vertex(template.folds[side - len(template.all_loop_sides())])
-                self._after_action("insert", (template.position(a) + template.position(b)) / 2)
+                    rejection = self._editor.insert_fold_vertex(template.folds[side - len(template.all_loop_sides())])
+                if rejection is not None:
+                    self._show_rejection(rejection, middle)
+                else:
+                    self._after_action("insert", middle)
             self.refresh()
             return
         if self._drag is not None:
@@ -555,8 +571,12 @@ class TemplateTool(QObject):
             return
         fold = self._fold_at(x, y)
         if fold is not None:
-            self._editor.delete_fold(fold)
-            self._after_action("unfold", self._editor.template.position(fold.start))
+            p = self._editor.template.position(fold.start)
+            rejection = self._editor.delete_fold(fold)
+            if rejection is not None:
+                self._show_rejection(rejection, p)
+            else:
+                self._after_action("unfold", p)
 
     def _after_action(self, action: str, p: Vec) -> None:
         self.refresh()
@@ -569,9 +589,14 @@ class TemplateTool(QObject):
         self.changed.emit()
 
     def _show_rejection(self, rejection: TemplateRejection, p: Vec) -> None:
+        """Flash what breaks the rules; a refusal by the safety net (a bug: the template would be inconsistent) is
+        said in a warning instead (`unexpected`)."""
+        self.rejected.emit(p, rejection.problem)
+        if rejection.problem is TemplateProblem.UNEXPECTED:
+            self.unexpected.emit()
+            return
         self.item.set_flash(rejection.segments)
         self._flash_timer.start()
-        self.rejected.emit(p, rejection.problem)
 
     def _quantize(self, x: float, y: float) -> Vec:
         return self._editor.origin.quantize(x, y)

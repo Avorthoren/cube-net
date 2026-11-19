@@ -72,6 +72,10 @@ class TemplateProblem(Enum):
     # Another vertex has this label already.
     LABEL_TAKEN = "label taken"
 
+    # The change would leave the template inconsistent (its faces don't add up): a bug of the application, not the
+    # user's mistake. Refused, so that it never reaches a file.
+    UNEXPECTED = "unexpected"
+
 
 @dataclass(frozen=True, slots=True)
 class TemplateRejection:
@@ -209,6 +213,17 @@ def _fold_problems(template: Template) -> tuple[set[tuple[int, int]], set[tuple[
             _ordered((f.start, f.end)) for f in template.folds for v in (f.start, f.end) if template.is_fold_vertex(v)
         )  # two vertices at one point, one of them a fold vertex
     return outside, crossing - outside
+
+
+def faces_consistent(template: Template) -> bool:
+    """Is every side (of the loop and the closed holes, both ways of the folds) on exactly one face?"""
+    sides = [
+        *template.all_loop_sides(),
+        *((f.start, f.end) for f in template.folds),
+        *((f.end, f.start) for f in template.folds),
+    ]
+    count = sum(len(c) for face in template.faces for c in face.cycles)
+    return count == len(sides) and all(sum(face.has_side(a, b) for face in template.faces) == 1 for a, b in sides)
 
 
 def on_the_net(template: Template, p: Vec) -> bool:

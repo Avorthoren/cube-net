@@ -197,3 +197,28 @@ def test_a_passed_validate_aligns_the_hatches(qtbot: QtBot, monkeypatch: pytest.
     assert sum(not f.hatch.is_identity() for f in mode.editor.template.faces) == 2
     mode.editor.undo()  # the alignment: an action
     assert mode.status() is ValidationStatus.UNDEFINED
+
+
+def test_an_action_refused_by_the_safety_net(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bug (here: working the faces out loses one) never reaches the template: the action is refused, the user is
+    warned, and a session log gets the template as it was (to reproduce it with the input logged before)."""
+    import cube_net.core.template.holes as holes
+
+    notes: list[tuple[object, ...]] = []
+    mode._note = lambda *fields: notes.append(fields)  # type: ignore[method-assign]
+    texts = told(monkeypatch)
+    real = holes.faces_from_graph
+    monkeypatch.setattr(holes, "faces_from_graph", lambda t: real(t)[1:])
+    mode.tool.start_hole()
+    for x, y in [(11.25, 12.25), (11.75, 12.25), (11.5, 12.75), (11.25, 12.25)]:
+        mode.view.left_pressed.emit(x, y)
+    hole = mode.editor.template.holes[0]
+    assert not hole.closed and len(hole.vertices) == 3  # the closing click refused
+    assert texts == [
+        "Application encountered an unexpected error and refused your action, because it would corrupt the project. "
+        "If you want, you can turn on logging, reproduce the action, stop logging and contact the author providing "
+        "logs."
+    ]
+    assert ("template", "unexpected error") in notes
+    assert any(n[:2] == ("state", "snapshot") for n in notes)
+    assert mode.tool.item.flash() == ()  # no flash: the warning says it

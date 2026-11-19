@@ -656,6 +656,15 @@ Done (§8.5):
   `TemplateTool` draws a hole as the loop (SHIFT, a locked slope, Place a vertex), Escape gives up a hole without
   points; its sides have middle circles like the loop's. H is left out of Help's hotkeys with Ctrl+T and V.
 
+- Fixed (2026-11-19): working the faces out lost the faces by a slit (two loop sides leaving one vertex the same way:
+  of them, the one with the net on its right comes first counter-clockwise). And a safety net: the editor never keeps
+  a template whose faces don't add up (every side on exactly one face); the change is refused instead
+  (`TemplateProblem.UNEXPECTED`, from every action that changes faces). The user is told: "Application encountered an
+  unexpected error and refused your action, because it would corrupt the project. If you want, you can turn on
+  logging, reproduce the action, stop logging and contact the author providing logs." A session log being recorded
+  gets "template rejected unexpected <point>", "template unexpected error" and a snapshot of the template as it was
+  (the refused action's input is logged before them).
+
 ### 8.6 Restoring a damaged file
 (Asked for on 2026-11-19, after a hole drawn in the torus template left it unreadable.)
 - A project or template file that can't be opened, but has actions in its undo list: the message adds "Try to

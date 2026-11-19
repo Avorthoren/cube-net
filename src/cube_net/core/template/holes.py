@@ -173,11 +173,15 @@ def faces_from_graph(template: Template) -> list[tuple[tuple[int, ...], list[tup
         edges.setdefault(a, set()).add(b)
         edges.setdefault(b, set()).add(a)
 
-    def angle(a: int, b: int) -> float:
+    def order(a: int, b: int) -> tuple[float, int]:
+        """Where the segment from `a` to `b` lies round `a`, counter-clockwise. Two loop sides may leave `a` the same
+        way (a slit: the loop comes back along itself): of them, the one with the net on its right comes first, the
+        slit (outside the net) between them."""
         d = template.position(b) - template.position(a)
-        return math.atan2(float(d.y), float(d.x))
+        net_on_the_right = (b, a) in loop_sides
+        return round(math.atan2(float(d.y), float(d.x)), 12), 0 if net_on_the_right else 1
 
-    around = {v: sorted(ns, key=lambda n: angle(v, n)) for v, ns in edges.items()}
+    around = {v: sorted(ns, key=lambda n: order(v, n)) for v, ns in edges.items()}
     seen: set[tuple[int, int]] = set()
     outer: list[tuple[int, ...]] = []
     inner: list[tuple[int, ...]] = []

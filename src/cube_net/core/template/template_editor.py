@@ -34,6 +34,7 @@ from cube_net.core.template.rules import (
     TemplateProblem,
     TemplateRejection,
     check,
+    faces_consistent,
     fold_problem,
     on_the_sheet,
 )
@@ -95,11 +96,12 @@ class TemplateEditor:
         changed = [(vertices[-1].id, after.vertices[-1].id)] if vertices else []
         return self._apply(ActionKind.ADD_VERTEX, after, changed)
 
-    def insert_vertex(self, a: int, b: int) -> None:
-        """A new vertex in the middle of the loop's side from `a` to `b` (always allowed)."""
+    def insert_vertex(self, a: int, b: int) -> TemplateRejection | None:
+        """A new vertex in the middle of the side from `a` to `b` of the loop or a hole (always allowed; refused only by
+        the safety net, see `_record`)."""
         self._require_closed()
         middle = (self.template.position(a) + self.template.position(b)) / 2
-        self._record(ActionKind.ADD_VERTEX, self.template.with_vertex_inserted(a, b, middle))
+        return self._recorded(ActionKind.ADD_VERTEX, self.template.with_vertex_inserted(a, b, middle))
 
     def move_problem(self, vertex_id: int, p: Vec) -> TemplateRejection | None:
         """What would be wrong with the vertex at `p` (None: nothing), without moving it."""
@@ -122,8 +124,8 @@ class TemplateEditor:
         if p == self.template.position(vertex_id):
             return None  # released where it was: not an action
         problem = self.move_problem(vertex_id, p)
-        if problem is None:
-            self._record(ActionKind.MOVE_VERTEX, self._moved(vertex_id, p))
+        if problem is None and not self._record(ActionKind.MOVE_VERTEX, self._moved(vertex_id, p)):
+            return TemplateRejection(TemplateProblem.UNEXPECTED)
         return problem
 
     def delete_vertex(self, vertex_id: int) -> TemplateRejection | None:
@@ -131,8 +133,7 @@ class TemplateEditor:
         fold vertex: the folds at it go (and those left hanging)."""
         self._require_closed()
         if self.template.is_fold_vertex(vertex_id):
-            self._record(ActionKind.DELETE_VERTEX, self.template.without_vertex(vertex_id))
-            return None
+            return self._recorded(ActionKind.DELETE_VERTEX, self.template.without_vertex(vertex_id))
         hole = self.template.hole_of(vertex_id)
         if hole is not None:
             if not self.template.holes[hole].closed:
@@ -181,8 +182,8 @@ class TemplateEditor:
         §8.4)."""
         self._require_closed()
         problem = self.fold_line_problem(start, points, end)
-        if problem is None:
-            self._record(ActionKind.ADD_FOLD, self.template.with_fold_line(start, points, end))
+        if problem is None and not self._record(ActionKind.ADD_FOLD, self.template.with_fold_line(start, points, end)):
+            return TemplateRejection(TemplateProblem.UNEXPECTED)
         return problem
 
     def fold_line_problem(self, start: int, points: Sequence[Vec], end: int | None) -> TemplateRejection | None:
@@ -208,15 +209,16 @@ class TemplateEditor:
         )
         return check(drawn, [(f.start, f.end) for f in folds])
 
-    def insert_fold_vertex(self, fold: Fold) -> None:
-        """A new fold vertex in the middle of a fold segment (always allowed)."""
+    def insert_fold_vertex(self, fold: Fold) -> TemplateRejection | None:
+        """A new fold vertex in the middle of a fold segment (always allowed; refused only by the safety net)."""
         self._require_closed()
         middle = (self.template.position(fold.start) + self.template.position(fold.end)) / 2
-        self._record(ActionKind.ADD_VERTEX, self.template.with_fold_vertex_inserted(fold, middle))
+        return self._recorded(ActionKind.ADD_VERTEX, self.template.with_fold_vertex_inserted(fold, middle))
 
-    def delete_fold(self, fold: Fold) -> None:
+    def delete_fold(self, fold: Fold) -> TemplateRejection | None:
+        """Delete a fold segment, and what's left hanging (refused only by the safety net)."""
         self._require_closed()
-        self._record(ActionKind.DELETE_FOLD, self.template.without_fold(fold))
+        return self._recorded(ActionKind.DELETE_FOLD, self.template.without_fold(fold))
 
     def set_face_color(self, face_index: int, color: str) -> None:
         """Give a face a colour: even the one it has (it's numbered anew, its hatch tied to the grid again)."""
@@ -270,14 +272,23 @@ class TemplateEditor:
 
     def _apply(self, kind: ActionKind, after: Template, changed: list[tuple[int, int]]) -> TemplateRejection | None:
         problem = check(after, changed)
-        if problem is None:
-            self._record(kind, after)
+        if problem is None and not self._record(kind, after):
+            return TemplateRejection(TemplateProblem.UNEXPECTED)
         return problem
 
-    def _record(self, kind: ActionKind, after: Template) -> None:
+    def _recorded(self, kind: ActionKind, after: Template) -> TemplateRejection | None:
+        """`_record`, saying UNEXPECTED where the safety net refused it."""
+        return None if self._record(kind, after) else TemplateRejection(TemplateProblem.UNEXPECTED)
+
+    def _record(self, kind: ActionKind, after: Template) -> bool:
+        """Make `after` the template, as an action. A safety net: a template whose faces don't add up (a bug) is never
+        kept, so never saved (False: nothing changed)."""
+        if after.closed and not faces_consistent(after):
+            return False
         before = self.snapshot()
         self.template = after
         self.history.record(kind, before, self.snapshot())
+        return True
 
     def _require_closed(self) -> None:
         if not self.template.closed:

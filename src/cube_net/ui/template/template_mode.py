@@ -34,12 +34,13 @@ from cube_net.core.template import (
 from cube_net.ui import palette
 from cube_net.ui.dialogs.message_window import MessageIcon, ask_yes_no, tell
 from cube_net.ui.i18n import tr
+from cube_net.ui.session.snapshots import snapshot_text
 from cube_net.ui.sheet.sheet_context_menu import SheetContextMenu
 from cube_net.ui.sheet.sheet_cursor import SheetCursor
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.style import DEFAULT_STYLE, Style
 from cube_net.ui.template.assign_vertex_window import AssignVertexWindow
-from cube_net.ui.template.template_tool import TemplateTool
+from cube_net.ui.template.template_tool import UNEXPECTED_ERROR, TemplateTool
 from cube_net.ui.template.validation_messages import failure_text, no_problems_text, reindexed_text
 
 # The template sheet.
@@ -82,6 +83,7 @@ class TemplateMode(QObject):
         self.tool.rejected.connect(lambda p, problem: self._note("template", "rejected", problem.value, _point(p)))
         self.tool.face_double_clicked.connect(self._pick_face_color)
         self.tool.warned.connect(lambda text: tell(parent, "Cube Net", text, icon=MessageIcon.WARNING))
+        self.tool.unexpected.connect(self._on_unexpected)
         self.view.show_initial_view(FIRST_VIEW)
 
     # --- the document -------------------------------------------------------------------------------------------------
@@ -185,6 +187,13 @@ class TemplateMode(QObject):
     def _set_status(self, template: Template, status: ValidationStatus) -> None:
         self._validated = (template, status)
         self.changed.emit()
+
+    def _on_unexpected(self) -> None:
+        """An action was refused because it would have corrupted the template (a bug): a session log being recorded
+        gets the template as it is (the refused action's input is in the lines before), the user a warning."""
+        self._note("template", "unexpected error")
+        self._note("state", "snapshot", snapshot_text(self.document()))
+        tell(self._parent, "Cube Net", tr(UNEXPECTED_ERROR), icon=MessageIcon.WARNING)
 
     # --- the windows --------------------------------------------------------------------------------------------------
 

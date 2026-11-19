@@ -6,6 +6,8 @@
 
 from fractions import Fraction as F
 
+import pytest
+
 from cube_net.core.geometry import Vec
 from cube_net.core.template import Fold, Template, TemplateEditor, TemplateProblem, template_area
 from cube_net.core.template.holes import closed_hole, faces_from_graph, with_hole_point, without_hole_vertex
@@ -133,3 +135,34 @@ def test_a_hole_vertex_dragged_over_a_fold_cuts_it() -> None:
     assert {Vec(5, 4), Vec(5, 5)} <= positions  # the new crossings: vertices of the hole
     assert len(editor.template.folds) == 2 and len(editor.template.faces) == 2  # the part inside it gone
     assert editor.undo() and editor.template.folds == (Fold(1, 4),)
+
+
+def test_a_hole_in_a_template_with_a_slit() -> None:
+    """The torus template (Cube with a hole) has a slit: its loop goes up from S2 to M2 and back down from M2 to K2,
+    two sides leaving M2 the same way. A hole drawn in its purple face used to lose the three faces by the slit when
+    the faces were worked out again (2026-11-19: the file was saved so, and couldn't be opened)."""
+    from cube_net.core.project.builtin_templates import cube_with_a_hole
+
+    template = cube_with_a_hole().state.template
+    assert {frozenset(c) for c, _ in faces_from_graph(template)} == {frozenset(f.corners) for f in template.faces}
+    editor = TemplateEditor(template)
+    hole = [(F(173, 4), F(119, 2)), (F(175, 4), F(119, 2)), (F(175, 4), F(121, 2))]  # in the upper purple piece
+    for x, y in [*hole, hole[0]]:
+        assert editor.add_hole_point(Vec(x, y)) is None
+    after = editor.template
+    assert len(after.faces) == len(template.faces) and sum(bool(f.holes) for f in after.faces) == 1
+    assert {f.color for f in after.faces} == {f.color for f in template.faces}
+
+
+def test_faces_that_dont_add_up_are_never_kept(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A safety net: if working the faces out ever went wrong again, the change is refused, not kept (and saved)."""
+    import cube_net.core.template.holes as holes
+
+    editor = TestEditor().editor()
+    for p in [(1, 1), (2, 1), (2, 2)]:
+        assert editor.add_hole_point(Vec(*p)) is None
+    real = holes.faces_from_graph
+    monkeypatch.setattr(holes, "faces_from_graph", lambda t: real(t)[1:])  # a face lost
+    before = editor.template
+    assert editor.add_hole_point(Vec(1, 1)) is not None
+    assert editor.template is before and editor.template.drawing_hole
