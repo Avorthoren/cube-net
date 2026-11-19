@@ -1037,7 +1037,8 @@ class MainWindow(QMainWindow):
 
     def _on_new(self) -> None:
         """File -> New: the user chooses what the project starts from (or a template that isn't valid, to open)."""
-        choice = choose_new_project(self, template_files(), self._dialog_folder())
+        open_template = self.template_mode.path if self.in_template_mode else None
+        choice = choose_new_project(self, template_files(), self._dialog_folder(), open_template)
         if choice is not None and self._confirm_leaving_project():
             self._start_chosen(choice)
 

@@ -446,4 +446,5 @@ RUSSIAN: dict[str, str] = {
     "Choose template": "Выбор шаблона",
     "{path} is a project, not a template.": "{path} — это проект, а не шаблон.",
     "Template is not valid. Open template?": "Шаблон некорректен. Открыть шаблон?",
+    "Template is not valid.": "Шаблон некорректен.",
 }

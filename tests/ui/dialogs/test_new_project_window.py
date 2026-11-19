@@ -141,6 +141,25 @@ def test_a_template_that_is_not_valid(
         assert choice is None and window.isVisible()  # back to the window
 
 
+def test_a_template_that_is_not_valid_and_open_already(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing to open: the window only says it's not valid, and stays."""
+    asked: list[str] = []
+    told: list[str] = []
+    monkeypatch.setattr(f"{MODULE}.ask_yes_no", lambda _p, text: asked.append(text) or True)
+    monkeypatch.setattr(f"{MODULE}.tell", lambda _p, _t, text, **_: told.append(text))
+    path = tmp_path / "empty.nettemplate"
+    save_template(TemplateDocument(TemplateSnapshot(TemplateEditor().template), History()), path)
+    window = NewProjectWindow("Cube Net templates (*.nettemplate)", open_template=tmp_path / "." / "empty.nettemplate")
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    choose(window, Start.CUSTOM, path)
+    assert told == ["Template is not valid."] and asked == []
+    assert window.choice() is None and window.isVisible()
+
+
 def test_cancel(qtbot: QtBot) -> None:
     window = make(qtbot)
     window.cancel_button.click()

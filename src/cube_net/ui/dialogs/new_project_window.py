@@ -10,8 +10,9 @@
 The line with the file is only there for Custom template (empty otherwise, so that the window keeps its size). Create
 with a custom template reads it and validates it quietly: a file that can't be read, or a project, is said so, and the
 window stays; a template that isn't valid asks "Template is not valid. Open template?": Yes ends the window with that
-template to open for editing, No goes back to it. Otherwise the window ends with the new project: the cube, or the body
-of the template, with the template's style, colours and origin.
+template to open for editing, No goes back to it. If that template is the one open already, there's nothing to open:
+it only says "Template is not valid.", and the window stays. Otherwise the window ends with the new project: the
+cube, or the body of the template, with the template's style, colours and origin.
 """
 
 from dataclasses import dataclass, replace
@@ -76,11 +77,15 @@ def builtin_project(start: Start) -> Project:
 
 
 class NewProjectWindow(SmallWindow):
-    def __init__(self, files_filter: str, folder: str = "", parent: QWidget | None = None) -> None:
-        """`files_filter`: what the Browse window shows; `folder`: where it starts."""
+    def __init__(
+        self, files_filter: str, folder: str = "", parent: QWidget | None = None, open_template: Path | None = None
+    ) -> None:
+        """`files_filter`: what the Browse window shows; `folder`: where it starts; `open_template`: the file of the
+        template open in the window, if one is."""
         super().__init__(tr("New project"), parent)
         self._filter = files_filter
         self._folder = folder
+        self._open_template = open_template
         self._choice: NewProjectChoice | None = None
         self.start = QComboBox(self)
         self.start.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)  # as wide as its longest option
@@ -170,6 +175,9 @@ class NewProjectWindow(SmallWindow):
             return
         template = document.state.template
         if not template.closed or validate(template) is not None:  # validating needs a closed loop
+            if self._open_template is not None and _same_file(path, self._open_template):
+                tell(self, "Cube Net", tr("Template is not valid."), icon=MessageIcon.WARNING)  # it's open already
+                return
             if ask_yes_no(self, tr("Template is not valid. Open template?")):
                 self._choice = NewProjectChoice(start, path, template=document)
                 self.accept()
@@ -178,9 +186,19 @@ class NewProjectWindow(SmallWindow):
         self.accept()
 
 
-def choose_new_project(parent: QWidget, files_filter: str, folder: str) -> NewProjectChoice | None:
-    """File -> New's window, until the user creates a project or cancels (None)."""
-    window = NewProjectWindow(files_filter, folder, parent)
+def _same_file(a: Path, b: Path) -> bool:
+    try:
+        return a.resolve() == b.resolve()
+    except OSError:
+        return a == b
+
+
+def choose_new_project(
+    parent: QWidget, files_filter: str, folder: str, open_template: Path | None = None
+) -> NewProjectChoice | None:
+    """File -> New's window, until the user creates a project or cancels (None). `open_template`: the file of the
+    template open in the window, if one is."""
+    window = NewProjectWindow(files_filter, folder, parent, open_template)
     try:
         window.exec()
         return window.choice()
