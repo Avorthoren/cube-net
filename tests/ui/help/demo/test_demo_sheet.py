@@ -52,15 +52,12 @@ def test_held_keys_go_with_the_mouse(qtbot: QtBot) -> None:
     assert sheet.view.ctrl_held()
 
 
-def test_labels_of_the_cut_lines_new_points_too(qtbot: QtBot) -> None:
-    sheet = DemoSheet(QSize(560, 400), labels=True)
-    qtbot.addWidget(sheet)
+def test_no_vertex_labels(qtbot: QtBot) -> None:
+    sheet = make(qtbot)
     item = sheet.view.net_item()
-    assert item is not None and item.labels() is not None
+    assert item is not None and item.labels() is None
     for _ in sheet.play([Move((11.0, 14.0), 0), *click(), Move((11.6, 12.2), 0), *click()], instant=True):
         pass
-    assert sheet.workspace.cut_tool.item.labels() != ()  # the new point is named
-    sheet.set_labels_shown(False)
     assert item.labels() is None and sheet.workspace.cut_tool.item.labels() == ()
 
 
@@ -128,3 +125,32 @@ def test_place_a_vertex_typed_into_its_window(qtbot: QtBot) -> None:
     assert sheet.place_window is None
     line = sheet.workspace.editor.cut_line
     assert line is not None and line.last.position == sheet.workspace.editor.origin.sheet(Vec(F(23, 2), F(25, 2)))
+
+
+def test_the_built_in_cubes_look_whatever_is_in_place(qtbot: QtBot) -> None:
+    """Help's animations look the same whatever is open: another style, a body's colours, a template."""
+    from dataclasses import replace
+
+    from PyQt6.QtGui import QImage
+
+    from cube_net.core.body import CUBE
+    from cube_net.ui import palette
+    from cube_net.ui.style import DEFAULT_CUBE_LOOK, DEFAULT_STYLE, apply_style
+    from cube_net.ui.style.apply import style_in_place
+
+    def picture() -> QImage:
+        sheet = make(qtbot)
+        play(sheet, [*CUTTING, Move((11.6, 12.2), 0), *click()])
+        return sheet.grab().toImage().convertToFormat(QImage.Format.Format_ARGB32)
+
+    plain = picture()
+    other = replace(DEFAULT_STYLE, edge_width=1.0, vertex_radius=3.0, hatch_columns=1.0, dashes_per_unit=2.0)
+    colors = ("#111111",) * len(CUBE.colors)
+    apply_style(other)
+    palette.set_face_colors(colors, CUBE)
+    try:
+        assert make(qtbot).look == DEFAULT_CUBE_LOOK
+        assert picture() == plain
+        assert style_in_place() == other and palette.face_colors_in_place() == (colors, CUBE)  # still the project's
+    finally:
+        palette.set_face_colors(CUBE.colors, CUBE)

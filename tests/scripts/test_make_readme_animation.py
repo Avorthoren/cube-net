@@ -6,29 +6,23 @@ file still shows the app as it draws itself now."""
 
 import struct
 import zlib
-from collections.abc import Iterator
 from fractions import Fraction as F
 
-import pytest
 from PyQt6.QtCore import QRect
 from PyQt6.QtGui import QColor, QImage
 from PyQt6.QtWidgets import QApplication
 from pytestqt.qtbot import QtBot
 
-from cube_net.core.body import CUBE
 from cube_net.core.editor import EditorState
 from cube_net.core.geometry import Vec
-from cube_net.ui import palette
-from cube_net.ui.style import DEFAULT_STYLE, apply_style
+from cube_net.core.project import load_project
 from scripts import make_readme_animation as animation
 
 
-@pytest.fixture(autouse=True)
-def default_look() -> Iterator[None]:
-    """The animation puts its project's style and colours in place (they're global): the next test has the defaults."""
-    yield
-    apply_style(DEFAULT_STYLE)
-    palette.set_face_colors(CUBE.colors, CUBE)
+def test_the_animation_has_its_projects_look() -> None:
+    project = load_project(animation.BASIS)
+    look = animation.sheet().look
+    assert (look.style, look.face_colors) == (project.settings.style, project.settings.face_colors)
 
 
 def chunks(data: bytes) -> list[tuple[bytes, bytes]]:

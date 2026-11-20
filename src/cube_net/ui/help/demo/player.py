@@ -47,10 +47,8 @@ class DemoPlayer(QFrame):
         before: Sequence[Sequence[Step]] = (),
         size: QSize = DEFAULT_SIZE,
         shown: Box = AROUND_THE_NET,
-        labels: bool = False,
         parent: QWidget | None = None,
     ) -> None:
-        """`labels`: whether the vertices have their debug labels (an app setting)."""
         super().__init__(parent)
         self.setObjectName("demo")
         self.setStyleSheet(f"#demo {{ border: 1px solid {BORDER}; border-radius: 6px; }}")
@@ -58,7 +56,6 @@ class DemoPlayer(QFrame):
         self._before = [list(part) for part in before]
         self._size = size
         self._shown = shown
-        self._labels = labels
         self._layout = QGridLayout(self)
         self._layout.setContentsMargins(1, 1, 1, 1)
         self.sheet: DemoSheet = self._new_sheet()
@@ -87,15 +84,8 @@ class DemoPlayer(QFrame):
         self._run = self.sheet.play(self._steps)
         self._next()
 
-    def set_labels_shown(self, shown: bool) -> None:
-        self._labels = shown
-        self.sheet.set_labels_shown(shown)
-
-    def restyle(self) -> None:
-        self.sheet.restyle()
-
     def _new_sheet(self) -> DemoSheet:
-        sheet = DemoSheet(self._size, self._shown, self._labels, self)
+        sheet = DemoSheet(self._size, self._shown, parent=self)
         for part in self._before:
             for _ in sheet.play(part, instant=True):
                 pass

@@ -4,8 +4,8 @@
 """Help -> Help: a big window that explains how the application works, with animations of the real tools.
 
 The text is in a column of easy-to-read width, in blocks between the animations (`TextBlock`: selectable across
-paragraphs). The animations (`demo`) are drawn in the style chosen in the settings, with the vertex labels if they're
-switched on, and follow both when they change. Escape closes the window.
+paragraphs). The animations (`demo`) are drawn in the built-in Cube's look (`DEFAULT_CUBE_LOOK`), whatever the open
+document's style and colours are, and never with the vertex labels. Escape closes the window.
 """
 
 from collections.abc import Callable, Sequence
@@ -104,12 +104,10 @@ class HelpWindow(QWidget):
     # The user chose another language in the list at the top (a `Language`): it's the application's setting.
     language_changed = pyqtSignal(object)
 
-    def __init__(self, parent: QWidget | None = None, labels: bool = False) -> None:
-        """`labels`: whether the animations show the vertex labels (an app setting)."""
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.Window)
         bind(self, self.setWindowTitle, "{name} Help", name=APP_NAME)
-        self._labels = labels
         self.players: list[DemoPlayer] = []
         self.blocks: list[TextBlock] = []
         self._block: TextBlock | None = None
@@ -166,17 +164,6 @@ class HelpWindow(QWidget):
             self.close()
             return
         super().keyPressEvent(event)
-
-    def restyle(self) -> None:
-        """The style changed in the settings: the animations follow it."""
-        for player in self.players:
-            player.restyle()
-
-    def set_labels_shown(self, shown: bool) -> None:
-        """The vertex labels were switched on or off in the settings: the animations follow."""
-        self._labels = shown
-        for player in self.players:
-            player.set_labels_shown(shown)
 
     # --- the parts of the page ---------------------------------------------------------------------------------------
 
@@ -284,7 +271,7 @@ class HelpWindow(QWidget):
     def _player(
         self, steps: Sequence[Step], before: Sequence[Sequence[Step]], size: QSize, shown: Box = AROUND_THE_NET
     ) -> DemoPlayer:
-        player = DemoPlayer(steps, before, size, shown, self._labels)
+        player = DemoPlayer(steps, before, size, shown)
         self.players.append(player)
         return player
 

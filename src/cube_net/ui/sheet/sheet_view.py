@@ -31,6 +31,7 @@ from cube_net.ui import palette
 from cube_net.ui.sheet import zoom
 from cube_net.ui.sheet.net_item import NetItem
 from cube_net.ui.sheet.sheet_item import SheetItem
+from cube_net.ui.style.look import Look
 
 type HitTest = Callable[[float, float], bool]
 """Tells whether a sheet point (x, y) lies on the cube net."""
@@ -89,6 +90,8 @@ class SheetView(QGraphicsView):
         self._sheet_item = SheetItem()
         self._scene().addItem(self._sheet_item)
         self._net_item: NetItem | None = None
+        # The view's own look, which it paints in and hit-tests with (None: the open document's, in place anyway).
+        self._look: Look | None = None
 
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.NoAnchor)  # zoom anchoring is done manually
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.NoAnchor)
@@ -317,6 +320,21 @@ class SheetView(QGraphicsView):
             event.accept()
         else:
             super().wheelEvent(event)  # outside the sheet the wheel just scrolls
+
+    def set_look(self, look: Look | None) -> None:
+        """Paint in `look` and hit-test with it, whatever the open document's is (None: in the open document's)."""
+        self._look = look
+        self.viewport().update()
+
+    def look(self) -> Look | None:
+        return self._look
+
+    def viewportEvent(self, event: QEvent | None) -> bool:
+        """Every event of the viewport (its painting, the mouse) is handled in the view's own look, if it has one."""
+        if self._look is None:
+            return super().viewportEvent(event)
+        with self._look.used():
+            return super().viewportEvent(event)
 
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
         if event is None:

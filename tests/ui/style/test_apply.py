@@ -6,6 +6,7 @@ from dataclasses import replace
 from cube_net.ui import palette
 from cube_net.ui.sheet import net_style
 from cube_net.ui.style import DEFAULT_STYLE, apply_style
+from cube_net.ui.style.apply import style_in_place
 
 
 def test_everything_reads_the_new_values() -> None:
@@ -35,3 +36,10 @@ def test_and_back() -> None:
     apply_style(DEFAULT_STYLE)
     assert DEFAULT_STYLE.edge_width == net_style.EDGE_WIDTH_PX
     assert DEFAULT_STYLE.edge_width * net_style.CUT_HITBOX_FACTOR == net_style.CUT_HITBOX_PX
+
+
+def test_the_style_in_place() -> None:
+    assert style_in_place() == DEFAULT_STYLE
+    other = replace(DEFAULT_STYLE, edge_width=2.5, hatch_columns=0.5, grid_color="#ABCDEF")
+    apply_style(other)
+    assert style_in_place() == other

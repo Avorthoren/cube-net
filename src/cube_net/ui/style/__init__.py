@@ -7,5 +7,6 @@ template's), put in place for everything that paints."""
 from cube_net.core.style import Style, StyleError
 from cube_net.ui.style.apply import apply_style
 from cube_net.ui.style.default_style import DEFAULT_STYLE, fitted
+from cube_net.ui.style.look import DEFAULT_CUBE_LOOK, Look
 
-__all__ = ["DEFAULT_STYLE", "Style", "StyleError", "apply_style", "fitted"]
+__all__ = ["DEFAULT_CUBE_LOOK", "DEFAULT_STYLE", "Look", "Style", "StyleError", "apply_style", "fitted"]

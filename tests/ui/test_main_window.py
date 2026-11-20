@@ -3503,28 +3503,32 @@ class TestHelpMenu:
         again.show_help_at_first_start()
         assert again.help_window is None
 
-    def test_its_animations_follow_the_vertex_labels_setting(self, qtbot: QtBot, tmp_path: Path) -> None:
+    def test_its_animations_keep_the_built_in_cubes_look(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from dataclasses import replace
+
+        from cube_net.ui.style import DEFAULT_CUBE_LOOK, DEFAULT_STYLE
+        from cube_net.ui.style.apply import style_in_place
+
+        window = self.make(qtbot, tmp_path)
+        other = replace(DEFAULT_STYLE, edge_width=1.5, hatch_columns=1.0)
+        window._on_style_changed(other)
+        window.help_action.trigger()
+        help_window = window.help_window
+        assert help_window is not None and help_window.players
+        assert all(player.sheet.view.look() == DEFAULT_CUBE_LOOK for player in help_window.players)
+        assert style_in_place() == other  # the project's, for everything else
+
+    def test_its_animations_have_no_vertex_labels_even_when_they_are_on(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
         window.show_labels_action.setChecked(True)
         window.help_action.trigger()
-        assert window.help_window is not None
-        item = window.help_window.players[0].sheet.view.net_item()
-        assert item is not None and item.labels() is not None
+        help_window = window.help_window
+        assert help_window is not None
         window.show_labels_action.setChecked(False)
-        assert item.labels() is None
-
-    def test_its_animations_follow_the_style(
-        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        from cube_net.ui.help.help_window import HelpWindow
-        from cube_net.ui.style import DEFAULT_STYLE
-
-        window = self.make(qtbot, tmp_path)
-        window.help_action.trigger()
-        restyled: list[bool] = []
-        monkeypatch.setattr(HelpWindow, "restyle", lambda self: restyled.append(True))
-        window._on_style_changed(DEFAULT_STYLE)
-        assert restyled == [True]
+        window.show_labels_action.setChecked(True)  # switched on again while Help is open
+        for player in help_window.players:
+            item = player.sheet.view.net_item()
+            assert item is not None and item.labels() is None
 
     def test_about_and_updates_open_their_windows(
         self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

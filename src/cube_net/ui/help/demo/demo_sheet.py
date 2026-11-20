@@ -18,11 +18,9 @@ from PyQt6.QtCore import QEvent, QObject, QPoint, QPointF, QSize, Qt
 from PyQt6.QtGui import QKeyEvent, QMouseEvent
 from PyQt6.QtWidgets import QApplication, QFrame, QLineEdit, QWidget
 
-from cube_net.core.body import CUBE
 from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.geometry import Box, Vec
 from cube_net.core.history import History
-from cube_net.core.labels import PointLabels
 from cube_net.core.net import default_net
 from cube_net.core.project import Project
 from cube_net.core.project_settings import ProjectSettings
@@ -36,6 +34,7 @@ from cube_net.ui.sheet.place_vertex_window import PlaceVertexWindow
 from cube_net.ui.sheet.sheet_context_menu import PLACE_VERTEX, SheetContextMenu
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.sheet.workspace import Workspace
+from cube_net.ui.style import DEFAULT_CUBE_LOOK, DEFAULT_STYLE, Look
 
 # What the view shows by default: the default net with some room around it.
 AROUND_THE_NET = Box(Vec(9, F(48, 5)), Vec(14, F(72, 5)))
@@ -71,16 +70,15 @@ class DemoSheet(QWidget):
         self,
         size: QSize,
         shown: Box = AROUND_THE_NET,
-        labels: bool = False,
         bounds: bool = False,
         parent: QWidget | None = None,
         project: Project | None = None,
     ) -> None:
         """`shown`: what the view shows (as large as it fits), all the time: it's where the net is in every state of
-        the animation. `labels`: whether the vertices have their debug labels (an app setting). `bounds`: whether the
-        net's minimum-area bounding rectangle is shown, as the Bounds button shows it (green below the project's target
-        area). `project`: what's on the sheet at the start, its origin and its names of points (None: a new project's,
-        the default net); its style is the caller's to put in place (it's global)."""
+        the animation. `bounds`: whether the net's minimum-area bounding rectangle is shown, as the Bounds button shows
+        it (green below the project's target area). `project`: what's on the sheet at the start, its origin and its
+        look (None: the built-in Cube's, the default net in the default look). The sheet paints in that look whatever
+        the open document's is (`SheetView.set_look`). There are no vertex labels, whatever the app's setting."""
         super().__init__(parent)
         self.setFixedSize(size)
         net = default_net() if project is None else project.state.net
@@ -90,47 +88,44 @@ class DemoSheet(QWidget):
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.view.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.view.set_sheet(sheet_box(v.position for v in net.vertices))
-        self.view.set_net(net)
-        self.view.show_fixed(shown, 1.0)
-        self.workspace = Workspace(self.view, net, mouse_cursor=False)
-        tool = self.workspace.cut_tool
-        if project is not None:
-            self.workspace.editor.load(project.state, History())
-            tool.reload()
-        tool.approve_clicked.connect(tool.approve)  # what the main window's actions do for these buttons
-        tool.undo_clicked.connect(tool.undo)
-        # The names of the points made on the way (I, J, ...), as in a new project, or the project's own.
-        self._names = PointLabels(CUBE) if project is None else project.labels
-        # The target area the bounding rectangle is green below.
-        self._threshold = (ProjectSettings() if project is None else project.settings).area_threshold
-        # The right click's menu and the window of its Place a vertex, while they're open.
-        self._context_menu = SheetContextMenu(self.view, tool)
-        self.menu: ContextMenu | None = None
-        self.place_window: PlaceVertexWindow | None = None
-        self._menu_at: Point | None = None
-        self._labels = labels
-        tool.line_changed.connect(self._show_labels)
-        self.workspace.net_changed.connect(self._show_labels)
-        self._show_labels()
-        self.bounding_item: BoundingItem | None = None
-        if bounds:
-            self.bounding_item = BoundingItem()
-            scene = self.view.scene()
-            assert scene is not None
-            scene.addItem(self.bounding_item)
-            self.workspace.net_changed.connect(self._show_bounds)
-            self._show_bounds()
-        viewport = self.view.viewport()
-        assert viewport is not None
-        self.pointer = Pointer(viewport, self.view.from_sheet)
-        self.pointer.resize(size)
-        self._mouse: Point | None = None
-        self._modifiers = Qt.KeyboardModifier.NoModifier
-        self._pressed = False
-        self._sending = False
-        for widget in (self.view, viewport):
-            widget.installEventFilter(self)
+        self.look = DEFAULT_CUBE_LOOK if project is None else _look(project)
+        self.view.set_look(self.look)
+        with self.look.used():
+            self.view.set_sheet(sheet_box(v.position for v in net.vertices))
+            self.view.set_net(net)
+            self.view.show_fixed(shown, 1.0)
+            self.workspace = Workspace(self.view, net, mouse_cursor=False)
+            tool = self.workspace.cut_tool
+            if project is not None:
+                self.workspace.editor.load(project.state, History())
+                tool.reload()
+            tool.approve_clicked.connect(tool.approve)  # what the main window's actions do for these buttons
+            tool.undo_clicked.connect(tool.undo)
+            # The target area the bounding rectangle is green below.
+            self._threshold = (ProjectSettings() if project is None else project.settings).area_threshold
+            # The right click's menu and the window of its Place a vertex, while they're open.
+            self._context_menu = SheetContextMenu(self.view, tool)
+            self.menu: ContextMenu | None = None
+            self.place_window: PlaceVertexWindow | None = None
+            self._menu_at: Point | None = None
+            self.bounding_item: BoundingItem | None = None
+            if bounds:
+                self.bounding_item = BoundingItem()
+                scene = self.view.scene()
+                assert scene is not None
+                scene.addItem(self.bounding_item)
+                self.workspace.net_changed.connect(self._show_bounds)
+                self._show_bounds()
+            viewport = self.view.viewport()
+            assert viewport is not None
+            self.pointer = Pointer(viewport, self.view.from_sheet)
+            self.pointer.resize(size)
+            self._mouse: Point | None = None
+            self._modifiers = Qt.KeyboardModifier.NoModifier
+            self._pressed = False
+            self._sending = False
+            for widget in (self.view, viewport):
+                widget.installEventFilter(self)
 
     def eventFilter(self, watched: QObject | None, event: QEvent | None) -> bool:
         """Only the script's own events get through."""
@@ -141,13 +136,6 @@ class DemoSheet(QWidget):
         assert self.bounding_item is not None
         rectangle = min_area_rectangle(v.position for v in self.workspace.net.vertices)
         self.bounding_item.set_rectangle(rectangle.corners, rectangle.area < self._threshold)
-
-    def set_labels_shown(self, shown: bool) -> None:
-        self._labels = shown
-        self._show_labels()
-
-    def _show_labels(self) -> None:
-        self.workspace.show_labels(self._names if self._labels else None)
 
     def mouse(self) -> Point | None:
         return self._mouse
@@ -195,6 +183,10 @@ class DemoSheet(QWidget):
 
     def _open_menu(self) -> None:
         """The right click's menu, where the mouse is (as `SheetContextMenu` does it)."""
+        with self.look.used():
+            self._open_menu_here()
+
+    def _open_menu_here(self) -> None:
         x, y = self._menu_at = self._here()
         viewport = self.view.viewport()
         assert viewport is not None
@@ -215,6 +207,10 @@ class DemoSheet(QWidget):
 
     def _choose(self) -> None:
         """A click on the open menu: it closes, and its item under the mouse (if any) does what it does."""
+        with self.look.used():
+            self._choose_here()
+
+    def _choose_here(self) -> None:
         assert self.menu is not None and self._menu_at is not None
         menu, self.menu = self.menu, None
         item = menu.item_at(menu.mapFromParent(self.view.from_sheet(QPointF(*self._here())).toPoint()))
@@ -260,6 +256,10 @@ class DemoSheet(QWidget):
 
     def _type(self, char: str) -> None:
         """A key pressed and released in the open window, where its focus is."""
+        with self.look.used():
+            self._type_here(char)
+
+    def _type_here(self, char: str) -> None:
         assert self.place_window is not None, "keys are typed into an open window"
         target = self.place_window.focusWidget() or self.place_window
         key = SPECIAL_KEYS.get(char)
@@ -331,19 +331,14 @@ class DemoSheet(QWidget):
         if self._mouse is None:
             return
         x, y = self._mouse
+        with self.look.used():
+            self._show_pointer_at(x, y)
+
+    def _show_pointer_at(self, x: float, y: float) -> None:
         over = self._over_window(self.view.from_sheet(QPointF(x, y)))
         kind = CursorKind.ARROW if over else self.workspace.cut_tool.cursor_at(x, y)
         ctrl = bool(self._modifiers & Qt.KeyboardModifier.ControlModifier)
         self.pointer.set_state(QPointF(x, y), kind, ctrl)
-
-    def restyle(self) -> None:
-        """The style changed: draw the net anew."""
-        item = self.view.net_item()
-        if item is not None:
-            item.restyle()
-        scene = self.view.scene()
-        if scene is not None:
-            scene.update()
 
 
 def _distance(a: Point, b: Point) -> float:
@@ -363,3 +358,10 @@ def _along(corners: list[Point], lengths: list[float], distance: float) -> Point
             return a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
         distance -= length
     return corners[-1]
+
+
+def _look(project: Project) -> Look:
+    """The look of `project`: its style and face colours (the default style and its body's own colours, where it has
+    none)."""
+    settings, body = project.settings, project.state.net.body
+    return Look(settings.style or DEFAULT_STYLE, settings.face_colors or body.colors, body)

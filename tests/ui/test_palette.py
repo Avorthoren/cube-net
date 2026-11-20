@@ -23,8 +23,14 @@ def test_the_open_projects_body_gets_its_colours() -> None:
 
 
 def test_another_body_keeps_its_own_colours() -> None:
-    """Help's cube, while a project of another body is open."""
     torus = body_from_template(cube_with_a_hole().state.template)
     palette.set_face_colors(("#111111",) * len(torus.face_numbers), torus)
     assert palette.face_color(torus, 2).name().upper() == "#111111"
     assert palette.face_color(CUBE, 2).name().upper() == CUBE.colors[1]
+
+
+def test_the_colours_in_place() -> None:
+    torus = body_from_template(cube_with_a_hole().state.template)
+    colors = ("#111111",) * len(torus.face_numbers)
+    palette.set_face_colors(colors, torus)
+    assert palette.face_colors_in_place() == (colors, torus)

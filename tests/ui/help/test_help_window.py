@@ -47,13 +47,12 @@ def test_escape_closes_it(qtbot: QtBot) -> None:
     assert not window.isVisible()
 
 
-def test_restyle_reaches_every_animation(qtbot: QtBot) -> None:
+def test_every_animation_has_the_built_in_cubes_look(qtbot: QtBot) -> None:
+    """Whatever is open (another style, another body, a template), Help's animations look the same."""
+    from cube_net.ui.style import DEFAULT_CUBE_LOOK
+
     window = make(qtbot)
-    seen: list[object] = []
-    for player in window.players:
-        player.sheet.restyle = lambda p=player: seen.append(p)  # type: ignore[method-assign]
-    window.restyle()
-    assert seen == window.players
+    assert window.players and all(player.sheet.view.look() == DEFAULT_CUBE_LOOK for player in window.players)
 
 
 def test_text_can_be_selected_across_paragraphs(qtbot: QtBot) -> None:
@@ -93,13 +92,10 @@ def test_the_wheel_is_left_to_the_page_over_text_and_animations(qtbot: QtBot) ->
     assert player.sheet.view.scale_factor() == scale  # no zooming there
 
 
-def test_labels_follow_the_setting(qtbot: QtBot) -> None:
-    window = HelpWindow(labels=True)
-    qtbot.addWidget(window)
-    item = window.players[0].sheet.view.net_item()
-    assert item is not None and item.labels() is not None
-    window.set_labels_shown(False)
-    assert item.labels() is None
+def test_no_vertex_labels_in_the_animations(qtbot: QtBot) -> None:
+    window = make(qtbot)
+    items = [player.sheet.view.net_item() for player in window.players]
+    assert items and all(item is not None and item.labels() is None for item in items)
 
 
 def test_good_to_know_starts_with_the_right_click_then_the_origin(qtbot: QtBot) -> None:

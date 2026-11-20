@@ -1210,7 +1210,7 @@ class MainWindow(QMainWindow):
     def show_help(self) -> None:
         """Help -> Help: one window, brought to the front if it's open already."""
         if self.help_window is None:
-            self.help_window = HelpWindow(self, self.settings.show_vertex_labels)
+            self.help_window = HelpWindow(self)
             self.help_window.language_changed.connect(self._on_language_changed)
         self.help_window.show()
         self.help_window.raise_()
@@ -1269,13 +1269,11 @@ class MainWindow(QMainWindow):
         self._note("template" if self.in_template_mode else "project", "style", format_style(style))
 
     def _repaint_net(self) -> None:
-        """Paint the net and Help's animation again, in the colours and sizes in place now."""
+        """Paint the net again, in the colours and sizes in place now (Help's animations keep their own look)."""
         item = self.sheet_view.net_item()
         if item is not None:
             item.restyle()
         self.template_mode.tool.restyle()
-        if self.help_window is not None:
-            self.help_window.restyle()
         scene = self.sheet_view.scene()
         if scene is not None:
             scene.update()
@@ -1545,8 +1543,6 @@ class MainWindow(QMainWindow):
     def _on_show_labels_toggled(self, checked: bool) -> None:
         self.settings.show_vertex_labels = checked
         self._update_vertex_labels()
-        if self.help_window is not None:
-            self.help_window.set_labels_shown(checked)
         if self.recorder is not None:
             self.recorder.note("labels", "on" if checked else "off")
 

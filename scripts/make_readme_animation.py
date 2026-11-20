@@ -11,7 +11,7 @@ draws it.
 It starts from the author's project `BASIS` (a copy of their torus project: a net of the Cube with a hole, with its
 own style): to start from another one, copy the project file there and write the scene anew (its points are that
 net's). It's the app itself: the cut is played with the real net, editor and tools (Help -> Help's animation engine,
-`ui/help/demo`), in the project's style, without the vertex labels but with the bounding rectangle (as the Bounds
+`ui/help/demo`), in the project's style, with the bounding rectangle (as the Bounds
 button shows it), and recorded as it plays. The menu and the window are the real ones too, shown in the picture of
 the sheet. The file is an animated PNG (APNG): GitHub shows it like any picture and browsers play it, in full colour
 (a GIF has 256 colours); each frame keeps only the part of the picture that changed, so it stays small. Where
@@ -31,12 +31,10 @@ from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import QApplication
 
 from cube_net.core.geometry import Box, Vec
-from cube_net.core.project import Project, load_project
-from cube_net.ui import palette
+from cube_net.core.project import load_project
 from cube_net.ui.help.demo.demo_sheet import DemoSheet
 from cube_net.ui.help.demo.steps import Move, RightClick, Step, ToItem, Type, Wait, click
 from cube_net.ui.sheet.sheet_context_menu import PLACE_VERTEX
-from cube_net.ui.style import apply_style
 
 ROOT = Path(__file__).resolve().parent.parent
 README_ANIMATION = ROOT / "docs/media/readme-animation-net.png"
@@ -108,19 +106,9 @@ GLUE: list[Step] = [
 SCENE: list[Step] = [*CUT, *GLUE]
 
 
-def basis() -> Project:
-    """The project the animation starts from, its style and face colours put in place (they're global)."""
-    project = load_project(BASIS)
-    style, colors = project.settings.style, project.settings.face_colors
-    assert style is not None and colors is not None, "the basis is saved with its style and colours"
-    apply_style(style)
-    palette.set_face_colors(colors, project.state.net.body)
-    return project
-
-
 def sheet() -> DemoSheet:
-    """The animation's sheet, with the mouse where the scene starts."""
-    demo = DemoSheet(SIZE, SHOWN, labels=False, bounds=True, project=basis())
+    """The animation's sheet (in `BASIS`'s look), with the mouse where the scene starts."""
+    demo = DemoSheet(SIZE, SHOWN, bounds=True, project=load_project(BASIS))
     first = SCENE[0]
     assert isinstance(first, Move)
     demo.place(first.to)

@@ -493,3 +493,28 @@ class TestFollowCursor:
         view.follow_cursor(None)
         QApplication.sendEvent(modal, QEvent(QEvent.Type.Enter))
         assert left == [True]  # not followed any more
+
+
+def test_a_view_with_its_own_look(view: SheetView, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Its painting and its mouse are handled in its look; everything else keeps the one in place."""
+    from dataclasses import replace
+
+    from cube_net.core.body import CUBE
+    from cube_net.ui.sheet import net_style
+    from cube_net.ui.style import DEFAULT_STYLE, Look
+
+    assert view.look() is None
+    seen: list[float] = []
+    monkeypatch.setattr(view, "mouseMoveEvent", lambda _event: seen.append(net_style.EDGE_WIDTH_PX))
+    look = Look(replace(DEFAULT_STYLE, edge_width=1.5), CUBE.colors, CUBE)
+    view.set_look(look)
+    assert view.look() == look
+    viewport = view.viewport()
+    assert viewport is not None
+    nothing = Qt.MouseButton.NoButton
+    move = QMouseEvent(
+        QEvent.Type.MouseMove, QPointF(5, 5), QPointF(5, 5), nothing, nothing, Qt.KeyboardModifier.NoModifier
+    )
+    QApplication.sendEvent(viewport, move)
+    assert seen == [1.5]
+    assert DEFAULT_STYLE.edge_width == net_style.EDGE_WIDTH_PX

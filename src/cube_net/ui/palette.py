@@ -28,8 +28,7 @@ GRID = QColor("#D3D3D3")
 # ones (docs/idea.txt) until a project says otherwise.
 FACE_COLORS = MappingProxyType({face: QColor(color) for face, color in enumerate(CUBE_FACE_COLORS, start=1)})
 
-# The open project's body: its faces are painted in FACE_COLORS, another body's (Help's cube, while a project of
-# another body is open) in that body's own default colours.
+# The open project's body: its faces are painted in FACE_COLORS, another body's in that body's own default colours.
 _FACE_COLORS_BODY: Body = CUBE
 
 # The grey squares of a template's face that has no colour yet (a chessboard with white).
@@ -152,6 +151,11 @@ def set_face_colors(colors: Sequence[str], body: Body = CUBE) -> None:
     global FACE_COLORS, _FACE_COLORS_BODY
     FACE_COLORS = MappingProxyType({face: QColor(color) for face, color in enumerate(colors, start=1)})
     _FACE_COLORS_BODY = body
+
+
+def face_colors_in_place() -> tuple[tuple[str, ...], Body]:
+    """The face colours in place now ("#RRGGBB") and the body they're for (`set_face_colors`)."""
+    return tuple(color.name().upper() for color in FACE_COLORS.values()), _FACE_COLORS_BODY
 
 
 def face_color(body: Body, face: int) -> QColor:
