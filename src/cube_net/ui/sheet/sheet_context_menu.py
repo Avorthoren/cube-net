@@ -13,7 +13,7 @@
 - "Move the origin" opens `MoveOriginWindow` for the drawn point under the mouse (the one the coordinates hint is
   about): the origin moves so that the point has the typed coordinates (`Origin`). Disabled where there's no such
   point, and while a point is dragged.
-- In a template (with `TemplateTool`), "Assign the vertex" too, for the vertex under the mouse: what to do is the
+- In a template (with `TemplateTool`), "Assign label" too, for the vertex under the mouse: what to do is the
   window's (`assign`). Disabled where there's no vertex, while the loop isn't closed yet, and while a vertex is dragged.
 
 The menu is the application's own (`ContextMenu`), drawn in the window: on Wayland, a system popup can't open while the
@@ -55,7 +55,7 @@ class SheetContextMenu(QObject):
     def __init__(
         self, view: SheetView, cut_tool: CutTool | TemplateTool, assign: Callable[[Vec], None] | None = None
     ) -> None:
-        """`assign`: a template's Assign the vertex, for the vertex at a sheet point (None: not offered)."""
+        """`assign`: a template's Assign label, for the vertex at a sheet point (None: not offered)."""
         super().__init__(view)
         self._view = view
         self._cut_tool = cut_tool
@@ -68,7 +68,7 @@ class SheetContextMenu(QObject):
 
     def items(self, placement: Placement | None, slope: Vec | None, vertex: Vec | None = None) -> list[MenuItem]:
         """The menu's items: "Place a vertex" (disabled without a placement), "Set slope" (disabled without a segment),
-        "Move the origin" (disabled without a drawn point), and in a template "Assign the vertex"."""
+        "Move the origin" (disabled without a drawn point), and in a template "Assign label"."""
         items = [
             MenuItem(tr("Place a vertex"), placement is not None),
             MenuItem(tr("Set slope"), slope is not None),
@@ -76,7 +76,7 @@ class SheetContextMenu(QObject):
         ]
         if self._assign is not None:
             assignable = isinstance(self._cut_tool, TemplateTool) and self._cut_tool.can_assign()
-            items.append(MenuItem(tr("Assign the vertex"), assignable and vertex is not None))
+            items.append(MenuItem(tr("Assign label"), assignable and vertex is not None))
         return items
 
     def items_at(self, x: float, y: float) -> list[MenuItem]:

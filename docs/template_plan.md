@@ -153,7 +153,7 @@ as now.
   from the vertex it was started at to the one it ended at.
 - **Face colours**: a click inside a face opens the colour picker (the one from the Style tab, without the native
   dialog) with the face's colour. A fold splitting a face gives both parts its colour.
-- **Labels**: right click on a vertex → Assign the vertex (§6.4).
+- **Labels**: right click on a vertex → Assign label (§6.4).
 - Undoable actions: add/delete a vertex, move a vertex, add/delete a fold, set a face colour, set a label (the five in
   the idea). Moving the origin is undoable too, as in projects.
 
@@ -244,7 +244,7 @@ new file says it was saved by a newer version of Cube Net.
   "Faces tiling" now means *per unit* (for the cube, a face is a unit, so nothing changes there). A project from the
   template keeps that hatching on each face, moved along with it.
 
-### 6.4 Assign the vertex
+### 6.4 Assign label
 - Context menu item, enabled on a vertex. The window `AssignVertexWindow` (a `SmallWindow`, like Place a vertex):
   "Name (1–2 Latin letters) and index (1–99):" (Russian: латинские буквы), two fields, Cancel/Assign, the title-bar
   cross acts as Cancel.
@@ -295,7 +295,7 @@ Each one ends with the app working and all tests green.
 | T3 | The `kind` field, project format 3 with a body and face colours, template files; the target area's limit raised to 10000; face colours as a project setting | Old projects still open |
 | T4 | `Template`, `TemplateEditor`, its rules and history, `template_area` | Nothing |
 | T5 | Template validation, `body_from_template` | Nothing |
-| T6 | Template creation mode: File → New Template, the sheet, drawing, editing, folds, colours, hatching, Assign the vertex, Validate, Net area, settings hidden; session logs record template creation from the first version you can try | The new mode |
+| T6 | Template creation mode: File → New Template, the sheet, drawing, editing, folds, colours, hatching, Assign label, Validate, Net area, settings hidden; session logs record template creation from the first version you can try | The new mode |
 | T6a | Loops that touch themselves (§8.1) | Slits, loops meeting at a point |
 | T6b | Faces in pieces, one face by colour; faces and nets with holes; validation status; tiling across pieces (§8.2) | The torus's purple pieces glue into one ring |
 | T6c | The whole Style belongs to the template or the project, with the origin (§8.3) | Style per document |
@@ -359,7 +359,7 @@ Done in T6 (`ui/template/`):
   fold; a click in a face opens the colour picker. Refusals flash in black.
 - `TemplateItem`: faces hatched in their colour, tied to the grid (`tiled_hatch`, per unit), folds dashed, the loop
   solid, all labels always.
-- The right click menu (shared with projects) has Assign the vertex too (`AssignVertexWindow`, the "label taken"
+- The right click menu (shared with projects) has Assign label too (`AssignVertexWindow`, the "label taken"
   question). Validate (V) words the 11 checks (`validation_messages.py`), and offers to reindex.
 - The instrument panel shows Net area (with its exact value in the hint; Ctrl+C copies it) instead of the bounding
   controls; the ruler, Approve and the labels' switch are hidden; so is Faces colors in Settings -> Style.
@@ -586,7 +586,7 @@ Done (step 4, second part: the cut rule):
 (Asked for on 2026-11-19.) A fold line is drawn like a cut line in a project: from a vertex, through points inside a
 face, to a vertex.
 - **Vertices:** a fold line's inner points are vertices of the template too, *fold vertices* (inside the loop, not on
-  it), with labels like the loop's: Assign the vertex works on them, and validation's check 2 covers them. One that
+  it), with labels like the loop's: Assign label works on them, and validation's check 2 covers them. One that
   goes straight on between two segments is no vertex of the body (§8.2's straight vertices); one where the line bends
   is a vertex of the body with 360 degrees around it.
 - **Folds are segments** between any two vertices (of the loop or fold vertices). A fold line starts and ends at any

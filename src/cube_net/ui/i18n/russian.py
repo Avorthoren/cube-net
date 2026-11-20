@@ -51,9 +51,9 @@ RUSSIAN: dict[str, str] = {
     "Save project as": "Сохранить проект как",
     "Cube Net projects (*{suffix})": "Проекты Cube Net (*{suffix})",
     "Save changes?": "Сохранить изменения?",
-    'Save changes to "{name}"?': "Сохранить изменения в проекте «{name}»?",
+    'Save changes to "{name}"?': "Сохранить изменения в «{name}»?",
     "Don't save": "Не сохранять",
-    "Can't open the project": "Не удалось открыть проект",
+    "Can't open the file": "Не удалось открыть файл",
     "Start a new project, or open another one?": "Начать новый проект или открыть другой?",
     "New project": "Новый проект",
     # Why a project can't be saved or opened (from core.project; values are as the system or the file has them).
@@ -72,7 +72,7 @@ RUSSIAN: dict[str, str] = {
     "Cancel": "Отменить",
     # The settings panel.
     "Preferences": "Основные",
-    "Style": "Оформление",
+    "Style": "Стиль",
     "Hide settings": "Скрыть настройки",
     "Language": "Язык",
     "Show vertex labels": "Показывать метки вершин",
@@ -108,8 +108,8 @@ RUSSIAN: dict[str, str] = {
     "Blink when target area achieved": "Мигать, когда цель достигнута",
     "Maximum zoom:": "Макс. масштаб:",
     "px per unit": "пикс. на ед.",
-    "How far in the sheet can be zoomed: how many pixels the edge of the cube takes": (
-        "Насколько можно приблизить лист: сколько пикселей занимает ребро куба"
+    "How far in the sheet can be zoomed: how many pixels a unit of length takes": (
+        "Насколько можно приблизить лист: сколько пикселей занимает единица длины"
     ),
     "px": "пикс.",
     "per unit": "на единицу",
@@ -286,7 +286,7 @@ RUSSIAN: dict[str, str] = {
     "Undo and redo": "Отмена и повтор",
     "Undo the last action": "Отменить последнее действие",
     "Redo it": "Повторить его",
-    "Making a cut": "Разрез",
+    "Making a cut": "Создание разреза",
     "hold {key}": "удерживать {key}",
     "The new segment is horizontal or vertical": "Новый отрезок горизонтален или вертикален",
     "Unlock the slope set with Set slope": "Снять наклон, заданный через «Задать наклон»",
@@ -295,7 +295,7 @@ RUSSIAN: dict[str, str] = {
     "The segment from the vertex before it is horizontal or vertical": (
         "Отрезок от предыдущей вершины горизонтален или вертикален"
     ),
-    "click a vertex": "щелчок по вершине",
+    "click a vertex": "щёлкнуть по вершине",
     "Delete it (any but the first and the last)": "Удалить её (кроме первой и последней)",
     "Gluing": "Склейка",
     "Approve the rearranged net (when its halves don't overlap)": (
@@ -340,7 +340,7 @@ RUSSIAN: dict[str, str] = {
     "Net area": "Площадь\nразвёртки",  # two lines: the panel stays narrow
     "Area of the net the loop draws": "Площадь развёртки, которую очерчивает контур",
     "Face color": "Цвет грани",
-    "Assign the vertex": "Назначить вершину",
+    "Assign label": "Назначить метку",
     "Name (1-2 Latin letters) and index (1-99):": "Имя (1-2 латинские буквы) и индекс (1-99):",
     "Assign": "Назначить",
     "Such label already exists. Assign first free index?": "Такая метка уже есть. Назначить первый свободный индекс?",
@@ -361,10 +361,10 @@ RUSSIAN: dict[str, str] = {
         "У некоторых вершин нет меток. Назначьте метку каждой вершине."
     ),
     "You have edges that connect a vertex to itself, which is impossible: {list}.": (
-        "Есть рёбра, соединяющие вершину саму с собой, а так не бывает: {list}."
+        "Есть рёбра, соединяющие вершину саму с собой, что невозможно: {list}."
     ),
     "You have an edge that connects a vertex to itself, which is impossible: {list}.": (
-        "Есть ребро, соединяющее вершину саму с собой, а так не бывает: {list}."
+        "Есть ребро, соединяющее вершину саму с собой, что невозможно: {list}."
     ),
     "Segments {list} don't have counterparts. Each segment should appear exactly twice, because that's what gluing "
     "implies.": (
@@ -390,27 +390,27 @@ RUSSIAN: dict[str, str] = {
         "Пары должны идти в противоположных направлениях."
     ),
     "You have cuts that also exist as folds, which is impossible: {list}.": (
-        "Есть разрезы, которые встречаются и как линии сгиба, а так не бывает: {list}."
+        "Есть разрезы, которые встречаются и как линии сгиба, что невозможно: {list}."
     ),
     "You have a cut that also exists as a fold, which is impossible: {list}.": (
-        "Есть разрез, который встречается и как линия сгиба, а так не бывает: {list}."
+        "Есть разрез, который встречается и как линия сгиба, что невозможно: {list}."
     ),
     "You have folds that connect the same vertices, which is impossible: {list}.": (
-        "Есть линии сгиба, соединяющие одни и те же вершины, а так не бывает: {list}."
+        "Есть линии сгиба, соединяющие одни и те же вершины, что невозможно: {list}."
     ),
     "Some of your vertices are not glued to themselves, which is impossible: {list}.": (
-        "Некоторые вершины не склеены сами с собой, а так не бывает: {list}."
+        "Некоторые вершины не склеены сами с собой, что невозможно: {list}."
     ),
     "Vertex {name} is not glued to itself, which is impossible.": (
-        "Вершина {name} не склеена сама с собой, а так не бывает."
+        "Вершина {name} не склеена сама с собой, что невозможно."
     ),
     "Net should have at least 4 faces.": "В развёртке должно быть хотя бы 4 грани.",
     "You have folds between faces of the same color: {list}. A fold separates two faces: give them different "
-    "colors.": "У вас есть сгибы между гранями одного цвета: {list}. Сгиб разделяет две грани: назначьте им разные "
-    "цвета.",
+    "colors.": "У вас есть линии сгиба между гранями одного цвета: {list}. Линия сгиба разделяет две грани: "
+    "назначьте им разные цвета.",
     "You have a fold between faces of the same color: {list}. A fold separates two faces: give them different "
-    "colors.": "У вас есть сгиб между гранями одного цвета: {list}. Сгиб разделяет две грани: назначьте им разные "
-    "цвета.",
+    "colors.": "У вас есть линия сгиба между гранями одного цвета: {list}. Линия сгиба разделяет две грани: "
+    "назначьте им разные цвета.",
     "Pieces of some faces aren't glued together: {list}.": "Части некоторых граней не склеены друг с другом: {list}.",
     "Pieces of this face aren't glued together: {list}.": "Части этой грани не склеены друг с другом: {list}.",
     "Some faces self-intersect after gluing: {list}.": "Некоторые грани самопересекаются после склеивания: {list}.",
@@ -433,8 +433,8 @@ RUSSIAN: dict[str, str] = {
     ),
     "A face touches itself at {list}, which a face can't do: a slit, or a point where the loop touches itself, must "
     "lie between two faces. Divide the face there with a fold.": (
-        "Грань касается сама себя в {list}, а так быть не может: прорезь или точка, где контур касается сам себя, "
-        "должна лежать между двумя гранями. Разделите там грань линией сгиба."
+        "Грань касается сама себя в {list}, чего грань делать не может: прорезь или точка, где контур касается "
+        "сам себя, должна лежать между двумя гранями. Разделите там грань линией сгиба."
     ),
     # File -> New.
     "Cube": "Куб",

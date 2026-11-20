@@ -304,7 +304,7 @@ def test_the_menu_and_the_coordinates(setup: tuple[SheetView, TemplateTool]) -> 
 
 
 def test_while_drawing_a_vertex_is_one_for_the_menu(setup: tuple[SheetView, TemplateTool]) -> None:
-    """Move the origin on the loop's vertices before it's closed; Assign the vertex only after."""
+    """Move the origin on the loop's vertices before it's closed; Assign label only after."""
     from cube_net.ui.sheet.sheet_context_menu import ASSIGN_VERTEX, MOVE_ORIGIN, SheetContextMenu
 
     view, tool = setup

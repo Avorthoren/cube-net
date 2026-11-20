@@ -25,7 +25,7 @@ def test_english_by_default() -> None:
 
 def test_russian(russian: None) -> None:
     assert tr("Ruler") == "Линейка"
-    assert tr('Save changes to "{name}"?', name="cube.cubenet") == "Сохранить изменения в проекте «cube.cubenet»?"
+    assert tr('Save changes to "{name}"?', name="cube.cubenet") == "Сохранить изменения в «cube.cubenet»?"
 
 
 def test_an_unknown_text_stays_as_it_is(russian: None) -> None:

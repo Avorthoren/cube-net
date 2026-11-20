@@ -225,7 +225,7 @@ class TemplateTool(QObject):
 
     def vertex_at(self, x: float, y: float) -> Vec | None:
         """The vertex under the mouse (its position), if any, while the loop is drawn too: for the right click's menu
-        (Move the origin; Assign the vertex, once the loop is closed) and the coordinates hint."""
+        (Move the origin; Assign label, once the loop is closed) and the coordinates hint."""
         vertex = self._drawn_vertex_at(x, y)
         return None if vertex is None else self._editor.template.position(vertex)
 
@@ -233,7 +233,7 @@ class TemplateTool(QObject):
         return self._drawn_vertex_at(x, y)
 
     def can_assign(self) -> bool:
-        """Can a vertex get a label now (Assign the vertex)? Once the loop is closed (docs/template_idea.txt: the
+        """Can a vertex get a label now (Assign label)? Once the loop is closed (docs/template_idea.txt: the
         second step), and not while a vertex is dragged."""
         return self._editor.state is TemplateState.FINALIZATION and self._drag is None and not self.drawing_hole
 
@@ -363,7 +363,7 @@ class TemplateTool(QObject):
             self.changed.emit()
 
     def set_label(self, vertex_id: int, label: Label | None) -> None:
-        """Give a vertex a label (Assign the vertex): another vertex mustn't have it."""
+        """Give a vertex a label (Assign label): another vertex mustn't have it."""
         rejection = self._editor.set_label(vertex_id, label)
         assert rejection is None, "the window makes sure no other vertex has the label"
         self.refresh()

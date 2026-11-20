@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 """`AssignVertexWindow`: which vertex of the body a vertex of the template is an image of (docs/template_idea.txt:
-right click -> Assign the vertex).
+right click -> Assign label).
 
     Name (1-2 Latin letters) and index (1-99):
     [name] [index]
@@ -45,7 +45,7 @@ class AssignVertexWindow(SmallWindow):
     ) -> None:
         """`label`: the vertex's label now; `owner_of`: whether another vertex has a label; `first_free_index`: the
         smallest index of a name that no vertex has."""
-        super().__init__(tr("Assign the vertex"), parent)
+        super().__init__(tr("Assign label"), parent)
         self._taken = owner_of
         self._first_free_index = first_free_index
         self._label: Label | None = label
