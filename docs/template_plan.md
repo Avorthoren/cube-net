@@ -365,7 +365,7 @@ Done in T6 (`ui/template/`):
   controls; the ruler, Approve and the labels' switch are hidden; so is Faces colors in Settings -> Style.
 - Session logs: template actions ("template add 10.000,10.000", "close", "move", "fold", "label", "color",
   "validate", ...) and snapshots of the template (`snapshots.py` extracts them as .nettemplate files).
-- Not in template mode for now: the ruler. Ctrl+T and V are left out of Help's hotkeys (a page of their own later).
+- Ctrl+T and V are left out of Help's hotkeys (a page of their own later).
 
 - Done later for other bodies: Help's animation of the cube paints with the cube's colours (T7); the Style tab
   scrolls when the window is small (checked by the user on 2026-11-18).
@@ -751,7 +751,8 @@ Done (T6c and T7):
 
 ## 9. Not decided yet
 
-- Marking templates saved without validation: not for now, maybe later.
+- Nothing at the moment. (Marking templates saved without validation was settled by the validation status, §8.2: a
+  template file keeps Undefined, Valid or Invalid, and the Validate button shows it.)
 
 ---
 
