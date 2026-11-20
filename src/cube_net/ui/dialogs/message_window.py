@@ -13,6 +13,7 @@ come in the order the system wants them.
 from enum import Enum
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QTextDocument
 from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QHBoxLayout,
@@ -149,9 +150,18 @@ def _label(text: str, parent: QWidget) -> QLabel:
     label = QLabel(text, parent)
     label.setWordWrap(True)
     label.setMaximumWidth(TEXT_WIDTH_PX)
-    label.setMinimumWidth(min(TEXT_WIDTH_PX, label.fontMetrics().horizontalAdvance(text) + 2))
+    label.setMinimumWidth(min(TEXT_WIDTH_PX, label.fontMetrics().horizontalAdvance(_shown(text)) + 2))
     label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
     return label
+
+
+def _shown(text: str) -> str:
+    """The words a label shows for its text: rich text (Qt takes it for one, as the label does) without its tags."""
+    if not Qt.mightBeRichText(text):
+        return text
+    document = QTextDocument()
+    document.setHtml(text)
+    return document.toPlainText()
 
 
 def tell(

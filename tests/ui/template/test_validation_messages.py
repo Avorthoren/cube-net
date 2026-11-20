@@ -5,7 +5,7 @@ import pytest
 
 from cube_net.core.template import ValidationFailure, ValidationProblem
 from cube_net.ui import palette
-from cube_net.ui.template.validation_messages import color_square, failure_text, groups_listed, listed
+from cube_net.ui.template.validation_messages import color_square, failure_text, groups_listed, listed, subscripted
 
 P = ValidationProblem
 
@@ -16,13 +16,26 @@ def test_lists() -> None:
     assert groups_listed([("A1-B1", "A1-B3"), ("S2-Q3", "S1-Q1", "S3-Q5")]) == "A1-B1 and A1-B3; S2-Q3 and S1-Q1, S3-Q5"
 
 
+def test_indices_are_subscripts() -> None:
+    assert subscripted("A1-GF12") == "A<sub>1</sub>-GF<sub>12</sub>"
+    assert subscripted("S2") == "S<sub>2</sub>"
+    assert subscripted("A-CT") == "A-CT"
+
+
+def test_a_message_with_indices_is_rich_text() -> None:
+    from PyQt6.QtCore import Qt
+
+    assert Qt.mightBeRichText(failure_text(ValidationFailure(P.FACE_TOUCHES_ITSELF, ("S2",))))
+
+
 @pytest.mark.parametrize(
     ("failure", "text"),
     [
         (ValidationFailure(P.UNLABELLED), "Some vertices don't have assigned labels. Name each vertex."),
         (
             ValidationFailure(P.SELF_EDGE, ("A1-A3", "BV2-BV1")),
-            "You have edges that connect a vertex to itself, which is impossible: A1-A3 and BV2-BV1.",
+            "You have edges that connect a vertex to itself, which is impossible: A<sub>1</sub>-A<sub>3</sub> and "
+            "BV<sub>2</sub>-BV<sub>1</sub>.",
         ),
         (
             ValidationFailure(P.NO_COUNTERPART, ("A-CT",)),
@@ -31,12 +44,14 @@ def test_lists() -> None:
         ),
         (
             ValidationFailure(P.CUT_AND_FOLD, groups=(("A1-B1", "A1-B3"),)),
-            "You have a cut that also exists as a fold, which is impossible: A1-B1 and A1-B3.",
+            "You have a cut that also exists as a fold, which is impossible: A<sub>1</sub>-B<sub>1</sub> and "
+            "A<sub>1</sub>-B<sub>3</sub>.",
         ),
         (
             ValidationFailure(P.SAME_FOLDS, groups=(("A1-B1", "A2-B2"), ("S1-Q1", "S2-Q3", "S3-Q2"))),
-            "You have folds that connect the same vertices, which is impossible: A1-B1 and A2-B2; S1-Q1, S2-Q3 and "
-            "S3-Q2.",
+            "You have folds that connect the same vertices, which is impossible: A<sub>1</sub>-B<sub>1</sub> and "
+            "A<sub>2</sub>-B<sub>2</sub>; S<sub>1</sub>-Q<sub>1</sub>, S<sub>2</sub>-Q<sub>3</sub> and "
+            "S<sub>3</sub>-Q<sub>2</sub>.",
         ),
         (ValidationFailure(P.NOT_GLUED, ("A",)), "Vertex A is not glued to itself, which is impossible."),
         (
@@ -97,6 +112,6 @@ def test_a_square_is_an_image_of_its_colour(qapp: object) -> None:
 def test_folds_of_one_colour() -> None:
     failure = ValidationFailure(ValidationProblem.SAME_COLOR_FOLD, ("A1-B1",))
     assert failure_text(failure) == (
-        "You have a fold between faces of the same color: A1-B1. A fold separates two faces: give them different "
-        "colors."
+        "You have a fold between faces of the same color: A<sub>1</sub>-B<sub>1</sub>. A fold separates two faces: "
+        "give them different colors."
     )

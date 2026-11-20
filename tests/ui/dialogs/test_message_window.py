@@ -122,3 +122,11 @@ def test_a_message_has_only_ok_and_every_key_closes_it(qtbot: QtBot, key: Qt.Key
     answering(press)
     tell(None, "Title", "Done.")
     assert seen == [["OK"]]
+
+
+def test_rich_text_is_as_wide_as_its_words_without_the_tags(qtbot: QtBot) -> None:
+    rich = MessageWindow("Title", "Vertex S<sub>2</sub> is here.")
+    plain = MessageWindow("Title", "Vertex S2 is here.")
+    qtbot.addWidget(rich)
+    qtbot.addWidget(plain)
+    assert rich.text_label.minimumWidth() == plain.text_label.minimumWidth()

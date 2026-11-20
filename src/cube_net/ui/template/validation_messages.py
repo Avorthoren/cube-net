@@ -3,9 +3,11 @@
 
 """What validating a template says (docs/template_idea.txt, Validation): a `ValidationFailure` in words, in the user's
 language. Lists read like "A-CT, AS-QC and Z-R"; cuts and their folds like "A1-B1 and A1-B3; S2-Q3 and S1-Q1, S3-Q5";
-folds named the same like "A1-B1 and A2-B2; S1-Q1, S2-Q3 and S3-Q2"; faces as squares of their colours (a message
-that has them is rich text)."""
+folds named the same like "A1-B1 and A2-B2; S1-Q1, S2-Q3 and S3-Q2"; faces as squares of their colours. Vertex
+indices are subscripts, as on the sheet (A<sub>1</sub>-B<sub>1</sub>): a message that has them, or squares, is rich
+text."""
 
+import re
 from collections.abc import Sequence
 
 from PyQt6.QtCore import QBuffer, QByteArray, QIODevice
@@ -22,6 +24,9 @@ REINDEXED = "Vertices automatically reindexed.\nNo other problems found."
 # When nothing was wrong.
 NO_PROBLEMS = "No problems found."
 
+# A vertex's label in a name: its name (1 or 2 capital letters), then its index.
+LABEL = re.compile(r"\b([A-Z]{1,2})([0-9]+)\b")
+
 
 def no_problems_text() -> str:
     return tr(NO_PROBLEMS)
@@ -36,6 +41,12 @@ def listed(items: Sequence[str]) -> str:
     if len(items) == 1:
         return items[0]
     return tr("{items} and {last}", items=", ".join(items[:-1]), last=items[-1])
+
+
+def subscripted(text: str) -> str:
+    """Every label in a name ("A1-GF12") with its index a subscript, in rich text ("A<sub>1</sub>-GF<sub>12</sub>");
+    names without indices ("A-CT") as they are. Names have nothing else that HTML would take."""
+    return LABEL.sub(r"\1<sub>\2</sub>", text)
 
 
 def color_square(color: str) -> str:
@@ -61,7 +72,9 @@ def groups_listed(groups: Sequence[Sequence[str]]) -> str:
 
 def failure_text(failure: ValidationFailure) -> str:
     """The message for a failed check (the last one's is a question: see `REINDEX`)."""
-    names, many = failure.names, len(failure.names) > 1 or len(failure.groups) > 1
+    names = [subscripted(n) for n in failure.names]
+    groups = [[subscripted(n) for n in g] for g in failure.groups]
+    many = len(names) > 1 or len(groups) > 1
     match failure.problem:
         case ValidationProblem.NO_COLOR:
             if failure.count > 1:
@@ -107,19 +120,19 @@ def failure_text(failure: ValidationFailure) -> str:
                 list=listed(names),
             )
         case ValidationProblem.CUT_AND_FOLD:
-            if many or len(failure.groups[0]) > 2:
+            if many or len(groups[0]) > 2:
                 return tr(
                     "You have cuts that also exist as folds, which is impossible: {list}.",
-                    list=groups_listed(failure.groups),
+                    list=groups_listed(groups),
                 )
             return tr(
                 "You have a cut that also exists as a fold, which is impossible: {list}.",
-                list=groups_listed(failure.groups),
+                list=groups_listed(groups),
             )
         case ValidationProblem.SAME_FOLDS:
             return tr(
                 "You have folds that connect the same vertices, which is impossible: {list}.",
-                list="; ".join(listed(group) for group in failure.groups),
+                list="; ".join(listed(group) for group in groups),
             )
         case ValidationProblem.NOT_GLUED:
             if many:
