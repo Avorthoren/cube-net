@@ -295,11 +295,11 @@ def test_place_a_vertex(setup: tuple[SheetView, TemplateTool]) -> None:
 
 def test_the_menu_and_the_coordinates(setup: tuple[SheetView, TemplateTool]) -> None:
     view, tool = setup
-    assert tool.menu_offered(None)  # drawing: Place a vertex, Set slope
+    assert tool.placement_at(11.5, 10.5) is not None  # drawing: Place a vertex
     drawn(view, tool)
-    assert not tool.menu_offered(None)
-    assert tool.vertex_at(11.0, 10.0) == Vec(11, 10)
-    assert tool.menu_offered(Vec(11, 10))
+    assert tool.placement_at(11.5, 10.5) is None and tool.slope_at(11.5, 10.5) is None
+    assert tool.vertex_at(11.5, 10.5) is None  # inside the net, nothing drawn: no item, so no menu
+    assert tool.vertex_at(11.0, 10.0) == Vec(11, 10)  # Move the origin
     assert tool.coordinates_at(11.5, 11.0) == Vec(F(23, 2), 11)  # a middle circle: where the new vertex would be
 
 
@@ -417,9 +417,8 @@ class TestHoles:
         """Place a vertex and Set slope, as while drawing the loop (asked for on 2026-11-19)."""
         view, tool = setup
         self.rectangle(view, tool)
-        assert not tool.menu_offered(None)  # inside the net, nothing drawn: no menu
         tool.start_hole()
-        assert tool.menu_offered(None) and not tool.can_assign()
+        assert not tool.can_assign()
         start = tool.placement_at(11.0, 11.0)
         assert start is not None and start.action is Action.START and tool.slope_at(11.0, 11.0) is None
         view.left_pressed.emit(11.0, 11.0)
@@ -432,3 +431,26 @@ class TestHoles:
         assert tool.slope is None  # placing it used the lock up, as for the loop
         view.left_pressed.emit(12.0, 12.5)
         assert len(tool.editor.template.holes[0].vertices) == 3
+
+
+def test_the_right_click_menu_while_drawing_a_fold_line(setup: tuple[SheetView, TemplateTool]) -> None:
+    """Place a vertex and Set slope for the line's next point, as for the loop's (2026-11-20: there was no menu)."""
+    from cube_net.ui.sheet.sheet_context_menu import SheetContextMenu
+
+    view, tool = setup
+    drawn(view, tool)
+    menu = SheetContextMenu(view, tool)
+    assert not menu.offered_at(11.5, 10.5)  # inside a face, nothing drawn: nothing to choose
+    click(view, 11.0, 10.0)  # a fold line starts at (11, 10)
+    assert [item.enabled for item in menu.items_at(11.5, 10.5)] == [True, True, False]
+    placement = tool.placement_at(11.5, 10.5)
+    assert placement is not None and placement.action is Action.ADD
+    assert tool.slope_at(12.0, 11.0) == Vec(1, 1)
+    tool.lock_slope(Vec(1, 2))
+    assert tool.coordinates_at(12.0, 10.5) == Vec(F(57, 5), F(54, 5))  # on the slope's line, nearest the mouse
+    assert tool.place(placement, Vec(F(45, 4), F(21, 2))) is None  # typed: the line's next point
+    assert tool.slope is None  # unlocked once the point is there, as for the loop
+    assert tool.placement_at(11.0, 11.0) is None  # on a vertex: a click ends the line there, nothing to type
+    assert menu.offered_at(11.0, 11.0)  # but Set slope and Move the origin are there
+    click(view, 11.0, 11.0)
+    assert len(tool.editor.template.fold_vertices) == 1 and len(tool.editor.template.faces) == 2

@@ -237,29 +237,23 @@ class TemplateTool(QObject):
         second step), and not while a vertex is dragged."""
         return self._editor.state is TemplateState.FINALIZATION and self._drag is None and not self.drawing_hole
 
-    def menu_offered(self, vertex: Vec | None) -> bool:
-        """Is there a right click menu here (while drawing the loop or a hole, dragging, or over a vertex)?"""
-        return (
-            self._editor.state is not TemplateState.FINALIZATION
-            or self.drawing_hole
-            or self._drag is not None
-            or vertex is not None
-        )
-
     def placement_at(self, x: float, y: float) -> Placement | None:
-        """What a click (or the drag) would place here, for Place a vertex."""
+        """What a click (or the drag) would place here, for Place a vertex: the loop's, a hole's or a fold line's next
+        point, or where the dragged vertex is."""
         if self._drag is not None:
             vertex_id, position = self._drag
             return Placement(Action.MOVE, position, Constraint.free(), vertex_id)
-        if self._editor.state is TemplateState.FINALIZATION and not self.drawing_hole:
+        if self._fold_start is not None:
+            if self._vertex_at(x, y) is not None:
+                return None  # a click there ends the line at that vertex: nothing to type
+        elif self._editor.state is TemplateState.FINALIZATION and not self.drawing_hole:
             return None
-        vertices = self._drawn_loop()
+        last = self._last_point()
         p = self._next_point(x, y)
-        if not vertices:
+        if last is None:
             return Placement(Action.START, p, Constraint.free())
         if self._closing_at(x, y):
             return None  # the first vertex: nothing to type
-        last = vertices[-1].position
         if self._slope is not None:
             return Placement(Action.ADD, p, Constraint.along(last, self._slope))
         if self._view.shift_held():
@@ -267,11 +261,12 @@ class TemplateTool(QObject):
         return Placement(Action.ADD, p, Constraint.free())
 
     def slope_at(self, x: float, y: float) -> Vec | None:
-        """The direction of the segment a click would make (while drawing the loop), for Set slope."""
-        vertices = self._drawn_loop()
-        if not vertices:
+        """The direction of the segment a click would make (while drawing the loop, a hole or a fold line), for Set
+        slope."""
+        last = self._last_point()
+        if last is None:
             return None
-        d = self._next_point(x, y) - vertices[-1].position
+        d = self._next_point(x, y) - last
         return None if d.is_zero() else d
 
     def place(self, placement: Placement, p: Vec) -> str | None:
@@ -285,6 +280,8 @@ class TemplateTool(QObject):
                 self._after_action("move", p)
         elif self.drawing_hole:
             rejection = self._add_hole_point(p)
+        elif self._fold_start is not None:
+            rejection = self._add_fold_point(p)
         else:
             rejection = self._editor.add_point(p)
             if rejection is None:
@@ -441,20 +438,30 @@ class TemplateTool(QObject):
                 self._show_rejection(rejection, end)
                 return  # the line stays: another vertex may do
             self._fold_start, self._fold_points = None, []
+            self.unlock_slope()
             self._after_action("fold", end)
             return
-        p = self._quantize(x, y)
+        p = self._next_point(x, y)
         if vertex is None and template.face_at(p) is not None:
-            rejection = self._editor.fold_line_problem(start, [*points, p], None)
+            rejection = self._add_fold_point(p)
             if rejection is not None:
                 self._show_rejection(rejection, p)
-            else:
-                points.append(p)
-                self.acted.emit("fold point", p)
             self.refresh()
             return
         self._fold_start, self._fold_points = None, []  # given up
+        self.unlock_slope()
         self.refresh()
+
+    def _add_fold_point(self, p: Vec) -> TemplateRejection | None:
+        """The fold line's next point at `p` (a click inside a face, or Place a vertex)."""
+        assert self._fold_start is not None
+        rejection = self._editor.fold_line_problem(self._fold_start, [*self._fold_points, p], None)
+        if rejection is None:
+            self._fold_points.append(p)
+            self.unlock_slope()
+            self.acted.emit("fold point", p)
+            self.refresh()
+        return rejection
 
     def _on_left_double_clicked(self, x: float, y: float) -> None:
         """Inside a face (not on anything there, nor while a fold or a drag is under way): ask for its colour."""
@@ -535,8 +542,14 @@ class TemplateTool(QObject):
                 rubber = (drawn[-1].position, end)
             elif self._fold_start is not None:
                 highlight = self._vertex_at(x, y)
-                end = template.position(highlight) if highlight is not None else self._quantize(x, y)
-                last = self._fold_points[-1] if self._fold_points else template.position(self._fold_start)
+                if self._placing is not None:
+                    end = self._placing.position
+                elif highlight is not None:
+                    end = template.position(highlight)
+                else:
+                    end = self._next_point(x, y)
+                last = self._last_point()
+                assert last is not None
                 rubber = (last, end)
             elif self._editor.state is TemplateState.FINALIZATION and self._drag is None and not self.drawing_hole:
                 highlight = self._vertex_at(x, y)
@@ -611,14 +624,21 @@ class TemplateTool(QObject):
             return template.holes[-1].vertices
         return ()
 
-    def _next_point(self, x: float, y: float) -> Vec:
-        """The loop's (or the hole's) next vertex if the mouse were clicked here: SHIFT's or a locked slope's line
-        from the last one."""
-        p = self._quantize(x, y)
+    def _last_point(self) -> Vec | None:
+        """The last point of what's being drawn: the loop's or the hole's last vertex, or the fold line's (its start,
+        before it has points); None where nothing is drawn."""
+        if self._fold_start is not None:
+            return self._fold_points[-1] if self._fold_points else self._editor.template.position(self._fold_start)
         vertices = self._drawn_loop()
-        if not vertices:
+        return vertices[-1].position if vertices else None
+
+    def _next_point(self, x: float, y: float) -> Vec:
+        """The next point of the loop, a hole or a fold line if the mouse were clicked here: SHIFT's or a locked
+        slope's line from the last one."""
+        p = self._quantize(x, y)
+        last = self._last_point()
+        if last is None:
             return p
-        last = vertices[-1].position
         if self._slope is not None:
             return along(last, self._slope, p)
         if self._view.shift_held():
