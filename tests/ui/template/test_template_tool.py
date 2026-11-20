@@ -180,8 +180,8 @@ def test_a_fold_vertex_inserted_dragged_and_deleted(setup: tuple[SheetView, Temp
     view.mouse_moved.emit(11.25, 10.5)
     view.left_released.emit(11.25, 10.5)
     assert tool.editor.template.fold_vertices[0].position == Vec(F(45, 4), F(21, 2))
-    tool._delete_at(11.25, 10.5)  # Ctrl+click on it
-    assert tool.editor.template.folds == () and len(tool.editor.template.faces) == 1
+    tool._delete_at(11.25, 10.5)  # Ctrl+click on it: the fold is one segment again
+    assert tool.editor.template.folds == (Fold(1, 4),) and len(tool.editor.template.faces) == 2
 
 
 def test_the_middle_circle_inserts_a_vertex(setup: tuple[SheetView, TemplateTool]) -> None:

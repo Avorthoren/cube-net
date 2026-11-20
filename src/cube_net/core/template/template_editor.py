@@ -133,7 +133,16 @@ class TemplateEditor:
         fold vertex: the folds at it go (and those left hanging)."""
         self._require_closed()
         if self.template.is_fold_vertex(vertex_id):
-            return self._recorded(ActionKind.DELETE_VERTEX, self.template.without_vertex(vertex_id))
+            folds = self.template.folds_at(vertex_id)
+            after = self.template.without_vertex(vertex_id)
+            if len(folds) == 2:  # its two segments become one: where that one goes is checked as a new fold's
+                merged = next(f for f in after.folds if f not in self.template.folds)
+                problem = fold_problem(self.template, merged.start, merged.end) or check(
+                    after, [(merged.start, merged.end)]
+                )
+                if problem is not None:
+                    return problem
+            return self._recorded(ActionKind.DELETE_VERTEX, after)
         hole = self.template.hole_of(vertex_id)
         if hole is not None:
             if not self.template.holes[hole].closed:

@@ -302,9 +302,29 @@ class TestFoldLines:
         assert len(editor.template.fold_vertices) == 2 and len(editor.template.folds) == 3
         bend = editor.template.fold_vertices[0].id
         assert editor.move_vertex(bend, Vec(F(23, 2), F(21, 2))) is None
-        assert editor.delete_vertex(bend) is None
-        assert editor.template.folds == () and editor.template.fold_vertices == ()
+        assert editor.delete_vertex(bend) is None  # between two segments: they become one
+        assert len(editor.template.folds) == 2 and len(editor.template.fold_vertices) == 1
         assert editor.undo() and len(editor.template.folds) == 3
+
+    def test_inserted_then_deleted_is_as_before(self) -> None:
+        """A vertex put in the middle of a fold and deleted again: the fold as it was (2026-11-20)."""
+        editor = drawn(PILLOW)
+        assert editor.add_fold(1, 4) is None
+        before = editor.template
+        editor.insert_fold_vertex(before.folds[0])
+        assert editor.delete_vertex(editor.template.fold_vertices[0].id) is None
+        after = editor.template
+        assert after.folds == before.folds and after.fold_vertices == ()
+        assert sorted(f.corners for f in after.faces) == sorted(f.corners for f in before.faces)
+
+    def test_joining_that_would_break_the_rules_is_refused(self) -> None:
+        """A bend whose two segments, joined, would run outside the net (round a corner of an L): refused."""
+        corner = [Vec(10, 10), Vec(12, 10), Vec(12, 11), Vec(11, 11), Vec(11, 12), Vec(10, 12)]
+        editor = drawn(corner)
+        assert editor.add_fold_line(1, [Vec(F(21, 2), F(21, 2))], 4) is None  # from (12, 10) round to (11, 12)
+        bend = editor.template.fold_vertices[0].id
+        rejection = editor.delete_vertex(bend)
+        assert rejection is not None and len(editor.template.fold_vertices) == 1
 
     def test_a_fold_vertex_outside_the_net_or_a_line_crossing_is_refused(self) -> None:
         editor = drawn(PILLOW)

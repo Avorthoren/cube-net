@@ -272,12 +272,15 @@ class Template:
 
     def without_vertex(self, vertex_id: int) -> Template:
         """The loop without a vertex (its two sides become one), and without the folds that end at it (and those left
-        hanging then), and without a face it leaves with nothing (two corners: its fold goes too); a fold vertex:
+        hanging then), and without a face it leaves with nothing (two corners: its fold goes too). A fold vertex
+        between two segments: they become one, as the loop's sides do (`with_fold_vertex_joined`); one where more meet:
         without the folds at it, and those left hanging."""
         if self.hole_of(vertex_id) is not None:
             from cube_net.core.template.holes import without_hole_vertex
 
             return without_hole_vertex(self, vertex_id)
+        if self.is_fold_vertex(vertex_id) and len(self.folds_at(vertex_id)) == 2:
+            return self.with_fold_vertex_joined(vertex_id)
         template = self
         for fold in self.folds_at(vertex_id):
             if fold in template.folds:
@@ -289,6 +292,27 @@ class Template:
         )
         vertices = tuple(v for v in template.vertices if v.id != vertex_id)
         return replace(template, vertices=vertices, faces=faces)._without_empty_faces()
+
+    def with_fold_vertex_joined(self, vertex_id: int) -> Template:
+        """Without a fold vertex between two segments: they become one, from the first's other end to the second's (in
+        the line's direction, where the two go one way); the faces just lose that corner."""
+        first, second = self.folds_at(vertex_id)
+        a = first.start if first.end == vertex_id else first.end
+        b = second.end if second.start == vertex_id else second.start
+        if first.start == vertex_id and second.end == vertex_id:  # drawn the other way: keep that way
+            a, b = b, a
+        joined = Fold(a, b)
+        folds = tuple(joined if f == first else f for f in self.folds if f != second)
+        faces = tuple(
+            replace(
+                face,
+                corners=tuple(c for c in face.corners if c != vertex_id),
+                holes=tuple(tuple(c for c in cycle if c != vertex_id) for cycle in face.holes),
+            )
+            for face in self.faces
+        )
+        fold_vertices = tuple(v for v in self.fold_vertices if v.id != vertex_id)
+        return replace(self, folds=folds, faces=faces, fold_vertices=fold_vertices)
 
     def _without_empty_faces(self) -> Template:
         """Without the faces a deleted vertex reduced to nothing: two corners left, joined by the loop's new side and

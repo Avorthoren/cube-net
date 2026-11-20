@@ -147,8 +147,15 @@ class TestFoldLines:
         assert sorted(f.corners for f in template.faces) == sorted([(1, 2, 3, 4, 6), (4, 5, 0, 1, 6)])
         assert all(f.color == "#AA0000" for f in template.faces) and template.vertex(6).position == self.BEND
 
-    def test_deleting_the_fold_vertex_deletes_its_segments(self) -> None:
+    def test_deleting_a_fold_vertex_between_two_segments_joins_them(self) -> None:
+        """As a loop vertex's sides do: the line is one segment again (2026-11-20)."""
         template = self.bent().without_vertex(6)
+        assert template.folds == (Fold(1, 4),) and template.fold_vertices == ()
+        assert sorted(f.corners for f in template.faces) == sorted([(1, 2, 3, 4), (4, 5, 0, 1)])
+
+    def test_deleting_a_fold_vertex_where_three_segments_meet(self) -> None:
+        """Its segments go, and what's left hanging: the whole of both lines here."""
+        template = self.bent().with_fold_line(6, [], 3).without_vertex(6)
         assert template.folds == () and template.fold_vertices == ()
         (face,) = template.faces
         k = face.corners.index(0)
