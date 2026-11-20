@@ -4,11 +4,14 @@ What's new in every version of Cube Net. While working, write the changes under 
 (`./release.sh 1.2.0`) gives that section its version and date, and its text becomes the release's notes.
 
 ## Unreleased
- - File path added to footer
- - Style settings are not global but per project now
+ - The ability to work with a limited set of other bodies added
  - Cut lines can go outside the net now
  - Emergency project restoration implemented (for cases when application bug damaged the project)
+ - Performance of dragging significantly improved (relevant for smaller color tilings)
+ - Faces and dashes colorings settings can now be not whole numbers
  - Coordinates inputs improved: denominator is set to 1 when numerator is edited
+ - Style settings are not global but per project now
+ - File path added to footer
 
 ## 1.2.0 (2026-11-15)
  - Exact value of bounding rectangle area added to the hint
