@@ -152,3 +152,8 @@ class TestArithmeticGivesProperVecs:
         made = Vec(1, 2) + Vec(3, 4)
         with pytest.raises(AttributeError):
             made.x = F(0)  # type: ignore[misc]
+
+
+def test_a_fraction_is_taken_as_it_is() -> None:
+    half = F(1, 2)
+    assert to_fraction(half) is half and to_fraction(3) == F(3)
