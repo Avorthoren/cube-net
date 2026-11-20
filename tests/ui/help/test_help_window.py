@@ -23,14 +23,16 @@ def texts(window: HelpWindow) -> str:
     return "\n".join([*labels, *(block.toHtml() for block in window.blocks)])
 
 
-def test_four_animations_and_the_text(qtbot: QtBot) -> None:
+def test_five_animations_and_the_text(qtbot: QtBot) -> None:
     window = make(qtbot)
     assert window.windowTitle() == "Cube Net Help"
-    assert len(window.players) == 4
+    assert len(window.players) == 5
     all_text = texts(window)
-    assert "6 square units" in all_text
+    assert "surface area of the body" in all_text
     assert "Bounds" in window.blocks[-1].toPlainText()  # the button's own name
-    assert len(window.blocks) == 4  # the text between the animations
+    assert len(window.blocks) == 5  # the text between the animations
+    advanced = window.blocks[-2].toPlainText()
+    assert "Advanced features" in advanced and "assigning desired coordinates" in advanced
 
 
 def test_in_russian_too(qtbot: QtBot) -> None:
@@ -39,6 +41,7 @@ def test_in_russian_too(qtbot: QtBot) -> None:
     assert window.windowTitle() == "Cube Net — справка"
     assert "Рамка" in window.blocks[-1].toPlainText()
     assert "Сделайте разрез" in window.blocks[0].toPlainText()
+    assert "Расширенные возможности" in window.blocks[-2].toPlainText()
 
 
 def test_escape_closes_it(qtbot: QtBot) -> None:
@@ -47,12 +50,26 @@ def test_escape_closes_it(qtbot: QtBot) -> None:
     assert not window.isVisible()
 
 
-def test_every_animation_has_the_built_in_cubes_look(qtbot: QtBot) -> None:
+def test_the_steps_animations_have_the_built_in_cubes_look(qtbot: QtBot) -> None:
     """Whatever is open (another style, another body, a template), Help's animations look the same."""
     from cube_net.ui.style import DEFAULT_CUBE_LOOK
 
     window = make(qtbot)
-    assert window.players and all(player.sheet.view.look() == DEFAULT_CUBE_LOOK for player in window.players)
+    steps = window.players[:-1]
+    assert all(player.sheet.view.look() == DEFAULT_CUBE_LOOK for player in steps)
+    assert all(player.sheet.coordinates_hint is None for player in steps)
+
+
+def test_advanced_features_on_the_torus_with_the_coordinates_hint(qtbot: QtBot) -> None:
+    from cube_net.ui.help.demo.torus import torus_project
+
+    window = make(qtbot)
+    sheet = window.players[-1].sheet
+    project = torus_project()
+    look = sheet.view.look()
+    assert look is not None and (look.style, look.face_colors) == (project.settings.style, project.settings.face_colors)
+    assert sheet.workspace.editor.net is project.state.net
+    assert sheet.coordinates_hint is not None
 
 
 def test_text_can_be_selected_across_paragraphs(qtbot: QtBot) -> None:
@@ -61,7 +78,7 @@ def test_text_can_be_selected_across_paragraphs(qtbot: QtBot) -> None:
     assert block.textInteractionFlags() & Qt.TextInteractionFlag.TextSelectableByMouse
     block.selectAll()
     selected = block.textCursor().selectedText()
-    assert "Cube Net" in selected and "6 square units" in selected and "Make a cut" in selected
+    assert "Cube Net" in selected and "surface area of the body" in selected and "Make a cut" in selected
 
 
 def test_the_wheel_is_left_to_the_page_over_text_and_animations(qtbot: QtBot) -> None:
@@ -98,13 +115,14 @@ def test_no_vertex_labels_in_the_animations(qtbot: QtBot) -> None:
     assert items and all(item is not None and item.labels() is None for item in items)
 
 
-def test_good_to_know_starts_with_the_right_click_then_the_origin(qtbot: QtBot) -> None:
-    from cube_net.ui.help.help_window import EXACT_TEXT, HOTKEYS_TITLE, MORE_TITLE, ORIGIN_TEXT, UNDO_TEXT
+def test_good_to_know_undo_the_rectangle_and_the_view(qtbot: QtBot) -> None:
+    from cube_net.ui.help.help_window import HOTKEYS_TITLE, MORE_TITLE, UNDO_TEXT, VIEW_TEXT
 
     text = make(qtbot).blocks[-1].toPlainText()
     after_title = text[text.index(MORE_TITLE) + len(MORE_TITLE) :].lstrip()
-    assert after_title.lstrip("•  ").startswith(EXACT_TEXT)
-    assert text.index(EXACT_TEXT) < text.index(ORIGIN_TEXT) < text.index(UNDO_TEXT)  # the origin's is the second
+    assert after_title.startswith("•") and after_title[1:].lstrip().startswith(UNDO_TEXT)
+    assert text.index(UNDO_TEXT) < text.index("exact area value") < text.index(VIEW_TEXT)
+    assert "right-click" not in text  # it's in Advanced features now
     assert "Hold Shift while cutting" not in text  # it's with the hotkeys now
     assert text.index(MORE_TITLE) < text.index(HOTKEYS_TITLE)  # the hotkeys come after it
 

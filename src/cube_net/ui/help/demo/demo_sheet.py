@@ -5,12 +5,13 @@
 `Workspace`); the mouse input comes from a script (`steps`), sent as real mouse events, so everything reacts as it does
 in the app. The user's own mouse and keyboard mean nothing here.
 
-A right click opens the sheet's real menu (`SheetContextMenu`'s items) and Place a vertex its real window, typed into
-with real key events. They're shown inside the sheet, under the pointer, rather than as windows of their own (which a
-picture of the sheet wouldn't have); they don't wait as they do in the app, so the script goes on meanwhile.
+A right click opens the sheet's real menu (`SheetContextMenu`'s items), and its items their real windows (Place a
+vertex, Set slope, Move the origin), typed into with real key events. They're shown inside the sheet, under the
+pointer, rather than as windows of their own (which a picture of the sheet wouldn't have); they don't wait as they do
+in the app, so the script goes on meanwhile.
 """
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from fractions import Fraction as F
 from itertools import pairwise
 
@@ -19,6 +20,7 @@ from PyQt6.QtGui import QKeyEvent, QMouseEvent
 from PyQt6.QtWidgets import QApplication, QFrame, QLineEdit, QWidget
 
 from cube_net.core.bounding import min_area_rectangle
+from cube_net.core.cutting import slope_of
 from cube_net.core.geometry import Box, Vec
 from cube_net.core.history import History
 from cube_net.core.net import default_net
@@ -26,12 +28,17 @@ from cube_net.core.project import Project
 from cube_net.core.project_settings import ProjectSettings
 from cube_net.core.sheet import sheet_box
 from cube_net.ui.context_menu import ContextMenu
+from cube_net.ui.dialogs.small_window import SmallWindow
 from cube_net.ui.help.demo.pointer import Pointer
 from cube_net.ui.help.demo.steps import Keys, Move, Point, Press, Release, RightClick, Step, ToItem, Type, Wait
 from cube_net.ui.sheet.bounding_item import BoundingItem
+from cube_net.ui.sheet.coordinates_hint import CoordinatesHint
+from cube_net.ui.sheet.coordinates_text import coordinate_lines
 from cube_net.ui.sheet.cursors import CursorKind
+from cube_net.ui.sheet.move_origin_window import MoveOriginWindow
 from cube_net.ui.sheet.place_vertex_window import PlaceVertexWindow
-from cube_net.ui.sheet.sheet_context_menu import PLACE_VERTEX, SheetContextMenu
+from cube_net.ui.sheet.set_slope_window import SetSlopeWindow
+from cube_net.ui.sheet.sheet_context_menu import MOVE_ORIGIN, PLACE_VERTEX, SET_SLOPE, SheetContextMenu
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.sheet.workspace import Workspace
 from cube_net.ui.style import DEFAULT_CUBE_LOOK, DEFAULT_STYLE, Look
@@ -73,12 +80,14 @@ class DemoSheet(QWidget):
         bounds: bool = False,
         parent: QWidget | None = None,
         project: Project | None = None,
+        coordinates: bool = False,
     ) -> None:
         """`shown`: what the view shows (as large as it fits), all the time: it's where the net is in every state of
         the animation. `bounds`: whether the net's minimum-area bounding rectangle is shown, as the Bounds button shows
         it (green below the project's target area). `project`: what's on the sheet at the start, its origin and its
         look (None: the built-in Cube's, the default net in the default look). The sheet paints in that look whatever
-        the open document's is (`SheetView.set_look`). There are no vertex labels, whatever the app's setting."""
+        the open document's is (`SheetView.set_look`). `coordinates`: whether the coordinates hint is next to the
+        pointer, as the app shows it. There are no vertex labels, whatever the app's setting."""
         super().__init__(parent)
         self.setFixedSize(size)
         net = default_net() if project is None else project.state.net
@@ -106,7 +115,7 @@ class DemoSheet(QWidget):
             # The right click's menu and the window of its Place a vertex, while they're open.
             self._context_menu = SheetContextMenu(self.view, tool)
             self.menu: ContextMenu | None = None
-            self.place_window: PlaceVertexWindow | None = None
+            self.small_window: SmallWindow | None = None
             self._menu_at: Point | None = None
             self.bounding_item: BoundingItem | None = None
             if bounds:
@@ -118,6 +127,7 @@ class DemoSheet(QWidget):
                 self._show_bounds()
             viewport = self.view.viewport()
             assert viewport is not None
+            self.coordinates_hint = CoordinatesHint(viewport) if coordinates else None
             self.pointer = Pointer(viewport, self.view.from_sheet)
             self.pointer.resize(size)
             self._mouse: Point | None = None
@@ -216,20 +226,77 @@ class DemoSheet(QWidget):
         item = menu.item_at(menu.mapFromParent(self.view.from_sheet(QPointF(*self._here())).toPoint()))
         menu.hide()
         menu.deleteLater()
-        self.workspace.cut_tool.freeze_drag(False)
-        if item == PLACE_VERTEX and menu.items[item].enabled:
-            self._open_place_window(*self._menu_at)
+        tool = self.workspace.cut_tool
+        tool.freeze_drag(False)
+        x, y = self._menu_at
+        if item is None or not menu.items[item].enabled:
+            pass
+        elif item == PLACE_VERTEX:
+            self._open_place_window(x, y)
+        elif item == SET_SLOPE:
+            self._open_slope_window(x, y)
+        elif item == MOVE_ORIGIN:
+            self._open_origin_window(x, y)
         self._show_pointer()
 
     def _open_place_window(self, x: float, y: float) -> None:
-        """Place a vertex's window for what a click at (x, y) would make, in the middle of the sheet (as the app's is
-        in the middle of its window)."""
+        """Place a vertex's window for what a click at (x, y) would make (as `SheetContextMenu.open_window`)."""
         tool = self.workspace.cut_tool
         placement = tool.placement_at(x, y)
         assert placement is not None
+        window = PlaceVertexWindow(placement, lambda p: tool.place(placement, p), origin=tool.editor.origin)
+        tool.freeze_drag(True)
+        tool.set_placing(placement)
+
+        def closed(result: int) -> None:
+            tool.set_placing(None)
+            tool.freeze_drag(False)
+            if result != PlaceVertexWindow.DialogCode.Accepted:
+                tool.unlock_slope()
+
+        self._open(window, closed)
+
+    def _open_slope_window(self, x: float, y: float) -> None:
+        """Set slope's window for the segment a click at (x, y) would make (as `SheetContextMenu.open_slope_window`):
+        accepted, the slope is locked."""
+        tool = self.workspace.cut_tool
+        slope = tool.slope_at(x, y)
+        assert slope is not None
+        window = SetSlopeWindow(*slope_of(slope))
+        tool.freeze_drag(True)
+
+        def closed(result: int) -> None:
+            tool.freeze_drag(False)
+            direction = window.direction()
+            if result == SetSlopeWindow.DialogCode.Accepted and direction is not None:
+                if tool.dragging:
+                    tool.continue_drag_without_button()
+                tool.lock_slope(direction)
+            elif tool.dragging:
+                tool.cancel_drag()
+
+        self._open(window, closed)
+
+    def _open_origin_window(self, x: float, y: float) -> None:
+        """Move the origin's window for the drawn point at (x, y) (as `SheetContextMenu.open_origin_window`)."""
+        tool = self.workspace.cut_tool
+        vertex = tool.vertex_at(x, y)
+        assert vertex is not None
+        origin = tool.editor.origin
+        window = MoveOriginWindow(origin.shown(vertex))
+
+        def closed(result: int) -> None:
+            coordinates = window.coordinates()
+            if result == MoveOriginWindow.DialogCode.Accepted and coordinates is not None:
+                tool.move_origin(origin.moved(vertex, coordinates, None))
+
+        self._open(window, closed)
+
+    def _open(self, window: SmallWindow, closed: Callable[[int], None]) -> None:
+        """Show `window` in the middle of the sheet (as the app's are in the middle of its window), with the focus
+        where it puts it; `closed` gets its result when it closes."""
         viewport = self.view.viewport()
         assert viewport is not None
-        window = PlaceVertexWindow(placement, lambda p: tool.place(placement, p), origin=tool.editor.origin)
         focused = window.focusWidget()
         window.setParent(viewport, Qt.WindowType.Widget)
         window.setAutoFillBackground(True)  # a window has its background filled by the system
@@ -239,20 +306,16 @@ class DemoSheet(QWidget):
         if focused is not None:
             focused.setFocus()
         self.pointer.raise_()
-        tool.freeze_drag(True)
-        tool.set_placing(placement)
-        self.place_window = window
+        self.small_window = window
 
-        def closed(result: int) -> None:
-            tool.set_placing(None)
-            tool.freeze_drag(False)
-            if result != PlaceVertexWindow.DialogCode.Accepted:
-                tool.unlock_slope()
+        def finished(result: int) -> None:
+            with self.look.used():
+                closed(result)
             window.deleteLater()
-            self.place_window = None
+            self.small_window = None
             self._show_pointer()
 
-        window.finished.connect(closed)
+        window.finished.connect(finished)
 
     def _type(self, char: str) -> None:
         """A key pressed and released in the open window, where its focus is."""
@@ -260,8 +323,8 @@ class DemoSheet(QWidget):
             self._type_here(char)
 
     def _type_here(self, char: str) -> None:
-        assert self.place_window is not None, "keys are typed into an open window"
-        target = self.place_window.focusWidget() or self.place_window
+        assert self.small_window is not None, "keys are typed into an open window"
+        target = self.small_window.focusWidget() or self.small_window
         key = SPECIAL_KEYS.get(char)
         text = "" if key is not None else char
         code = key if key is not None else Qt.Key(ord(char.upper()))
@@ -271,12 +334,12 @@ class DemoSheet(QWidget):
                 QApplication.sendEvent(target, QKeyEvent(kind, code, Qt.KeyboardModifier.NoModifier, text))
             finally:
                 self._sending = False
-        if key is Qt.Key.Key_Tab and isinstance(field := self.place_window.focusWidget(), QLineEdit):
+        if key is Qt.Key.Key_Tab and isinstance(field := self.small_window.focusWidget(), QLineEdit):
             field.selectAll()  # as Tab does, but it doesn't where the window isn't active (no focus event comes then)
 
     def _over_window(self, at: QPointF) -> bool:
         """Is the viewport point `at` over the open menu or window?"""
-        return any(w is not None and w.geometry().contains(at.toPoint()) for w in (self.menu, self.place_window))
+        return any(w is not None and w.geometry().contains(at.toPoint()) for w in (self.menu, self.small_window))
 
     def _here(self) -> Point:
         assert self._mouse is not None, "a script starts by moving the mouse somewhere"
@@ -339,6 +402,15 @@ class DemoSheet(QWidget):
         kind = CursorKind.ARROW if over else self.workspace.cut_tool.cursor_at(x, y)
         ctrl = bool(self._modifiers & Qt.KeyboardModifier.ControlModifier)
         self.pointer.set_state(QPointF(x, y), kind, ctrl)
+        if self.coordinates_hint is not None:
+            tool = self.workspace.cut_tool
+            point = None if over else tool.coordinates_at(x, y)
+            if point is None:
+                self.coordinates_hint.hide()
+            else:
+                lines = coordinate_lines(tool.editor.origin.shown(point))
+                self.coordinates_hint.show_at(lines, self.view.from_sheet(QPointF(x, y)).toPoint())
+                self.pointer.raise_()
 
 
 def _distance(a: Point, b: Point) -> float:

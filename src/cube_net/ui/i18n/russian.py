@@ -212,20 +212,20 @@ RUSSIAN: dict[str, str] = {
     "{name} Help": "{name} — справка",
     "How it works": "Как это работает",
     (
-        "This application lets you build cube nets: simple polygons (without self-intersections) that, when folded, "
-        "cover the whole surface of the unit cube without overlaps. So the area of such a polygon is always equal to "
-        "the surface area of the unit cube: 6 square units."
+        "This application lets you build networks of solid bodies: polygons without self-intersections that, when "
+        "folded, can cover the whole surface of that body without overlaps. So the area of such a polygon is always "
+        "equal to the surface area of the body."
     ): (
-        "Это приложение позволяет строить развёртки куба: простые многоугольники (без самопересечений), которые после "
-        "сгибания покрывают всю поверхность единичного куба без наложений. Поэтому площадь такого многоугольника "
-        "всегда равна площади поверхности единичного куба: 6 квадратных единиц."
+        "Это приложение позволяет строить развёртки объёмных тел: многоугольники без самопересечений, которые после "
+        "сгибания могут покрыть всю поверхность этого тела без наложений. Поэтому площадь такого многоугольника всегда "
+        "равна площади поверхности тела."
     ),
     (
-        "If a cube net is cut into two pieces, they can be rearranged and glued together again along a pair of edges "
-        "that meet on the cube. That's exactly what the application is for:"
+        "If a network is cut into two pieces, they can be rearranged and glued together again along a pair of edges "
+        "that meet on the body. That's exactly what the application is for:"
     ): (
         "Если разрезать развёртку на две части, их можно переставить и снова склеить по паре рёбер, которые сходятся "
-        "на кубе. Именно для этого и создано приложение:"
+        "на теле. Именно для этого и создано приложение:"
     ),
     "Make a cut": "Сделайте разрез",
     (
@@ -259,23 +259,40 @@ RUSSIAN: dict[str, str] = {
     ),
     "No overlaps: approved": "Без наложений: утверждено",
     "Overlaps: cancelled": "С наложениями: отменено",
+    "Advanced features": "Расширенные возможности",
+    (
+        "You can set specific coordinates for vertices or slopes for lines when creating or dragging vertices: try "
+        "right-click."
+    ): (
+        "Можно задать точные координаты вершин или наклон линий, когда вы создаёте или перетаскиваете вершины: "
+        "попробуйте правый щелчок."
+    ),
+    (
+        "Cut should always start on the boundary, but other vertices of the cut line can even be outside the net: as "
+        "soon as net is divided into two pieces - cut line ends."
+    ): (
+        "Разрез всегда должен начинаться на границе, но остальные вершины линии разреза могут находиться даже за "
+        "пределами развёртки: как только развёртка разделится на две части, линия разреза заканчивается."
+    ),
+    (
+        "You can also move the origin by assigning desired coordinates to any vertex. Although, axes orientation and "
+        "the scale is constant."
+    ): (
+        "Также можно сдвинуть начало координат, назначив нужные координаты любой вершине. Однако ориентация осей и "
+        "масштаб постоянны."
+    ),
     "Good to know": "Полезно знать",
     "Undo and redo work for up to 1000 actions: use Ctrl+Z and Ctrl+Y.": (
         "Можно отменить и повторить до 1000 действий: используйте Ctrl+Z и Ctrl+Y."
     ),
     (
         "The application keeps track of the minimum-area bounding rectangle of the net. To see the rectangle itself, "
-        "press the {bounds} button on the instrument panel."
+        "press the {bounds} button on the instrument panel. You can see the exact area value by hovering the mouse "
+        "over its approximate value."
     ): (
         "Приложение следит за прямоугольником наименьшей площади, описанным вокруг развёртки. Чтобы увидеть сам "
-        "прямоугольник, нажмите кнопку {bounds} на панели инструментов."
-    ),
-    "You can set specific coordinates for points or slopes for lines: try right-click (even when dragging a point).": (
-        "Можно задать точные координаты точек или наклон отрезков: попробуйте правый щелчок (даже при перетаскивании "
-        "точки)."
-    ),
-    "You can move the working sheet origin: right-click on any vertex.": (
-        "Начало координат рабочего листа можно сдвинуть: щёлкните правой кнопкой по любой вершине."
+        "прямоугольник, нажмите кнопку {bounds} на панели инструментов. Точное значение площади можно увидеть, "
+        "наведя указатель мыши на её приближённое значение."
     ),
     "Hotkeys": "Горячие клавиши",
     "Projects": "Проекты",

@@ -553,8 +553,8 @@ mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dr
   draws it from the net and the colours into `src/cube_net/ui/icons/cube_net.png` (the window icon, 256 px) and
   `packaging/icons/` (`.ico` for Windows, `.icns` for macOS); a test fails when they're out of date.
 - The README's animation (`docs/media/readme-animation-net.png`, an animated PNG): `scripts/make_readme_animation.py`
-  plays a cut with Help -> Help's engine (the real net and tools, from `scripts/readme_animation.cubenet` in its own
-  style, no labels), records it and writes the APNG (only the changed rectangle of each frame). Run it again whenever
+  plays a cut with Help -> Help's engine (the real net and tools, from the torus project
+  `src/cube_net/ui/help/demo/torus.cubenet` in its own style, no labels), records it and writes the APNG (only the changed rectangle of each frame). Run it again whenever
   the look changes (drawing, mouse pointers, the right click's menu, Place a vertex's window); the modules that define
   it say so, and a test fails when the first picture no longer matches the app.
 

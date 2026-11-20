@@ -15,12 +15,12 @@ from pytestqt.qtbot import QtBot
 
 from cube_net.core.editor import EditorState
 from cube_net.core.geometry import Vec
-from cube_net.core.project import load_project
+from cube_net.ui.help.demo.torus import torus_project
 from scripts import make_readme_animation as animation
 
 
 def test_the_animation_has_its_projects_look() -> None:
-    project = load_project(animation.BASIS)
+    project = torus_project()
     look = animation.sheet().look
     assert (look.style, look.face_colors) == (project.settings.style, project.settings.face_colors)
 
@@ -55,7 +55,7 @@ def test_the_scene_cuts_glues_and_approves(qtbot: QtBot) -> None:
     vertices = len(editor.net.vertices)
     for _ in demo.play(animation.CUT, instant=True):
         pass
-    assert rejected == [] and demo.menu is None and demo.place_window is None
+    assert rejected == [] and demo.menu is None and demo.small_window is None
     assert editor.state is EditorState.CUT_EDITING and editor.cut_line is not None
     # The end typed in the window: (37, 63) from the origin's (44, 50), where the line leaves the net.
     assert [p.position for p in editor.cut_line.points] == [Vec(48, 66), Vec(45, 61), Vec(47, 57), Vec(40, F(306, 5))]

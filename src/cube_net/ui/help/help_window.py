@@ -17,11 +17,13 @@ from PyQt6.QtGui import QKeyEvent
 from PyQt6.QtWidgets import QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from cube_net.core.geometry import Box, Vec
+from cube_net.core.project import Project
 from cube_net.ui.help.about_dialog import APP_NAME
-from cube_net.ui.help.demo import scenes
+from cube_net.ui.help.demo import advanced, scenes
 from cube_net.ui.help.demo.demo_sheet import AROUND_THE_NET
 from cube_net.ui.help.demo.player import DemoPlayer
 from cube_net.ui.help.demo.steps import Step
+from cube_net.ui.help.demo.torus import torus_project
 from cube_net.ui.help.hotkeys import HOTKEYS, HotkeyGroup
 from cube_net.ui.help.text_block import ACCENT, BADGE_PX, BADGE_SCHEME, TextBlock
 from cube_net.ui.i18n import TRANSLATIONS, bind, tr
@@ -49,13 +51,13 @@ HALF = QSize(428, 400)
 AROUND_BOTH_RESULTS = Box(Vec(F(48, 5), F(43, 5)), Vec(F(77, 5), F(72, 5)))
 
 INTRO = (
-    "This application lets you build cube nets: simple polygons (without self-intersections) that, when folded, cover "
-    "the whole surface of the unit cube without overlaps. So the area of such a polygon is always equal to the surface "
-    "area of the unit cube: 6 square units."
+    "This application lets you build networks of solid bodies: polygons without self-intersections that, when folded, "
+    "can cover the whole surface of that body without overlaps. So the area of such a polygon is always equal to the "
+    "surface area of the body."
 )
 IDEA = (
-    "If a cube net is cut into two pieces, they can be rearranged and glued together again along a pair of edges that "
-    "meet on the cube. That's exactly what the application is for:"
+    "If a network is cut into two pieces, they can be rearranged and glued together again along a pair of edges that "
+    "meet on the body. That's exactly what the application is for:"
 )
 CUT_TITLE = "Make a cut"
 CUT_TEXT = (
@@ -77,15 +79,25 @@ GLUE_TEXT = (
 )
 GOOD_CAPTION = "No overlaps: approved"
 BAD_CAPTION = "Overlaps: cancelled"
-MORE_TITLE = "Good to know"
-EXACT_TEXT = (
-    "You can set specific coordinates for points or slopes for lines: try right-click (even when dragging a point)."
+ADVANCED_TITLE = "Advanced features"
+ADVANCED_EXACT_TEXT = (
+    "You can set specific coordinates for vertices or slopes for lines when creating or dragging vertices: try "
+    "right-click."
 )
-ORIGIN_TEXT = "You can move the working sheet origin: right-click on any vertex."
+ADVANCED_OUTSIDE_TEXT = (
+    "Cut should always start on the boundary, but other vertices of the cut line can even be outside the net: as soon "
+    "as net is divided into two pieces - cut line ends."
+)
+ADVANCED_ORIGIN_TEXT = (
+    "You can also move the origin by assigning desired coordinates to any vertex. Although, axes orientation and the "
+    "scale is constant."
+)
+MORE_TITLE = "Good to know"
 UNDO_TEXT = "Undo and redo work for up to 1000 actions: use Ctrl+Z and Ctrl+Y."
 BOUNDS_TEXT = (
     "The application keeps track of the minimum-area bounding rectangle of the net. To see the rectangle itself, "
-    "press the {bounds} button on the instrument panel."
+    "press the {bounds} button on the instrument panel. You can see the exact area value by hovering the mouse "
+    "over its approximate value."
 )
 VIEW_TEXT = "Zoom with the mouse wheel; drag the sheet to move it."
 HOTKEYS_TITLE = "Hotkeys"
@@ -133,9 +145,12 @@ class HelpWindow(QWidget):
         good = self._player(scenes.GLUE_GOOD, before, HALF, AROUND_BOTH_RESULTS)
         bad = self._player(scenes.GLUE_BAD, before, HALF, AROUND_BOTH_RESULTS)
         self._players([good, bad], [self._caption(GOOD_CAPTION), self._caption(BAD_CAPTION)])
+        self._title(ADVANCED_TITLE, 4)
+        self._paragraph(ADVANCED_EXACT_TEXT)
+        self._paragraph(ADVANCED_OUTSIDE_TEXT)
+        self._paragraph(ADVANCED_ORIGIN_TEXT)
+        self._players([self._player(advanced.ADVANCED, [], advanced.SIZE, advanced.SHOWN, torus_project(), True)])
         self._title(MORE_TITLE)
-        self._paragraph(EXACT_TEXT, bullet=True)
-        self._paragraph(ORIGIN_TEXT, bullet=True)
         self._paragraph(UNDO_TEXT, bullet=True)
         self._paragraph(BOUNDS_TEXT, lambda: {"bounds": f"<b>{tr('Bounds')}</b>"}, bullet=True)
         self._paragraph(VIEW_TEXT, bullet=True)
@@ -157,7 +172,7 @@ class HelpWindow(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.scroll)
-        self._resize_to_screen()
+        self.restore_default_size()
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
         if event is not None and event.key() == Qt.Key.Key_Escape:
@@ -269,9 +284,16 @@ class HelpWindow(QWidget):
         return caption
 
     def _player(
-        self, steps: Sequence[Step], before: Sequence[Sequence[Step]], size: QSize, shown: Box = AROUND_THE_NET
+        self,
+        steps: Sequence[Step],
+        before: Sequence[Sequence[Step]],
+        size: QSize,
+        shown: Box = AROUND_THE_NET,
+        project: Project | None = None,
+        coordinates: bool = False,
     ) -> DemoPlayer:
-        player = DemoPlayer(steps, before, size, shown)
+        """An animation (`DemoPlayer`): of the default net, or of `project`'s, with the coordinates hint if wanted."""
+        player = DemoPlayer(steps, before, size, shown, project=project, coordinates=coordinates)
         self.players.append(player)
         return player
 
@@ -288,7 +310,9 @@ class HelpWindow(QWidget):
         self._column.addLayout(grid)
         self._column.addSpacing(4)
 
-    def _resize_to_screen(self) -> None:
+    def restore_default_size(self) -> None:
+        """The size it's made for: the column's width with room around it, most of the screen's height. It opens with
+        it every time (`MainWindow.show_help`), whatever the user resized it to before."""
         screen = self.screen()
         height = 900 if screen is None else int(screen.availableGeometry().height() * 0.85)
         self.resize(WINDOW_PX, height)

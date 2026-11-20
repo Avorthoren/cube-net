@@ -8,8 +8,8 @@ another using cuts and rearrangements.
 
 <!--
 The animation is made by the application itself: scripts/make_readme_animation.py plays this cut with the real net
-and tools, starting from scripts/readme_animation.cubenet (in that project's style, with no vertex labels and the
-bounding rectangle ON), and records it. Run it again whenever the look changes: how the sheet, the net, the cut line
+and tools, starting from src/cube_net/ui/help/demo/torus.cubenet (in that project's style, with no vertex labels and
+the bounding rectangle ON), and records it. Run it again whenever the look changes: how the sheet, the net, the cut line
 and its buttons, the right click's menu or Place a vertex's window are drawn, or how the mouse pointer looks over them.
 A test fails when the animation's first picture no longer matches the app.
 -->

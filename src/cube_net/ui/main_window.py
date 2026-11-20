@@ -1208,10 +1208,13 @@ class MainWindow(QMainWindow):
             self.recorder.note("help", "first start")
 
     def show_help(self) -> None:
-        """Help -> Help: one window, brought to the front if it's open already."""
+        """Help -> Help: one window, brought to the front if it's open already; opened again, it has its default size
+        (the user may have resized it before, and has no other way back to that size)."""
         if self.help_window is None:
             self.help_window = HelpWindow(self)
             self.help_window.language_changed.connect(self._on_language_changed)
+        elif not self.help_window.isVisible():
+            self.help_window.restore_default_size()
         self.help_window.show()
         self.help_window.raise_()
         self.help_window.activateWindow()

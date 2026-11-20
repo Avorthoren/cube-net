@@ -104,7 +104,7 @@ def test_a_right_click_opens_the_sheets_menu_there(qtbot: QtBot) -> None:
 def test_a_click_off_its_items_closes_the_menu(qtbot: QtBot) -> None:
     sheet = make(qtbot)
     play(sheet, [*CUTTING, RightClick(), ToItem(MOVE_ORIGIN), *click()])  # disabled
-    assert sheet.menu is None and sheet.place_window is None
+    assert sheet.menu is None and sheet.small_window is None
     assert sheet.workspace.editor.state is EditorState.CUTTING  # the click didn't reach the sheet
 
 
@@ -115,14 +115,14 @@ def test_place_a_vertex_typed_into_its_window(qtbot: QtBot) -> None:
 
     sheet = make(qtbot)
     play(sheet, [*CUTTING, RightClick(), ToItem(PLACE_VERTEX), *click()])
-    window = sheet.place_window
+    window = sheet.small_window
     assert window is not None and window.isVisible() and window.focusWidget() is window.y.numerator
     play(sheet, [Type("25\t2\t23\t2")])  # the numerator typed, its denominator is 1 until typed too
     assert [field.text() for field in (window.y.numerator, window.y.denominator)] == ["25", "2"]
     assert [field.text() for field in (window.x.numerator, window.x.denominator)] == ["23", "2"]
     play(sheet, [Type("\n")])
     assert window.message.isHidden(), window.message.text()
-    assert sheet.place_window is None
+    assert sheet.small_window is None
     line = sheet.workspace.editor.cut_line
     assert line is not None and line.last.position == sheet.workspace.editor.origin.sheet(Vec(F(23, 2), F(25, 2)))
 
@@ -154,3 +154,45 @@ def test_the_built_in_cubes_look_whatever_is_in_place(qtbot: QtBot) -> None:
         assert style_in_place() == other and palette.face_colors_in_place() == (colors, CUBE)  # still the project's
     finally:
         palette.set_face_colors(CUBE.colors, CUBE)
+
+
+def test_set_slope_typed_into_its_window(qtbot: QtBot) -> None:
+    from cube_net.core.geometry import Vec
+    from cube_net.ui.sheet.set_slope_window import SetSlopeWindow
+    from cube_net.ui.sheet.sheet_context_menu import SET_SLOPE
+
+    sheet = make(qtbot)
+    play(sheet, [*CUTTING, RightClick(), ToItem(SET_SLOPE), *click()])
+    assert isinstance(sheet.small_window, SetSlopeWindow)
+    play(sheet, [Type("-2\t1\n")])
+    assert sheet.small_window is None
+    slope = sheet.workspace.cut_tool.slope()
+    assert slope is not None and slope.cross(Vec(1, -2)) == 0
+
+
+def test_move_the_origin_typed_into_its_window(qtbot: QtBot) -> None:
+    from fractions import Fraction as F
+
+    from cube_net.core.geometry import Vec
+    from cube_net.ui.sheet.move_origin_window import MoveOriginWindow
+
+    sheet = make(qtbot)
+    play(sheet, [Move((11.0, 14.0), 0), RightClick(), ToItem(MOVE_ORIGIN), *click()])  # on the vertex A_1
+    assert isinstance(sheet.small_window, MoveOriginWindow)
+    play(sheet, [Type("\t\t-8\t3\n")])  # its x only
+    assert sheet.small_window is None
+    origin = sheet.workspace.editor.origin
+    assert origin.shown(Vec(11, 14)) == Vec(F(-8, 3), 14)
+
+
+def test_the_coordinates_hint_if_wanted(qtbot: QtBot) -> None:
+    from cube_net.core.geometry import Vec
+    from cube_net.ui.sheet.coordinates_text import coordinate_lines
+
+    assert make(qtbot).coordinates_hint is None
+    sheet = DemoSheet(QSize(560, 400), coordinates=True)
+    qtbot.addWidget(sheet)
+    sheet.show()
+    qtbot.waitExposed(sheet)
+    play(sheet, [Move((11.0, 14.0), 0)])  # A_1
+    assert sheet.coordinates_hint is not None and sheet.coordinates_hint.lines() == coordinate_lines(Vec(11, 14))

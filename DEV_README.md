@@ -105,7 +105,7 @@ python -m mypy
 | Script | What it does |
 |---|---|
 | `python scripts/make_icon.py` | Draws the application's icon (PNG, `.ico`, `.icns`). Run it if the default net or its default colours change. |
-| `python scripts/make_readme_animation.py` | Records the README's animation (`docs/media/readme-animation-net.png`) with the application itself, from `scripts/readme_animation.cubenet`, about 30 s. Run it if the look changes: drawing, mouse pointers, the right click's menu, Place a vertex's window. |
+| `python scripts/make_readme_animation.py` | Records the README's animation (`docs/media/readme-animation-net.png`) with the application itself, from `src/cube_net/ui/help/demo/torus.cubenet`, about 30 s. Run it if the look changes: drawing, mouse pointers, the right click's menu, Place a vertex's window. |
 | `python -m scripts.embed_template projects/torus.nettemplate` | Makes the built-in Cube with a hole (File -> New) from the author's template file: only the template, its origin and its style go into `src/cube_net/core/project/builtin/cube_with_a_hole.nettemplate`. The template must be valid and have a style. |
 | `python scripts/make_test_release.py PACKAGE VERSION` | Makes a fake release of a build's package, on the disk, for trying "Download and update" without publishing anything. It prints the `CUBE_NET_UPDATES_URL=...` to start the application with. |
 | `python scripts/measure_code.py` | How much there is of everything: characters (without indentation, and without comments, separately) and lines of the app's source, the tests, developer scripts, build and release files, and docs, and the biggest files. It counts the files git tracks; a new kind of file it doesn't know is listed at the end, to be given a category in the script. |

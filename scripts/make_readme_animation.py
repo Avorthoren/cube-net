@@ -8,14 +8,13 @@ right click's menu and Place a vertex's window are drawn, and how the mouse poin
 the arrow of `ui/help/demo/pointer.py`). A test fails when the animation's first picture no longer matches how the app
 draws it.
 
-It starts from the author's project `BASIS` (a copy of their torus project: a net of the Cube with a hole, with its
-own style): to start from another one, copy the project file there and write the scene anew (its points are that
-net's). It's the app itself: the cut is played with the real net, editor and tools (Help -> Help's animation engine,
-`ui/help/demo`), in the project's style, with the bounding rectangle (as the Bounds
-button shows it), and recorded as it plays. The menu and the window are the real ones too, shown in the picture of
-the sheet. The file is an animated PNG (APNG): GitHub shows it like any picture and browsers play it, in full colour
-(a GIF has 256 colours); each frame keeps only the part of the picture that changed, so it stays small. Where
-animations aren't played, its first picture shows: the project's net.
+It starts from the author's torus project (`torus_project`: a net of the Cube with a hole, in its own style), as
+Help's Advanced features animation does; its scene is written for that net. It's the app itself: the cut is played
+with the real net, editor and tools (Help -> Help's animation engine, `ui/help/demo`), in the project's style, with the
+bounding rectangle (as the Bounds button shows it), and recorded as it plays. The menu and the window are the real
+ones too, shown in the picture of the sheet. The file is an animated PNG (APNG): GitHub shows it like any picture and
+browsers play it, in full colour (a GIF has 256 colours); each frame keeps only the part of the picture that changed,
+so it stays small. Where animations aren't played, its first picture shows: the project's net.
 """
 
 import struct
@@ -31,16 +30,13 @@ from PyQt6.QtGui import QImage
 from PyQt6.QtWidgets import QApplication
 
 from cube_net.core.geometry import Box, Vec
-from cube_net.core.project import load_project
 from cube_net.ui.help.demo.demo_sheet import DemoSheet
 from cube_net.ui.help.demo.steps import Move, RightClick, Step, ToItem, Type, Wait, click
+from cube_net.ui.help.demo.torus import torus_project
 from cube_net.ui.sheet.sheet_context_menu import PLACE_VERTEX
 
 ROOT = Path(__file__).resolve().parent.parent
 README_ANIMATION = ROOT / "docs/media/readme-animation-net.png"
-
-# The project the animation starts from.
-BASIS = ROOT / "scripts/readme_animation.cubenet"
 
 # The picture's size, and what it shows: the project's net, the net the cut makes, and the bounding rectangles of both
 # (the new one reaches further left), with a little room around.
@@ -107,8 +103,8 @@ SCENE: list[Step] = [*CUT, *GLUE]
 
 
 def sheet() -> DemoSheet:
-    """The animation's sheet (in `BASIS`'s look), with the mouse where the scene starts."""
-    demo = DemoSheet(SIZE, SHOWN, bounds=True, project=load_project(BASIS))
+    """The animation's sheet (in the torus project's look), with the mouse where the scene starts."""
+    demo = DemoSheet(SIZE, SHOWN, bounds=True, project=torus_project())
     first = SCENE[0]
     assert isinstance(first, Move)
     demo.place(first.to)

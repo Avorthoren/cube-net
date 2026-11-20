@@ -3491,6 +3491,19 @@ class TestHelpMenu:
         window.help_action.trigger()
         assert window.help_window is first and first.isVisible()  # the same one again
 
+    def test_help_opens_with_its_default_size_every_time(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.help_action.trigger()
+        help_window = window.help_window
+        assert help_window is not None
+        default = help_window.size()
+        help_window.resize(default.width() - 200, default.height() - 300)
+        window.help_action.trigger()  # open already: it stays as the user made it
+        assert help_window.size() != default
+        help_window.close()
+        window.help_action.trigger()
+        assert help_window.size() == default
+
     def test_opens_by_itself_at_the_first_start_only(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
         assert not window.settings.help_shown
@@ -3515,7 +3528,7 @@ class TestHelpMenu:
         window.help_action.trigger()
         help_window = window.help_window
         assert help_window is not None and help_window.players
-        assert all(player.sheet.view.look() == DEFAULT_CUBE_LOOK for player in help_window.players)
+        assert all(player.sheet.view.look() == DEFAULT_CUBE_LOOK for player in help_window.players[:-1])
         assert style_in_place() == other  # the project's, for everything else
 
     def test_its_animations_have_no_vertex_labels_even_when_they_are_on(self, qtbot: QtBot, tmp_path: Path) -> None:

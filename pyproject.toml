@@ -38,6 +38,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 "cube_net.ui.icons" = ["*.png"]
 "cube_net.core.project.builtin" = ["*.nettemplate"]
+"cube_net.ui.help.demo" = ["*.cubenet"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
