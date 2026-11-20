@@ -30,7 +30,7 @@ def _name(color: object) -> str:
 
 
 # What the style files say, taken before anything could change it. A new template starts with it, and so does the
-# built-in Cube. The README's animation shows it: after changing the defaults, run scripts/make_readme_animation.py.
+# built-in Cube.
 DEFAULT_STYLE = Style(
     hatch_columns=net_style.HATCH_COLUMNS,
     hatch_rows=net_style.HATCH_ROWS,

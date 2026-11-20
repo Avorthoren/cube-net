@@ -6,15 +6,29 @@ file still shows the app as it draws itself now."""
 
 import struct
 import zlib
+from collections.abc import Iterator
+from fractions import Fraction as F
 
+import pytest
 from PyQt6.QtCore import QRect
 from PyQt6.QtGui import QColor, QImage
 from PyQt6.QtWidgets import QApplication
 from pytestqt.qtbot import QtBot
 
+from cube_net.core.body import CUBE
 from cube_net.core.editor import EditorState
 from cube_net.core.geometry import Vec
+from cube_net.ui import palette
+from cube_net.ui.style import DEFAULT_STYLE, apply_style
 from scripts import make_readme_animation as animation
+
+
+@pytest.fixture(autouse=True)
+def default_look() -> Iterator[None]:
+    """The animation puts its project's style and colours in place (they're global): the next test has the defaults."""
+    yield
+    apply_style(DEFAULT_STYLE)
+    palette.set_face_colors(CUBE.colors, CUBE)
 
 
 def chunks(data: bytes) -> list[tuple[bytes, bytes]]:
@@ -44,14 +58,21 @@ def test_the_scene_cuts_glues_and_approves(qtbot: QtBot) -> None:
     rejected: list[Vec] = []
     demo.workspace.cut_tool.rejected.connect(rejected.append)
     editor = demo.workspace.editor
-    for _ in demo.play(animation.SCENE[:-8], instant=True):  # up to the glue, its click included
+    vertices = len(editor.net.vertices)
+    for _ in demo.play(animation.CUT, instant=True):
+        pass
+    assert rejected == [] and demo.menu is None and demo.place_window is None
+    assert editor.state is EditorState.CUT_EDITING and editor.cut_line is not None
+    # The end typed in the window: (37, 63) from the origin's (44, 50), where the line leaves the net.
+    assert [p.position for p in editor.cut_line.points] == [Vec(48, 66), Vec(45, 61), Vec(47, 57), Vec(40, F(306, 5))]
+    for _ in demo.play(animation.GLUE[:5], instant=True):  # up to the glue, its click included
+        pass
+    assert editor.state is EditorState.CUT_APPROVING and editor.rearranged is not None and editor.rearranged.valid
+    for _ in demo.play(animation.GLUE[5:], instant=True):
         pass
     assert rejected == []
-    assert editor.state is EditorState.CUT_APPROVING and editor.rearranged is not None and editor.rearranged.valid
-    for _ in demo.play(animation.SCENE[-8:], instant=True):
-        pass
     assert editor.state is EditorState.DEFAULT
-    assert len(editor.net.vertices) > 14  # the new net
+    assert len(editor.net.vertices) > vertices  # the new net
 
 
 def test_the_whole_result_and_its_rectangle_are_in_the_picture(qtbot: QtBot) -> None:
@@ -89,7 +110,7 @@ def test_an_animated_png(qtbot: QtBot) -> None:
 
 
 def test_the_committed_animation_shows_the_app_as_it_is(qtbot: QtBot) -> None:
-    """If this fails, the app's default look has changed: run `python scripts/make_readme_animation.py`."""
+    """If this fails, the app's look has changed: run `python scripts/make_readme_animation.py`."""
     stored = QImage.fromData(animation.README_ANIMATION.read_bytes(), "PNG")
     demo = animation.sheet()
     qtbot.addWidget(demo)

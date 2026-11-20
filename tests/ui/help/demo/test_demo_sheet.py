@@ -6,8 +6,9 @@ from pytestqt.qtbot import QtBot
 
 from cube_net.core.editor import EditorState
 from cube_net.ui.help.demo.demo_sheet import FRAME_MS, DemoSheet
-from cube_net.ui.help.demo.steps import Keys, Move, Wait, click
+from cube_net.ui.help.demo.steps import Keys, Move, RightClick, ToItem, Type, Wait, click
 from cube_net.ui.sheet.cursors import CursorKind
+from cube_net.ui.sheet.sheet_context_menu import MOVE_ORIGIN, PLACE_VERTEX
 
 
 def make(qtbot: QtBot) -> DemoSheet:
@@ -81,3 +82,49 @@ def test_no_coordinates_hint_in_the_animations(qtbot: QtBot) -> None:
     sheet = DemoSheet(QSize(560, 400))
     assert sheet.workspace.sheet_cursor is None
     assert sheet.findChildren(CoordinatesHint) == []
+
+
+def play(sheet: DemoSheet, steps: list) -> None:
+    for _ in sheet.play(steps, instant=True):
+        pass
+
+
+# A cut started at the default net's A_1, and the mouse on the net beside it.
+CUTTING = [Move((11.0, 14.0), 0), *click(), Move((11.4, 12.6), 0)]
+
+
+def test_a_right_click_opens_the_sheets_menu_there(qtbot: QtBot) -> None:
+    sheet = make(qtbot)
+    play(sheet, [*CUTTING, RightClick()])
+    menu = sheet.menu
+    assert menu is not None and menu.isVisible()
+    assert [item.enabled for item in menu.items] == [True, True, False]  # no drawn point under the mouse to move to
+    play(sheet, [ToItem(PLACE_VERTEX)])
+    assert menu.current() == PLACE_VERTEX  # highlighted under the mouse
+    assert sheet.pointer.kind() is CursorKind.ARROW
+
+
+def test_a_click_off_its_items_closes_the_menu(qtbot: QtBot) -> None:
+    sheet = make(qtbot)
+    play(sheet, [*CUTTING, RightClick(), ToItem(MOVE_ORIGIN), *click()])  # disabled
+    assert sheet.menu is None and sheet.place_window is None
+    assert sheet.workspace.editor.state is EditorState.CUTTING  # the click didn't reach the sheet
+
+
+def test_place_a_vertex_typed_into_its_window(qtbot: QtBot) -> None:
+    from fractions import Fraction as F
+
+    from cube_net.core.geometry import Vec
+
+    sheet = make(qtbot)
+    play(sheet, [*CUTTING, RightClick(), ToItem(PLACE_VERTEX), *click()])
+    window = sheet.place_window
+    assert window is not None and window.isVisible() and window.focusWidget() is window.y.numerator
+    play(sheet, [Type("25\t2\t23\t2")])  # the numerator typed, its denominator is 1 until typed too
+    assert [field.text() for field in (window.y.numerator, window.y.denominator)] == ["25", "2"]
+    assert [field.text() for field in (window.x.numerator, window.x.denominator)] == ["23", "2"]
+    play(sheet, [Type("\n")])
+    assert window.message.isHidden(), window.message.text()
+    assert sheet.place_window is None
+    line = sheet.workspace.editor.cut_line
+    assert line is not None and line.last.position == sheet.workspace.editor.origin.sheet(Vec(F(23, 2), F(25, 2)))

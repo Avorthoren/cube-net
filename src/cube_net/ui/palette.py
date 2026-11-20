@@ -3,7 +3,8 @@
 
 """Colours used by the UI (docs/idea.txt; docs/plan.md, section 6.5).
 
-The README's animation shows the default look: after changing a default here, run scripts/make_readme_animation.py.
+The README's animation shows these colours (but the faces' and the grid's: its project has its own): after changing
+one here, run scripts/make_readme_animation.py.
 """
 
 from collections.abc import Sequence
