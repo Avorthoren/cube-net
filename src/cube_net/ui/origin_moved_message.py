@@ -43,12 +43,6 @@ def tell_origin_moved(parent: QWidget | None, name: str | None, coordinates: Vec
     close button all mean it)."""
     window = MessageWindow("Cube Net", origin_moved_text(name), "\n".join(coordinate_lines(coordinates)), parent=parent)
     window.text_label.setTextFormat(Qt.TextFormat.RichText)
-    regular = window.text_label.font()
-    regular.setBold(False)  # unlike other messages' text
-    window.text_label.setFont(regular)
-    words = origin_moved_text(name).replace("<sub>", "").replace("</sub>", "")  # its width without the tags
-    width = window.text_label.fontMetrics().horizontalAdvance(html.unescape(words)) + 2
-    window.text_label.setMinimumWidth(min(window.text_label.maximumWidth(), width))
     font = hint_font()
     font.setPointSizeF(window.details_label.font().pointSizeF())  # the hint's letters (fixed width), the text's size
     window.details_label.setFont(font)

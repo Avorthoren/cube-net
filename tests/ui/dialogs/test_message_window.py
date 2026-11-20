@@ -130,3 +130,7 @@ def test_rich_text_is_as_wide_as_its_words_without_the_tags(qtbot: QtBot) -> Non
     qtbot.addWidget(rich)
     qtbot.addWidget(plain)
     assert rich.text_label.minimumWidth() == plain.text_label.minimumWidth()
+
+
+def test_the_text_is_regular(question: Question) -> None:
+    assert not question.window.text_label.font().bold()

@@ -25,7 +25,6 @@ def test_says_the_hints_lines_and_ok_closes_it(qtbot: QtBot) -> None:
         window = QApplication.activeModalWidget()
         assert isinstance(window, MessageWindow)
         seen.append((window.text(), window.informativeText()))
-        assert not window.text_label.font().bold()  # regular, unlike other messages
         assert window.text_label.textFormat() is Qt.TextFormat.RichText
         window.buttons()[0].click()
 

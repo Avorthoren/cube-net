@@ -4,8 +4,8 @@
 """What validating a template says (docs/template_idea.txt, Validation): a `ValidationFailure` in words, in the user's
 language. Lists read like "A-CT, AS-QC and Z-R"; cuts and their folds like "A1-B1 and A1-B3; S2-Q3 and S1-Q1, S3-Q5";
 folds named the same like "A1-B1 and A2-B2; S1-Q1, S2-Q3 and S3-Q2"; faces as squares of their colours. Vertex
-indices are subscripts, as on the sheet (A<sub>1</sub>-B<sub>1</sub>): a message that has them, or squares, is rich
-text."""
+indices are subscripts, as on the sheet (A<sub>1</sub>-B<sub>1</sub>), and a segment's name is kept on one line: a
+message that has indices, or squares, is rich text."""
 
 import re
 from collections.abc import Sequence
@@ -27,6 +27,9 @@ NO_PROBLEMS = "No problems found."
 # A vertex's label in a name: its name (1 or 2 capital letters), then its index.
 LABEL = re.compile(r"\b([A-Z]{1,2})([0-9]+)\b")
 
+# The hyphen between a segment's ends: a line never breaks at it.
+NON_BREAKING_HYPHEN = "\u2011"
+
 
 def no_problems_text() -> str:
     return tr(NO_PROBLEMS)
@@ -47,6 +50,12 @@ def subscripted(text: str) -> str:
     """Every label in a name ("A1-GF12") with its index a subscript, in rich text ("A<sub>1</sub>-GF<sub>12</sub>");
     names without indices ("A-CT") as they are. Names have nothing else that HTML would take."""
     return LABEL.sub(r"\1<sub>\2</sub>", text)
+
+
+def shown_name(text: str) -> str:
+    """A name as a message shows it: its indices subscripts, kept on one line (its hyphen a non-breaking one: Qt's
+    labels don't keep <nobr> or white-space: nowrap together)."""
+    return subscripted(text).replace("-", NON_BREAKING_HYPHEN)
 
 
 def color_square(color: str) -> str:
@@ -72,8 +81,8 @@ def groups_listed(groups: Sequence[Sequence[str]]) -> str:
 
 def failure_text(failure: ValidationFailure) -> str:
     """The message for a failed check (the last one's is a question: see `REINDEX`)."""
-    names = [subscripted(n) for n in failure.names]
-    groups = [[subscripted(n) for n in g] for g in failure.groups]
+    names = [shown_name(n) for n in failure.names]
+    groups = [[shown_name(n) for n in g] for g in failure.groups]
     many = len(names) > 1 or len(groups) > 1
     match failure.problem:
         case ValidationProblem.NO_COLOR:
