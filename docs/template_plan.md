@@ -596,8 +596,9 @@ face, to a vertex.
   vertex; Ctrl+click deletes a fold vertex or a fold segment.
 - **Deleting:** a loop vertex: its two sides become one (as now). A fold vertex between two segments: they become
   one, as a loop vertex's sides do (refused, flashing, where that one would break the rules); so a vertex inserted in a
-  fold and deleted again gives the fold back (2026-11-20; at first all its segments went). A fold vertex where more
-  segments meet: the segments at it go. A segment: it goes. Then, each time, every segment left hanging (an end at a fold vertex that no other segment reaches) goes too,
+  fold and deleted again gives the fold back (2026-11-20; at first all its segments went). Where that one would lie
+  on a fold or a side of the loop (the face between them closes up to nothing), the segments go instead, as deleting
+  one of them would have it. A fold vertex where more segments meet: the segments at it go. A segment: it goes. Then, each time, every segment left hanging (an end at a fold vertex that no other segment reaches) goes too,
   and so on; fold vertices without segments go. The faces a deleted segment divided merge, in the colour of the face on
   its left (seen from where it was drawn), as now.
 - **File:** template files get the fold vertices (`"fold_vertices"`); folds stay pairs of vertex ids. Templates saved

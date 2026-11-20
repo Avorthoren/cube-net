@@ -353,3 +353,25 @@ def test_deleting_a_vertex_may_take_a_face_away() -> None:
     assert editor.add_fold(1, 3) is None and len(editor.template.faces) == 2
     assert editor.delete_vertex(2) is None
     assert editor.template.folds == () and len(editor.template.faces) == 1 and len(editor.template.vertices) == 7
+
+
+def test_deleting_a_bend_beside_a_fold_with_the_same_ends() -> None:
+    """A line from 1 through a point to 4, beside the fold 1-4: its vertex deleted, joined it would lie on that fold
+    (the face between closes up to nothing), so the line goes, as deleting one of its segments would have it
+    (2026-11-20: it was refused)."""
+    editor = drawn(PILLOW)
+    assert editor.add_fold(1, 4) is None
+    assert editor.add_fold_line(1, [Vec(F(23, 2), F(21, 2))], 4) is None
+    assert len(editor.template.faces) == 3
+    assert editor.delete_vertex(editor.template.fold_vertices[0].id) is None
+    assert editor.template.folds == (Fold(1, 4),) and editor.template.fold_vertices == ()
+    assert len(editor.template.faces) == 2
+
+
+def test_deleting_a_bend_beside_a_side_of_the_loop() -> None:
+    """A line from 1 through a point to 2, its neighbour along the loop: joined, it would lie on the loop's side."""
+    editor = drawn(PILLOW)
+    assert editor.add_fold_line(1, [Vec(F(23, 2), F(41, 4))], 2) is None
+    assert len(editor.template.faces) == 2
+    assert editor.delete_vertex(editor.template.fold_vertices[0].id) is None
+    assert editor.template.folds == () and len(editor.template.faces) == 1

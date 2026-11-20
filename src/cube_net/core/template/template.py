@@ -273,14 +273,19 @@ class Template:
     def without_vertex(self, vertex_id: int) -> Template:
         """The loop without a vertex (its two sides become one), and without the folds that end at it (and those left
         hanging then), and without a face it leaves with nothing (two corners: its fold goes too). A fold vertex
-        between two segments: they become one, as the loop's sides do (`with_fold_vertex_joined`); one where more meet:
-        without the folds at it, and those left hanging."""
+        between two segments: they become one, as the loop's sides do (`with_fold_vertex_joined`), unless that one would
+        lie on a fold or a side of the loop (the face between them would close up to nothing); otherwise, and where
+        more segments meet: without the folds at it, and those left hanging."""
         if self.hole_of(vertex_id) is not None:
             from cube_net.core.template.holes import without_hole_vertex
 
             return without_hole_vertex(self, vertex_id)
         if self.is_fold_vertex(vertex_id) and len(self.folds_at(vertex_id)) == 2:
-            return self.with_fold_vertex_joined(vertex_id)
+            a, b = (f.start if f.end == vertex_id else f.end for f in self.folds_at(vertex_id))
+            if self.find_fold(a, b) is None and not self.are_neighbours(a, b):
+                return self.with_fold_vertex_joined(vertex_id)
+            # Joined, they'd lie on a fold or a side of the loop: the face between closes up to nothing. So the
+            # segments go (as deleting one of them would have it: the rest is left hanging).
         template = self
         for fold in self.folds_at(vertex_id):
             if fold in template.folds:

@@ -135,11 +135,10 @@ class TemplateEditor:
         if self.template.is_fold_vertex(vertex_id):
             folds = self.template.folds_at(vertex_id)
             after = self.template.without_vertex(vertex_id)
-            if len(folds) == 2:  # its two segments become one: where that one goes is checked as a new fold's
-                merged = next(f for f in after.folds if f not in self.template.folds)
-                problem = fold_problem(self.template, merged.start, merged.end) or check(
-                    after, [(merged.start, merged.end)]
-                )
+            merged = [f for f in after.folds if f not in self.template.folds]
+            if len(folds) == 2 and merged:  # its two segments became one: where it goes is checked as a new fold's
+                (fold,) = merged
+                problem = fold_problem(self.template, fold.start, fold.end) or check(after, [(fold.start, fold.end)])
                 if problem is not None:
                     return problem
             return self._recorded(ActionKind.DELETE_VERTEX, after)
