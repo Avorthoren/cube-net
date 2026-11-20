@@ -8,6 +8,7 @@ What's new in every version of Cube Net. While working, write the changes under 
  - Style settings are not global but per project now
  - Cut lines can go outside the net now
  - Emergency project restoration implemented (for cases when application bug damaged the project)
+ - Coordinates inputs improved: denominator is set to 1 when numerator is edited
 
 ## 1.2.0 (2026-11-15)
  - Exact value of bounding rectangle area added to the hint

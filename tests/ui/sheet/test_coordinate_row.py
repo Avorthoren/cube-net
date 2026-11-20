@@ -37,3 +37,21 @@ def test_typed_or_not(qtbot: QtBot) -> None:
     row = make(qtbot, F(1))
     row.set_typed(False)
     assert not row.numerator.isEnabled() and not row.denominator.isEnabled()
+
+
+def test_every_edit_of_the_numerator_makes_the_denominator_1(qtbot: QtBot) -> None:
+    row = make(qtbot, F(-1, 3))
+    row.numerator.setFocus()
+    qtbot.keyClick(row.numerator, "5")
+    assert (row.numerator.text(), row.denominator.text()) == ("-15", "1") and row.value() == -15
+    row.denominator.setText("4")
+    qtbot.keyClick(row.numerator, "\b")  # Backspace
+    assert (row.numerator.text(), row.denominator.text()) == ("-1", "1")
+
+
+def test_the_program_setting_it_or_the_denominator_edited_dont(qtbot: QtBot) -> None:
+    row = make(qtbot, F(1))
+    row.set_value(F(7, 2))
+    assert row.denominator.text() == "2"
+    qtbot.keyClick(row.denominator, "0")
+    assert (row.numerator.text(), row.denominator.text()) == ("7", "20")
