@@ -375,3 +375,14 @@ def test_deleting_a_bend_beside_a_side_of_the_loop() -> None:
     assert len(editor.template.faces) == 2
     assert editor.delete_vertex(editor.template.fold_vertices[0].id) is None
     assert editor.template.folds == () and len(editor.template.faces) == 1
+
+
+def test_deleting_what_held_a_loop_of_folds_deletes_the_loop() -> None:
+    """A triangle hanging from the loop by a line's two end segments: one deleted, the other has one face on both sides
+    and holds what touches the loop nowhere else, so it goes, and the triangle, in the same action (2026-11-20)."""
+    editor = drawn([Vec(0, 0), Vec(10, 0), Vec(10, 10), Vec(0, 10)])
+    assert editor.add_fold_line(0, [Vec(2, 2), Vec(4, 2), Vec(3, 4)], 3) is None
+    assert editor.add_fold(6, 4) is None
+    assert editor.delete_fold(Fold(0, 4)) is None
+    assert editor.template.folds == () and editor.template.fold_vertices == () and len(editor.template.faces) == 1
+    assert editor.undo() and len(editor.template.folds) == 5 and len(editor.template.faces) == 3

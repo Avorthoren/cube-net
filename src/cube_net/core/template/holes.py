@@ -73,9 +73,9 @@ def without_hole_vertex(template: Template, vertex_id: int) -> Template:
     return _refaced(after, template)
 
 
-def with_fold_line_among_holes(template: Template, start: int, points: Sequence[Vec], end: int) -> Template:
-    """`Template.with_fold_line` where there are holes: the faces worked out again (both sides keep the face's
-    colour)."""
+def with_fold_line_refaced(template: Template, start: int, points: Sequence[Vec], end: int) -> Template:
+    """`Template.with_fold_line` where there are holes, or where the face it divides touches itself: the faces worked
+    out again (both sides keep the face's colour)."""
     ids = list(range(template.next_id, template.next_id + len(points)))
     chain = [start, *ids, end]
     after = replace(
@@ -87,29 +87,63 @@ def with_fold_line_among_holes(template: Template, start: int, points: Sequence[
     return _refaced(after, template)
 
 
-def without_fold_among_holes(template: Template, fold: Fold) -> Template:
-    """`Template.without_fold` where there are holes: the merged face takes the colour of the one on the fold's left."""
+def without_fold_refaced(template: Template, fold: Fold) -> Template:
+    """`Template.without_fold` where there are holes, or where the fold has one face on both sides (what's beyond it
+    then floats, and goes): the faces worked out again, the merged face in the colour of the one on the fold's left."""
     left = next((f for f in template.faces if f.has_side(fold.start, fold.end)), None)
     after = _without_hanging(replace(template, folds=tuple(f for f in template.folds if f != fold)))
     return _refaced(after, template, prefer=left)
 
 
 def _without_hanging(template: Template) -> Template:
-    """Without fold segments left hanging (one after another) and fold vertices without segments (faces aside)."""
-    folds = list(template.folds)
-    fold_ids = {v.id for v in template.fold_vertices}
-    while True:
-        degree: dict[int, int] = {}
-        for f in folds:
-            for v in (f.start, f.end):
-                degree[v] = degree.get(v, 0) + 1
-        hanging = next((f for f in folds if any(v in fold_ids and degree[v] == 1 for v in (f.start, f.end))), None)
-        if hanging is None:
-            break
-        folds.remove(hanging)
+    """Only the folds that `attached` keeps, and the fold vertices they reach (faces aside)."""
+    folds = attached(template)
     used = {v for f in folds for v in (f.start, f.end)}
     kept = tuple(v for v in template.fold_vertices if v.id in used)
     return replace(template, folds=tuple(folds), fold_vertices=kept)
+
+
+def attached(template: Template) -> list[Fold]:
+    """The folds that stay after a deletion (docs/template_plan.md §8.4): without the parts that reach neither the loop
+    nor a hole. Such a part either floats inside a face, touching nothing but itself, or hangs on by one segment (a
+    segment hanging from a vertex, or a loop of folds and the segment it hangs on by): the face on both sides of that
+    segment is the same, so it can't fold. A deletion leaves them so (drawing always starts at a vertex that's there),
+    and they go, one after another, with whatever hangs on them."""
+    anchors = {v.id for v in template.vertices} | {v.id for h in template.holes for v in h.vertices}
+    folds = list(template.folds)
+    while True:
+        part = _cut_off(folds, anchors)
+        if not part:
+            return folds
+        folds = [f for f in folds if f not in part]
+
+
+def _cut_off(folds: list[Fold], anchors: set[int]) -> set[Fold]:
+    """A part of `folds` that doesn't reach `anchors`: a floating one, or one and the segment it hangs on by (empty if
+    there's none)."""
+    for fold in folds:
+        reach = _reached(folds, fold.start)
+        if not reach & anchors:
+            return {f for f in folds if f.start in reach}
+        rest = [f for f in folds if f != fold]
+        for end in (fold.start, fold.end):
+            reach = _reached(rest, end)
+            if not reach & anchors:
+                return {fold} | {f for f in rest if f.start in reach}
+    return set()
+
+
+def _reached(folds: list[Fold], start: int) -> set[int]:
+    """The vertices `start` reaches through `folds` (itself included)."""
+    reached = {start}
+    grown = True
+    while grown:
+        grown = False
+        for f in folds:
+            if (f.start in reached) != (f.end in reached):
+                reached.update((f.start, f.end))
+                grown = True
+    return reached
 
 
 def _cut_folds(template: Template, index: int) -> Template:
@@ -205,7 +239,11 @@ def faces_from_graph(template: Template) -> list[tuple[tuple[int, ...], list[tup
         (outer if area > 0 else inner).append(tuple(cycle))
     result: list[tuple[tuple[int, ...], list[tuple[int, ...]]]] = [(c, []) for c in outer]
     for island in inner:
-        p = template.position(island[0])
+        # A point just to the left of its first side: outside it, in the face around it (a point of the island itself
+        # is in the faces inside it too: the smallest of them would take it as its own hole).
+        side_start, side_end = template.position(island[0]), template.position(island[1])
+        along = side_end - side_start
+        p = (side_start + side_end) / 2 + Vec(-along.y, along.x) * Fraction(1, 1_000_000)
         containing = [
             (signed_area(poly), i)
             for i, (c, _) in enumerate(result)

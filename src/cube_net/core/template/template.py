@@ -337,10 +337,10 @@ class Template:
     def with_fold_line(self, start: int, points: Sequence[Vec], end: int) -> Template:
         """A fold line from vertex `start` through new fold vertices at `points` to vertex `end`: it divides the face it
         goes through into two, each in that face's colour (and with its number and hatch)."""
-        if self.holes:
-            from cube_net.core.template.holes import with_fold_line_among_holes
+        from cube_net.core.template.holes import with_fold_line_refaced
 
-            return with_fold_line_among_holes(self, start, points, end)
+        if self.holes:
+            return with_fold_line_refaced(self, start, points, end)
         ids = list(range(self.next_id, self.next_id + len(points)))
         chain = [start, *ids, end]
         positions = [self.position(start), *points, self.position(end)]
@@ -351,6 +351,8 @@ class Template:
             face = next(iter(candidates), None)
         if face is None:
             raise ValueError(f"no face has both {start} and {end}")
+        if _touches_itself(face):  # which of its visits to `start` or `end` the line leaves from isn't plain
+            return with_fold_line_refaced(self, start, points, end)
         corners = list(face.corners)
         k = corners.index(start)
         corners = corners[k:] + corners[:k]  # from `start`
@@ -384,18 +386,24 @@ class Template:
         )
 
     def without_fold(self, fold: Fold) -> Template:
-        """The two faces on its sides become one, in the colour of the one on its left (seen from where it starts)."""
-        if self.holes:
-            from cube_net.core.template.holes import without_fold_among_holes
+        """The two faces on its sides become one, in the colour of the one on its left (seen from where it starts). What
+        then reaches the loop no more goes too (`holes.attached`, docs/template_plan.md §8.4). The faces are worked out
+        again from the segments, as where there are holes, unless only segments hanging from a vertex go and neither
+        face touches itself (goes through a vertex twice), where merging them is enough."""
+        from cube_net.core.template.holes import attached, without_fold_refaced
 
-            return without_fold_among_holes(self, fold)
-        left = next(f for f in self.faces if f.has_side(fold.start, fold.end))
-        right = next(f for f in self.faces if f.has_side(fold.end, fold.start))
+        left = next((f for f in self.faces if f.has_side(fold.start, fold.end)), None)
+        right = next((f for f in self.faces if f.has_side(fold.end, fold.start)), None)
+        if self.holes or left is None or right is None or left is right or _touches_itself(left, right):
+            return without_fold_refaced(self, fold)
         merged = replace(left, corners=_merge(left.corners, right.corners, fold))
         i = min(self.faces.index(left), self.faces.index(right))
         faces = [f for f in self.faces if f is not left and f is not right]
         faces.insert(i, merged)
-        return replace(self, folds=tuple(f for f in self.folds if f != fold), faces=tuple(faces))._without_hanging()
+        after = replace(self, folds=tuple(f for f in self.folds if f != fold), faces=tuple(faces))._without_hanging()
+        if set(after.folds) != set(attached(after)):  # more than hanging segments go
+            return without_fold_refaced(self, fold)
+        return after
 
     def _without_hanging(self) -> Template:
         """Without the fold segments left hanging (an end at a fold vertex no other segment reaches), one after another,
@@ -478,6 +486,12 @@ def _without_spike(face: TemplateFace, tip: int) -> TemplateFace:
             gone = {i, (i + 1) % n}
             return replace(face, corners=tuple(c for j, c in enumerate(corners) if j not in gone))
     return face
+
+
+def _touches_itself(*faces: TemplateFace) -> bool:
+    """Does any of the faces go through a vertex twice (touching itself there: a loop of folds hanging on by a vertex,
+    say)? Dividing or merging it by its corners isn't plain then."""
+    return any(len(set(face.corners)) != len(face.corners) for face in faces)
 
 
 def _merge(left: tuple[int, ...], right: tuple[int, ...], fold: Fold) -> tuple[int, ...]:

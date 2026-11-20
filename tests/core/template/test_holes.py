@@ -165,3 +165,50 @@ def test_faces_that_dont_add_up_are_never_kept(monkeypatch: pytest.MonkeyPatch) 
     before = editor.template
     assert editor.add_hole_point(Vec(1, 1)) is not None
     assert editor.template is before and editor.template.drawing_hole
+
+
+def test_a_face_is_never_its_own_hole() -> None:
+    """A triangle of folds touching nothing else (none should be left so: see `TestFloatingFolds`) is a face of its own,
+    and the hole of the face around it (2026-11-20: it was its own hole, and clicks inside reached the face around)."""
+    from dataclasses import replace
+
+    from cube_net.core.template import LoopVertex
+    from cube_net.core.template.holes import _refaced
+
+    template = holed(square(), [(6, 6), (7, 6), (7, 7), (6, 7)])
+    n = template.next_id
+    corners = [Vec(1, 1), Vec(3, 1), Vec(2, 3)]
+    floating = replace(
+        template,
+        fold_vertices=tuple(LoopVertex(n + i, p) for i, p in enumerate(corners)),
+        folds=(*template.folds, Fold(n, n + 1), Fold(n + 1, n + 2), Fold(n + 2, n)),
+        next_id=n + 3,
+    )
+    faced = _refaced(floating, template)
+    triangle = faced.face_at(Vec(2, 2))
+    around = faced.face_at(Vec(4, 8))
+    assert triangle is not None and around is not None and triangle != around
+    assert faced.faces[triangle].holes == () and set(faced.faces[around].holes[0]) == {n, n + 1, n + 2}
+
+
+def test_a_loop_of_folds_left_floating_by_its_hole_goes() -> None:
+    """A triangle held by two segments from a hole's vertices: the hole deleted, it floats, and goes."""
+    template = holed(square(), [(6, 6), (8, 6), (7, 8)])
+    at = {v.position: v.id for v in template.holes[0].vertices}
+    template = template.with_fold_line(at[Vec(6, 6)], [Vec(6, 2), Vec(8, 2), Vec(7, 4)], at[Vec(8, 6)])
+    corner = {v.position: v.id for v in template.fold_vertices}
+    template = template.with_fold_line(corner[Vec(7, 4)], [], corner[Vec(6, 2)])
+    assert len(template.faces) == 4
+    after = without_hole_vertex(template, at[Vec(6, 6)])
+    assert after.holes == () and after.folds == (Fold(1, 4),) and after.fold_vertices == ()
+    assert sorted(f.color for f in after.faces) == ["#00AA00", "#AA0000"]
+
+
+def test_a_loop_of_folds_hanging_from_a_hole_by_one_segment_goes() -> None:
+    template = holed(square(), [(6, 6), (8, 6), (7, 8)])
+    at = {v.position: v.id for v in template.holes[0].vertices}
+    template = template.with_fold_line(at[Vec(6, 6)], [Vec(6, 2), Vec(8, 2), Vec(7, 4)], at[Vec(8, 6)])
+    corner = {v.position: v.id for v in template.fold_vertices}
+    template = template.with_fold_line(corner[Vec(7, 4)], [], corner[Vec(6, 2)])
+    after = template.without_fold(Fold(at[Vec(6, 6)], corner[Vec(6, 2)]))
+    assert after.folds == (Fold(1, 4),) and after.fold_vertices == () and len(after.faces) == 2

@@ -196,3 +196,39 @@ def test_a_face_reduced_to_nothing_goes_with_its_fold() -> None:
     assert after.folds == () and [v.id for v in after.vertices] == [0, 1, 4, 5]
     (face,) = after.faces
     assert sorted(face.corners) == [0, 1, 4, 5]
+
+
+def kite() -> Template:
+    """A 10 x 10 square (ids 0..3), a line from 0 through a triangle's corners (ids 4..6) to 3, and the triangle closed
+    by a segment 6-4: it hangs from the loop by the segments 0-4 and 6-3."""
+    template = loop([Vec(0, 0), Vec(10, 0), Vec(10, 10), Vec(0, 10)]).with_face_color(0, "#AA0000")
+    return template.with_fold_line(0, [Vec(2, 2), Vec(4, 2), Vec(3, 4)], 3).with_fold_line(6, [], 4)
+
+
+class TestFoldsThatGo:
+    """After a deletion, folds that reach neither the loop nor a hole go (2026-11-20): floating ones, and ones hanging
+    on by a segment with one face on both sides (it can't fold), with that segment."""
+
+    def test_a_loop_hanging_on_by_one_segment_goes_with_it(self) -> None:
+        after = kite().without_fold(Fold(0, 4))  # 6-3 is all that holds the triangle
+        assert after.folds == () and after.fold_vertices == ()
+        (face,) = after.faces
+        assert sorted(face.corners) == [0, 1, 2, 3] and face.color == "#AA0000"
+
+    def test_and_when_the_loop_vertex_that_held_it_goes(self) -> None:
+        after = kite().without_vertex(0)
+        assert after.folds == () and after.fold_vertices == ()
+        (face,) = after.faces
+        assert sorted(face.corners) == [1, 2, 3]
+
+    def test_a_loop_hanging_on_by_a_vertex_stays(self) -> None:
+        """A triangle (ids 5, 6, 4) whose corner 4 has two segments to the loop: no segment has one face on both sides.
+        It's a face of its own, and the face around touches itself at 4 (validation has its say on that)."""
+        template = loop([Vec(0, 0), Vec(10, 0), Vec(10, 10), Vec(0, 10)]).with_fold_line(0, [Vec(4, 4)], 2)
+        template = template.with_fold_line(4, [Vec(6, 2), Vec(8, 3)], 1).with_fold(6, 4)
+        after = template.without_fold(Fold(6, 1))
+        assert {v.id for v in after.fold_vertices} == {4, 5, 6} and len(after.faces) == 3
+        triangle = after.face_at(Vec(6, 3))
+        assert triangle is not None and set(after.faces[triangle].corners) == {4, 5, 6}
+        (around,) = [f for f in after.faces if len(set(f.corners)) != len(f.corners)]
+        assert around.corners.count(4) == 2

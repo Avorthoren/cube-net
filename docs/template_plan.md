@@ -601,6 +601,14 @@ face, to a vertex.
   one of them would have it. A fold vertex where more segments meet: the segments at it go. A segment: it goes. Then, each time, every segment left hanging (an end at a fold vertex that no other segment reaches) goes too,
   and so on; fold vertices without segments go. The faces a deleted segment divided merge, in the colour of the face on
   its left (seen from where it was drawn), as now.
+- **Folds that reach no loop** (2026-11-20): after a deletion, a part of the folds that reaches neither the loop nor a
+  hole goes too, in the same action: one floating inside a face (a loop of folds left so when what held it was
+  deleted), and one hanging on by a single segment (a segment from a vertex, or a loop of folds and the segment it
+  hangs on by), with that segment: the face on both sides of it is the same, so it can't fold. Nothing can draw a line
+  that starts inside a face. A loop of folds hanging on by a vertex stays (none of its segments has one face on both
+  sides): it's a face of its own, and validation says the face around touches itself. Faces made redundant by folds
+  that do reach the loop (a face divided into pieces of different colours, all in one plane on the body) are allowed:
+  they validate, and projects of them work (only some of their edges are never really folded).
 - **File:** template files get the fold vertices (`"fold_vertices"`); folds stay pairs of vertex ids. Templates saved
   before open as they are; ones saved after can't be opened by older versions (agreed).
 
@@ -621,6 +629,16 @@ Done (§8.4):
   goes, with its fold (2026-11-19, weird_cube.nettemplate's X2 then Y2).
 - In a project, the body's vertices inside the net (with 360 degrees around them: where a fold line bends) have
   vertex circles too, as the user chose on 2026-11-19 (`NetItem`); before, only their labels showed.
+- Folds that reach no loop go (2026-11-20): `holes.attached` keeps only the folds that reach the loop or a hole
+  without hanging on by one segment (its `_cut_off` parts go one after another; hanging segments are such parts too).
+  `without_fold` works the faces out again from the segments (`holes.without_fold_refaced`, as where there are holes)
+  when more than hanging segments go, when the fold has one face on both sides, or when a face it merges touches
+  itself; `with_fold_line` does (`with_fold_line_refaced`) when the face it divides touches itself. Merging or dividing
+  such faces by their corners went through the wrong visit to the vertex: a face's outline then went round another face
+  (a triangle given a colour stayed in the old one: it was painted over). Should a floating loop be left somehow (a
+  file saved before), `faces_from_graph` gives it to the face around it as a hole, never to the face it bounds itself
+  (which took it as its own hole: clicks inside it reached the face around, and validation said the face's pieces
+  weren't glued together).
 
 ### 8.5 Holes in templates (inner loops)
 (Asked for on 2026-11-19; it does §10.1.)
