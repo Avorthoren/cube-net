@@ -86,11 +86,12 @@ already (`QT_QPA_PLATFORM=xcb python -m pytest ...` shows them). Some useful var
 python -m pytest -q tests/core
 ```
 ```bash
-python -m pytest -q tests/ui/test_main_window.py -k TestUpdates
+python -m pytest -q tests/ui/main_window/test_window_help_and_updates.py -k TestUpdates
 ```
 
-The tests mirror the sources: `tests/core/test_version.py` tests `src/cube_net/core/version.py`, and so on. A few
-of them check the project as a whole:
+The tests mirror the sources: `tests/core/test_version.py` tests `src/cube_net/core/version.py`, and so on (the main
+window's are many: they're a folder of modules by topic, `tests/ui/main_window/`). A few of them check the project as a
+whole:
 
 - `tests/ui/i18n/test_russian.py`: every text the user sees has a Russian translation (`src/cube_net/ui/i18n/russian.py`).
 - `tests/test_license.py`: every Python file starts with the copyright and license lines.
