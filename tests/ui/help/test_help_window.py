@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QLabel
+from PyQt6.QtWidgets import QApplication, QLabel
 from pytestqt.qtbot import QtBot
 
 from cube_net.ui.help.help_window import HelpWindow
@@ -279,3 +279,25 @@ def test_the_tabs_follow_the_first_paragraph_when_the_page_is_laid_out_again(qtb
     column.layout().setContentsMargins(0, 28 + 40, 0, 40)  # type: ignore[union-attr]
     qtbot.waitUntil(lambda: window.first_paragraph_top() == before + 40)
     qtbot.waitUntil(lambda: bar.mapTo(window, QPoint(0, 0)).y() == before + 40)
+
+
+def test_the_column_is_at_the_same_place_on_every_tab_scrolling_or_not(qtbot: QtBot) -> None:
+    from PyQt6.QtCore import QPoint
+
+    from cube_net.ui.help.help_tab import HelpTab
+
+    window = make(qtbot)
+
+    def lefts() -> set[int]:
+        found = set()
+        for tab, language in zip(HelpTab, window.languages, strict=True):
+            window.show_tab(tab)
+            QApplication.processEvents()
+            column = language.parentWidget()
+            assert column is not None
+            found.add(column.mapTo(window, QPoint(0, 0)).x())
+        return found
+
+    assert window.pages[HelpTab.NETWORK].verticalScrollBar().isVisible()  # type: ignore[union-attr]
+    assert not window.pages[HelpTab.TEMPLATE].verticalScrollBar().isVisible()  # type: ignore[union-attr]
+    assert len(lefts()) == 1

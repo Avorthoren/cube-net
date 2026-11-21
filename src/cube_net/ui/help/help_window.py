@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QScrollArea,
+    QStyle,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -161,6 +162,8 @@ class HelpWindow(QWidget):
         self.tabs.setDocumentMode(True)
         # Each tab's page scrolls under the tabs, which stay where they are.
         self.pages: dict[HelpTab, QScrollArea] = {}
+        # Each page's scroll area and centring layout, by its viewport (`_reserve_scroll_bar`).
+        self._page_layouts: dict[QWidget, tuple[QScrollArea, QHBoxLayout]] = {}
 
         self._start_page(self.blocks)
         self._paragraph(INTRO)
@@ -219,10 +222,24 @@ class HelpWindow(QWidget):
         self.align_tabs()  # (a method, not a lambda: Qt disconnects it when the window is gone)
 
     def eventFilter(self, a0: QObject | None, a1: QEvent | None) -> bool:
-        """The first block of text moved or changed its size: the tabs follow its first paragraph."""
-        if a1 is not None and a1.type() in (QEvent.Type.Move, QEvent.Type.Resize):
+        """The first block of text moved or changed its size: the tabs follow its first paragraph. A page's scroll bar
+        came or went: its column stays where it is."""
+        if a1 is None:
+            return False
+        if isinstance(a0, QWidget) and a0 in self._page_layouts:
+            if a1.type() == QEvent.Type.Resize:
+                self._reserve_scroll_bar(*self._page_layouts[a0])
+        elif a1.type() in (QEvent.Type.Move, QEvent.Type.Resize):
             self.align_tabs()
         return False
+
+    def _reserve_scroll_bar(self, scroll: QScrollArea, centred: QHBoxLayout) -> None:
+        """A page without its scroll bar keeps its room on the right: the column is centred in the same width on every
+        page, whether it scrolls or not."""
+        bar, style = scroll.verticalScrollBar(), scroll.style()
+        assert bar is not None and style is not None
+        extent = style.pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent, None, bar)
+        centred.setContentsMargins(0, 0, 0 if bar.isVisibleTo(scroll) else extent, 0)
 
     def align_tabs(self) -> None:
         """The tabs start where the Network page's first paragraph does (its first line's top, under the name and "How
@@ -290,6 +307,10 @@ class HelpWindow(QWidget):
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setWidgetResizable(True)
         scroll.setWidget(page)
+        viewport = scroll.viewport()
+        assert viewport is not None
+        self._page_layouts[viewport] = (scroll, centred)
+        viewport.installEventFilter(self)  # resized whenever the scroll bar comes or goes
         index = self.tabs.addTab(scroll, "")
         bind(self.tabs, lambda text, i=index: self.tabs.setTabText(i, text), title)
         self.pages[tab] = scroll
