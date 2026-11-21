@@ -4658,3 +4658,29 @@ class TestRepairingLongNumbers:
         monkeypatch.setattr("cube_net.ui.main_window.repair_project", failing)
         assert not window.open_project_from(path)
         assert told == ["Unexpected error during project repairment."] and window.project_path is None
+
+    def test_a_template_repaired_when_the_user_wants(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from tests.core.project.test_template_repair import HAIR, edited
+
+        from cube_net.core.geometry import Vec
+        from cube_net.core.project import save_template
+        from cube_net.core.project.builtin_templates import cube_with_a_hole
+
+        corner = cube_with_a_hole().state.template.vertices[0]
+        path = tmp_path / "long.nettemplate"
+        save_template(edited({corner.id: Vec(HAIR, 0)}), path)
+        window = self.make(qtbot, tmp_path)
+        asked: list[str] = []
+        told: list[str] = []
+        monkeypatch.setattr("cube_net.ui.main_window.ask_yes_no", lambda _p, text, *_: asked.append(text) or True)
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda _p, _t, text, **_: told.append(text))
+        assert window.open_project_from(path)
+        assert len(asked) == 1 and asked[0].endswith(
+            'move "bad" vertices in closest appropriate positions? Caution: this will wipe out undo/redo history.'
+        )
+        assert "body edges" not in asked[0] and str(corner.label)[0] in asked[0]
+        assert told and told[0].startswith("Automatic repairment completed.")
+        assert window.in_template_mode and window.template_mode.is_dirty
+        assert window.template_mode.editor.template == cube_with_a_hole().state.template

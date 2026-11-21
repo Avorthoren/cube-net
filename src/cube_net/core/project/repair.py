@@ -50,12 +50,14 @@ def needs_repair(project: Project) -> bool:
 
 
 def vertex_names(net: Net, labels: PointLabels, vertices: list[NetVertex]) -> list[str]:
-    """The vertices' names ("A1", "BF3"), in the order of the names (a vertex without one: its position)."""
+    """The vertices' names ("A1", "BF3"), in the order of the names (a vertex without one: where it is, "(1.500,
+    3.667)")."""
     names = vertex_labels(net, labels)
     found = []
     for vertex in vertices:
         label = names.get(vertex)
-        found.append(f"{label.name}{label.index}" if label is not None else f"({vertex.position})")
+        p = vertex.position
+        found.append(f"{label.name}{label.index}" if label is not None else f"({float(p.x):.3f}, {float(p.y):.3f})")
     return sorted(set(found))
 
 

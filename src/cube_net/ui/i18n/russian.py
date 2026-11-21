@@ -75,7 +75,15 @@ RUSSIAN: dict[str, str] = {
         "(вершины на рёбрах тела будут перемещены вдоль этих рёбер)? Внимание: это сотрёт историю отмены и повтора, "
         "любой незаконченный разрез и неутверждённую перестановку."
     ),
+    (
+        'Do you want to apply automatic fix that will move "bad" vertices in closest appropriate positions? Caution: '
+        "this will wipe out undo/redo history."
+    ): (
+        "Применить автоматическое исправление, которое переместит «плохие» вершины в ближайшие подходящие положения? "
+        "Внимание: это сотрёт историю отмены и повтора."
+    ),
     "Unexpected error during project repairment.": "Непредвиденная ошибка при исправлении проекта.",
+    "Unexpected error during template repairment.": "Непредвиденная ошибка при исправлении шаблона.",
     "Automatic repairment completed.": "Автоматическое исправление завершено.",
     "Vertices {names} were adjusted.": "Вершины {names} были скорректированы.",
     # A number too long (ui/too_long_message.py).

@@ -19,15 +19,26 @@ REPAIR_QUESTION = (
     "body edges will be moved along those edges)? Caution: this will wipe out undo/redo history, any unfinished cut "
     "or unapproved rearrangement."
 )
+TEMPLATE_REPAIR_QUESTION = (
+    'Do you want to apply automatic fix that will move "bad" vertices in closest appropriate positions? Caution: this '
+    "will wipe out undo/redo history."
+)
 REPAIR_FAILED = "Unexpected error during project repairment."
+TEMPLATE_REPAIR_FAILED = "Unexpected error during template repairment."
 REPAIRED = "Automatic repairment completed."
 ADJUSTED = "Vertices {names} were adjusted."
 
 
 def too_long_question(names: Sequence[str]) -> str:
-    """The question (rich text: the names may have subscripts), for the vertices `names`."""
+    """The question about a project (rich text: the names may have subscripts), for the vertices `names`."""
     too_long = tr(TOO_LONG, max=MAX_NUMBER_DIGITS, names=", ".join(names))
     return "<br>".join([tr(UNABLE_TO_OPEN), too_long, tr(REPAIR_QUESTION)])
+
+
+def template_too_long_question(names: Sequence[str]) -> str:
+    """The question about a template: it has no body edges, no cut and no rearrangement to speak of."""
+    too_long = tr(TOO_LONG, max=MAX_NUMBER_DIGITS, names=", ".join(names))
+    return "<br>".join([tr(UNABLE_TO_OPEN), too_long, tr(TEMPLATE_REPAIR_QUESTION)])
 
 
 def repaired_text(names: Sequence[str]) -> str:
@@ -36,3 +47,7 @@ def repaired_text(names: Sequence[str]) -> str:
 
 def repair_failed_text() -> str:
     return tr(REPAIR_FAILED)
+
+
+def template_repair_failed_text() -> str:
+    return tr(TEMPLATE_REPAIR_FAILED)
