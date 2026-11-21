@@ -9,7 +9,8 @@ actions that mean something for a template (undo, redo, save, Validate, Escape).
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import traceback
+from collections.abc import Callable, Sequence
 from fractions import Fraction
 from pathlib import Path
 
@@ -32,6 +33,8 @@ from cube_net.core.template import (
     validate,
 )
 from cube_net.ui import palette
+from cube_net.ui.crash.crash_report import CrashSection
+from cube_net.ui.crash.crash_window import show_error_report_window
 from cube_net.ui.dialogs.message_window import MessageIcon, ask_yes_no, tell
 from cube_net.ui.i18n import tr
 from cube_net.ui.session.snapshots import snapshot_text
@@ -40,7 +43,7 @@ from cube_net.ui.sheet.sheet_cursor import SheetCursor
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.style import DEFAULT_STYLE, Style
 from cube_net.ui.template.assign_vertex_window import AssignVertexWindow
-from cube_net.ui.template.template_tool import UNEXPECTED_ERROR, TemplateTool
+from cube_net.ui.template.template_tool import TemplateTool
 from cube_net.ui.template.validation_messages import failure_text, no_problems_text, reindexed_text
 
 # The template sheet.
@@ -59,6 +62,9 @@ class TemplateMode(QObject):
         super().__init__(parent)
         self._parent = parent
         self._note = note
+        # Writes an error report with these sections (and the application's own), returning its path: the main
+        # window's (`MainWindow.write_error_report`). None: none is written.
+        self.write_error_report: Callable[[Sequence[CrashSection]], Path] | None = None
         self.view = SheetView(parent)
         self.view.set_sheet(SHEET)
         self.editor = TemplateEditor()
@@ -189,11 +195,31 @@ class TemplateMode(QObject):
         self.changed.emit()
 
     def _on_unexpected(self) -> None:
-        """An action was refused because it would have corrupted the template (a bug): a session log being recorded
-        gets the template as it is (the refused action's input is in the lines before), the user a warning."""
+        """An action was refused because it would have corrupted the template (a bug): an error report is written,
+        with the template the action would have made; a session log being recorded gets the template as it is (the
+        refused action's input is in the lines before); the user is told where the report is."""
         self._note("template", "unexpected error")
         self._note("state", "snapshot", snapshot_text(self.document()))
-        tell(self._parent, "Cube Net", tr(UNEXPECTED_ERROR), icon=MessageIcon.WARNING)
+        show_error_report_window(self._error_report(), self._parent)
+
+    def _error_report(self) -> Path | None:
+        """Write the error report (None: it couldn't be written, or there's no one to write it)."""
+        if self.write_error_report is None:
+            return None
+        try:
+            return self.write_error_report([CrashSection("Refused template", self._refused_snapshot)])
+        except Exception:
+            traceback.print_exc()
+            return None
+
+    def _refused_snapshot(self) -> str:
+        """The template the refused action would have made, as a session log's snapshot line (the developer turns it
+        into a file as one: `ui.session.snapshots`)."""
+        refused = self.editor.refused
+        if refused is None:
+            return "(none)"
+        document = TemplateDocument(TemplateSnapshot(refused, self.editor.origin), History(), self.style)
+        return f"0.000 state snapshot {snapshot_text(document)}"
 
     # --- the windows --------------------------------------------------------------------------------------------------
 

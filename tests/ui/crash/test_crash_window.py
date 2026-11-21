@@ -64,3 +64,28 @@ def test_in_russian_too(qtbot: QtBot) -> None:
     window = make(qtbot)
     assert "Отчёт о сбое сохранён в:" in window.text() and "Контакты:" in window.informativeText()
     assert {b.text() for b in window.buttons()} == {"Открыть папку", "Закрыть приложение"}
+
+
+def test_the_error_reports_window_and_the_application_goes_on(qtbot: QtBot) -> None:
+    from cube_net.ui.crash.crash_window import ErrorReportWindow
+
+    window = ErrorReportWindow(PATH.with_name("error-report-20261121-120000-005-42.log"))
+    qtbot.addWidget(window)
+    lines = window.text().split("<br>")
+    assert lines[0] == (
+        "Application encountered an unexpected error and refused your action, because it would corrupt the project. "
+        "Error report saved to:"
+    )
+    assert lines[1].endswith("error-report-20261121-120000-005-42.log")
+    assert lines[2].startswith("You can contact the author of this app")
+    assert window.informativeText().startswith("Contacts:")
+    assert window.defaultButton() is window.close_button and window.close_button.text().replace("&", "") == "OK"
+
+
+def test_the_error_reports_window_when_it_could_not_be_saved(qtbot: QtBot) -> None:
+    from cube_net.ui.crash.crash_window import ErrorReportWindow
+
+    window = ErrorReportWindow(None)
+    qtbot.addWidget(window)
+    assert window.text().split("<br>")[1] == "Error report couldn't be saved."
+    assert window.open_folder_button is None

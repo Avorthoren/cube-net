@@ -46,6 +46,17 @@ RUSSIAN: dict[str, str] = {
         "Произошла непредвиденная ошибка, и приложение будет закрыто."
     ),
     "Crash report couldn't be saved.": "Не удалось сохранить отчёт о сбое.",
+    "Application encountered an unexpected error and refused your action, because it would corrupt the project.": (
+        "Приложение столкнулось с непредвиденной ошибкой и отклонило ваше действие, потому что оно повредило бы проект."
+    ),
+    (
+        "Application encountered an unexpected error and refused your action, because it would corrupt the project. "
+        "Error report saved to:"
+    ): (
+        "Приложение столкнулось с непредвиденной ошибкой и отклонило ваше действие, потому что оно повредило бы "
+        "проект. Отчёт об ошибке сохранён в:"
+    ),
+    "Error report couldn't be saved.": "Не удалось сохранить отчёт об ошибке.",
     "An unexpected error occurred, and the application has to close. Crash report saved to:": (
         "Произошла непредвиденная ошибка, и приложение будет закрыто. Отчёт о сбое сохранён в:"
     ),
@@ -480,12 +491,6 @@ RUSSIAN: dict[str, str] = {
     "{path} is a project, not a template.": "{path} — это проект, а не шаблон.",
     "Template is not valid. Open template?": "Шаблон некорректен. Открыть шаблон?",
     "Template is not valid.": "Шаблон некорректен.",
-    "Application encountered an unexpected error and refused your action, because it would corrupt the project. If "
-    "you want, you can turn on logging, reproduce the action, stop logging and contact the author providing logs.": (
-        "Приложение столкнулось с непредвиденной ошибкой и отклонило ваше действие, потому что оно повредило бы "
-        "проект. Если хотите, можете включить запись журнала, повторить действие, остановить запись и связаться с "
-        "автором, приложив журнал."
-    ),
     "Try to restore the last valid state?": "Попробовать восстановить последнее корректное состояние?",
     "Unable to restore the file. Open another?": "Не удалось восстановить файл. Открыть другой?",
     "Unable to restore the file.": "Не удалось восстановить файл.",

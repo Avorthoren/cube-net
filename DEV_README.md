@@ -66,6 +66,11 @@ starts with it, the latest ~500 lines of input (kept in memory all the time, rec
 if one was being recorded. Its first snapshot is the document open at the crash, unsaved changes included:
 `python -m cube_net.ui.session.snapshots REPORT` turns it into a file as well.
 
+An error report (`error-report-<time>-<pid>.log`) is written when a safety net refuses an action because it would have
+corrupted the project (a bug: in a template, faces that don't add up); the application goes on. It has the stack
+where it was refused instead of a traceback, and, after the state, the refused template's snapshot. That one can be
+extracted with the same command, but not opened: it's the broken template (its data is gzipped JSON).
+
 ## 2. Tests and checks
 
 From the repository's root, with the virtual environment active:

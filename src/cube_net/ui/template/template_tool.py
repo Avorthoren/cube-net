@@ -43,6 +43,7 @@ from cube_net.core.template import (
     TemplateState,
     on_the_sheet,
 )
+from cube_net.ui.crash.crash_window import REFUSED_TEXT
 from cube_net.ui.i18n import tr
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
@@ -50,12 +51,6 @@ from cube_net.ui.sheet.cursors import CursorKind
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.template.corners import owned_arcs, shared, vertex_toward
 from cube_net.ui.template.template_item import TemplateItem
-
-# What the user is told when an action was refused because it would corrupt the template: a bug of the application.
-UNEXPECTED_ERROR = (
-    "Application encountered an unexpected error and refused your action, because it would corrupt the project. If "
-    "you want, you can turn on logging, reproduce the action, stop logging and contact the author providing logs."
-)
 
 # How long a rejected segment stays black (as for cuts).
 FLASH_MS = 200
@@ -78,7 +73,7 @@ def template_problem_text(problem: TemplateProblem) -> str:
         case TemplateProblem.OUTSIDE_THE_LOOP:
             return tr("A fold would be outside the loop.")
         case TemplateProblem.UNEXPECTED:
-            return tr(UNEXPECTED_ERROR)
+            return tr(REFUSED_TEXT)  # (the error report's window says the rest)
         case _:
             return tr("The loop would touch or cross itself, or a fold.")
 

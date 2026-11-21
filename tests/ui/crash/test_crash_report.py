@@ -49,3 +49,15 @@ def test_the_environment(qapp: QApplication) -> None:
     text = environment_text(time.monotonic() - 2.5, datetime(2026, 11, 21, 12, 0, 0))
     assert f"version: {__version__} (from source)" in text
     assert "time: 2026-11-21 12:00:00" in text and "running for: 2.5 s" in text and "thread: MainThread" in text
+
+
+def test_an_error_report_where_it_was_refused_first(tmp_path: Path, qapp: QApplication) -> None:
+    from cube_net.ui.crash.crash_report import write_error_report
+
+    path = write_error_report(tmp_path, [CrashSection("Refused template", lambda: "the template")])
+    assert path.name.startswith("error-report-")
+    text = path.read_text(encoding="utf-8")
+    assert text.startswith(f"# Cube Net {__version__} error report")
+    titles = [line for line in text.splitlines() if line.startswith("## ")]
+    assert titles == ["## Stack", "## Environment", "## Refused template"]
+    assert "test_an_error_report_where_it_was_refused_first" in text  # the stack, down to who wrote it

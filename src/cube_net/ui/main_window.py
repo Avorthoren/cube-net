@@ -5,6 +5,7 @@
 
 import datetime
 import os
+from collections.abc import Sequence
 from dataclasses import replace
 from enum import Enum
 from fractions import Fraction
@@ -52,7 +53,7 @@ from cube_net.core.update_policy import due_today, offer_automatically
 from cube_net.core.version import newer
 from cube_net.ui import palette
 from cube_net.ui.app_settings import AppSettings
-from cube_net.ui.crash.crash_report import CrashSection
+from cube_net.ui.crash.crash_report import CrashSection, write_error_report
 from cube_net.ui.desktop_integration import AppImage, DesktopEntry, data_home
 from cube_net.ui.dialogs.message_window import MessageIcon, ask_yes_no, tell
 from cube_net.ui.dialogs.new_project_window import NewProjectChoice, Start, builtin_project, choose_new_project
@@ -83,6 +84,7 @@ from cube_net.ui.session.start import (
     STOPPED_BY_USER,
     WINDOW_CLOSED,
     open_session_log_folder,
+    session_log_directory,
     start_recent_input,
     start_session_recording,
     stop_session_recording,
@@ -268,6 +270,7 @@ class MainWindow(QMainWindow):
         self.sheet_view.show_initial_view(net_box)
         # A template is made on its own sheet: the window shows one view or the other (`in_template_mode`).
         self.template_mode = TemplateMode(self, self._note)
+        self.template_mode.write_error_report = self.write_error_report
         self.template_mode.view.set_max_zoom(self.settings.max_zoom)
         self.stack = QStackedWidget(self)
         self.stack.addWidget(self.sheet_view)
@@ -388,6 +391,13 @@ class MainWindow(QMainWindow):
         self._record_state(recorder)
         recorder.record_view()
         return "\n".join(lines.lines())
+
+    def write_error_report(self, sections: Sequence[CrashSection]) -> Path:
+        """An action was refused by a safety net (a bug): an error report with the application's state, then
+        `sections`, then the latest input and the session log, in the session logs' folder. Returns its path."""
+        own = self.crash_sections()
+        directory = self._session_dir if self._session_dir is not None else session_log_directory()
+        return write_error_report(directory, [*own[:1], *sections, *own[1:]])
 
     def end_recording_after_crash(self) -> None:
         """The application is about to close after a crash: the session file says so in its last line."""

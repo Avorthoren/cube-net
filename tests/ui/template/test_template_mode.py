@@ -199,14 +199,22 @@ def test_a_passed_validate_aligns_the_hatches(
     assert mode.status() is ValidationStatus.UNDEFINED
 
 
-def test_an_action_refused_by_the_safety_net(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A bug (here: working the faces out loses one) never reaches the template: the action is refused, the user is
-    warned, and a session log gets the template as it was (to reproduce it with the input logged before)."""
+def test_an_action_refused_by_the_safety_net(
+    mode: TemplateMode, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A bug (here: working the faces out loses one) never reaches the template: the action is refused, an error report
+    is written (with the template the action would have made), the user is told where it is, and a session log gets
+    the template as it was (to reproduce it with the input logged before)."""
     import cube_net.core.template.holes as holes
+    from cube_net.core.project import ProjectFileError, document_from_bytes
+    from cube_net.ui.crash.crash_report import write_error_report
+    from cube_net.ui.session.snapshots import snapshots_in
 
     notes: list[tuple[object, ...]] = []
     mode._note = lambda *fields: notes.append(fields)  # type: ignore[method-assign]
-    texts = told(monkeypatch)
+    mode.write_error_report = lambda sections: write_error_report(tmp_path, sections)
+    shown: list[Path | None] = []
+    monkeypatch.setattr("cube_net.ui.template.template_mode.show_error_report_window", lambda p, _: shown.append(p))
     real = holes.faces_from_graph
     monkeypatch.setattr(holes, "faces_from_graph", lambda t: real(t)[1:])
     mode.tool.start_hole()
@@ -214,11 +222,13 @@ def test_an_action_refused_by_the_safety_net(mode: TemplateMode, monkeypatch: py
         mode.view.left_pressed.emit(x, y)
     hole = mode.editor.template.holes[0]
     assert not hole.closed and len(hole.vertices) == 3  # the closing click refused
-    assert texts == [
-        "Application encountered an unexpected error and refused your action, because it would corrupt the project. "
-        "If you want, you can turn on logging, reproduce the action, stop logging and contact the author providing "
-        "logs."
-    ]
+    [path] = shown
+    assert path is not None and path.name.startswith("error-report-")
+    text = path.read_text(encoding="utf-8")
+    assert "## Stack" in text and "## Refused template" in text
+    [refused] = snapshots_in(path)  # what the action would have made: its file can be extracted, but not opened
+    with pytest.raises(ProjectFileError, match="isn't on exactly one face"):
+        document_from_bytes(refused)
     assert ("template", "unexpected error") in notes
     assert any(n[:2] == ("state", "snapshot") for n in notes)
     assert mode.tool.item.flash() == ()  # no flash: the warning says it

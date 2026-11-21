@@ -61,6 +61,8 @@ class TemplateEditor:
         self.template = Template() if template is None else template
         self.origin = DEFAULT_ORIGIN
         self.history: History[TemplateSnapshot] = History()
+        # The latest template the safety net refused (`_record`): what an error report shows.
+        self.refused: Template | None = None
 
     @property
     def state(self) -> TemplateState:
@@ -292,6 +294,7 @@ class TemplateEditor:
         """Make `after` the template, as an action. A safety net: a template whose faces don't add up (a bug) is never
         kept, so never saved (False: nothing changed)."""
         if after.closed and not faces_consistent(after):
+            self.refused = after
             return False
         before = self.snapshot()
         self.template = after

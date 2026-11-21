@@ -28,8 +28,13 @@ from cube_net import __version__
 from cube_net.ui.i18n import TRANSLATIONS
 from cube_net.ui.session.session_log import unique_log_path
 
-# What the reports' names start with (the session logs': "session").
+# What the reports' names start with (the session logs': "session"): a crash's, and an action's refused by a safety
+# net (it would have corrupted the project: a bug, but the application goes on).
 PREFIX = "crash-report"
+ERROR_PREFIX = "error-report"
+
+# When the application started (`time.monotonic`): this module is imported at its start.
+APP_STARTED = time.monotonic()
 
 
 @dataclass(frozen=True)
@@ -47,13 +52,38 @@ def write_crash_report(
     started: float,
     now: datetime | None = None,
 ) -> Path:
-    """Write a new report into `directory`: `error`'s traceback, then the environment (`started`: when the application
-    started, `time.monotonic`), then `sections`. Returns its path."""
-    path = unique_log_path(directory, PREFIX, now)
+    """Write a new crash report into `directory`: `error`'s traceback, then the environment (`started`: when the
+    application started, `time.monotonic`), then `sections`. Returns its path."""
+    traceback_section = CrashSection("Traceback", lambda: "".join(traceback.format_exception(*error)))
+    return write_report(directory, PREFIX, "crash report", [traceback_section, *sections], started, now)
+
+
+def write_error_report(
+    directory: Path, sections: Sequence[CrashSection], started: float = APP_STARTED, now: datetime | None = None
+) -> Path:
+    """Write a new error report into `directory`, for an action refused by a safety net: where it was refused (the
+    stack), then the environment, then `sections`. Returns its path."""
+    stack = "".join(traceback.format_stack()[:-1])
+    return write_report(
+        directory, ERROR_PREFIX, "error report", [CrashSection("Stack", lambda: stack), *sections], started, now
+    )
+
+
+def write_report(
+    directory: Path,
+    prefix: str,
+    kind: str,
+    sections: Sequence[CrashSection],
+    started: float,
+    now: datetime | None = None,
+) -> Path:
+    """Write a new report (`<prefix>-<time>-<pid>.log`) into `directory`: its first section, then the environment, then
+    the rest of `sections`. Returns its path."""
+    path = unique_log_path(directory, prefix, now)
     with path.open("w", encoding="utf-8", buffering=1) as file:
-        file.write(f"# Cube Net {__version__} crash report\n")
-        _write(file, "Traceback", "".join(traceback.format_exception(*error)))
-        everything = [CrashSection("Environment", lambda: environment_text(started, now)), *sections]
+        file.write(f"# Cube Net {__version__} {kind}\n")
+        environment = CrashSection("Environment", lambda: environment_text(started, now))
+        everything = [*sections[:1], environment, *sections[1:]]
         for section in everything:
             try:
                 text = section.text()
