@@ -9,6 +9,7 @@ from hypothesis import strategies as st
 from net_checks import assert_consistent
 
 from cube_net.core.cutting import CutLine, CutPoint, SplitNet, connected_regions, rearrange, split_net
+from cube_net.core.editor import Editor, EditorState
 from cube_net.core.geometry import Vec
 from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_edge_from, boundary_vertex_at, default_net
 
@@ -148,7 +149,7 @@ def test_random_lines_down_the_column_stay_consistent(top: F, middle: F, bottom:
     line = CutLine([CutPoint(Vec(top, 14), first), CutPoint(Vec(middle, F(25, 2))), CutPoint(Vec(bottom, 10), last)])
     split = split_net(net, line)
     assert_consistent(split.net)
-    assert len(split.net.perimeters()) == 2
+    assert len(halves(split.net)) == 2
 
 
 def cut_names(split: SplitNet, cuts: frozenset[HalfEdge]) -> set[frozenset[Vec]]:
@@ -187,3 +188,90 @@ class TestSameHalfCuts:
         line = CutLine([CutPoint(v("11.5", "14"), cut("B_1-A_1")), CutPoint(v("11.5", "10"), cut("A_3-B_3"))])
         split = split_net(net, line)
         assert split.same_half_cuts == frozenset(split.net.boundary_edges()) - split.line_edges
+
+
+# Cube with a hole's net: where its perimeter touches itself, the corner U3 of one face (sheet (49, 54)) is in the
+# middle of a cut of the face next to it (from (49, 53) to (49, 55)), and the cuts of two faces lie along each other
+# (from (49, 50) to (49, 51)).
+U3 = Vec(49, 54)
+I2 = Vec(53, 49)
+
+
+def torus_editor() -> Editor:
+    from cube_net.core.history import History
+    from cube_net.core.project.builtin_templates import cube_with_a_hole
+    from cube_net.core.project.from_template import project_from_template
+
+    project = project_from_template(cube_with_a_hole())
+    editor = Editor(project.state.net)
+    editor.load(project.state, History())
+    return editor
+
+
+def the_unit_cut_around(net: Net, p: Vec) -> HalfEdge:
+    """The cut of `net`, one unit long, with `p` in its middle (the first one, if two lie along each other)."""
+    return next(
+        he
+        for he in net.boundary_edges()
+        if (he.destination.position - he.origin.position).length_squared() == 1
+        and (he.origin.position + he.destination.position) / 2 == p
+    )
+
+
+def cut_from_vertex(editor: Editor, start: Vec, end: Vec, cut: HalfEdge) -> None:
+    vertex = next(v for v in editor.net.vertices if v.position == start)
+    editor.click(start, None, vertex=vertex)
+    editor.click(end, cut)
+    assert editor.state is EditorState.CUT_EDITING
+
+
+def approved_somehow(cut: Callable[[], Editor]) -> bool:
+    """The line `cut` makes (in a new editor each time) can be rearranged and approved: the new net is a valid one."""
+    from cube_net.core.net.validate import validate_net
+
+    split = cut().split()
+    for chosen in split.net.boundary_edges():
+        if chosen in split.line_edges or chosen in split.same_half_cuts:
+            continue
+        editor = cut()
+        ends = (chosen.origin.position, chosen.destination.position)
+        editor.glue(
+            next(
+                he
+                for he in editor.split().net.boundary_edges()
+                if (he.origin.position, he.destination.position) == ends
+            )
+        )
+        if editor.rearranged is not None and editor.rearranged.valid:
+            editor.approve()
+            validate_net(editor.net)
+            return True
+    return False
+
+
+def test_a_line_from_a_corner_in_the_middle_of_another_faces_cut() -> None:
+    end = Vec(F(154, 3), 55)  # on the face's top side, from (53, 55) to (49, 55)
+
+    def cut() -> Editor:
+        editor = torus_editor()
+        top = next(he for he in editor.net.boundary_edges() if he.origin.position == Vec(53, 55))
+        cut_from_vertex(editor, U3, end, top)
+        return editor
+
+    split = cut().split()  # (it couldn't be connected: the corner isn't on that face)
+    assert len(halves(split.net)) == 2
+    assert_consistent(split.net)
+    assert approved_somehow(cut)
+
+
+def test_a_line_ending_where_the_cuts_of_two_faces_lie_along_each_other() -> None:
+    end = Vec(49, F(101, 2))
+
+    def cut() -> Editor:
+        editor = torus_editor()
+        cut_from_vertex(editor, I2, end, the_unit_cut_around(editor.net, end))  # on the face the line doesn't cross
+        return editor
+
+    split = cut().split()  # (it couldn't be connected: the end was on the other face's cut)
+    assert len(halves(split.net)) == 2
+    assert_consistent(split.net)  # (no rearrangement of these halves is valid: they'd overlap)

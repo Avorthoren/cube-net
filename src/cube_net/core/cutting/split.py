@@ -57,8 +57,7 @@ def split_net(net: Net, line: CutLine) -> SplitNet:
         raise ValueError("the line doesn't divide the net at its end")
     current, line_edges = net, frozenset[HalfEdge]()
     for k, piece in enumerate(real.piece_lines()):
-        if k > 0:
-            piece = _relocated(current, piece)
+        piece = _relocated(current, piece) if k > 0 else _ends_in_their_regions(current, piece)
         copy = current.copy()
         stops = _create_stops(current, copy, piece)
         forward = [_connect(copy.net, a, b) for a, b in pairwise(stops)]
@@ -88,6 +87,38 @@ def _relocated(net: Net, piece: CutLine) -> CutLine:
         else:
             raise ValueError(f"no cut of the net at {p} for a piece of the line")
     return CutLine(points)
+
+
+def _ends_in_their_regions(net: Net, piece: CutLine) -> CutLine:
+    """The piece with each end on the region it goes into. Where the perimeter touches itself, a corner of one region
+    can lie in the middle of a cut of another, or cuts of two regions can lie along each other: an end there may
+    have been found on the other region. It's moved to that region's vertex or cut at the same place."""
+    points = list(piece.points)
+    for end, toward in ((0, 1), (len(points) - 1, len(points) - 2)):
+        point = points[end]
+        p = point.position
+        region = region_at(net, p + (points[toward].position - p) * Fraction(1, 1_000_000))
+        if region is None:
+            continue
+        cycle = Net.region_cycle(region)
+        if point.vertex is not None:
+            if any(he.origin is point.vertex for he in cycle):
+                continue
+        elif point.edge is None or point.edge.region is region:
+            continue
+        cuts = [he for he in cycle if he.kind is EdgeKind.BOUNDARY]
+        corner = next((he for he in cuts if he.origin.position == p), None)
+        if corner is not None:
+            points[end] = CutPoint(p, corner, corner.origin)
+        elif (cut := next((he for he in cuts if _inside(p, he)), None)) is not None:
+            points[end] = CutPoint(p, cut)
+    return CutLine(points)
+
+
+def _inside(p: Vec, he: HalfEdge) -> bool:
+    """Is `p` on `he`, but not at either of its ends?"""
+    a, b = he.origin.position, he.destination.position
+    return p != a and p != b and on_segment(p, a, b)
 
 
 def _same_half_cuts(net: Net, line_edges: frozenset[HalfEdge]) -> frozenset[HalfEdge]:
