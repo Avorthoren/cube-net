@@ -275,3 +275,36 @@ def test_a_line_ending_where_the_cuts_of_two_faces_lie_along_each_other() -> Non
     split = cut().split()  # (it couldn't be connected: the end was on the other face's cut)
     assert len(halves(split.net)) == 2
     assert_consistent(split.net)  # (no rearrangement of these halves is valid: they'd overlap)
+
+
+def a_line(*clicks: Vec) -> Callable[[], Editor]:
+    """A line clicked on Cube with a hole's net (in a new editor each time): at its vertices, or at points inside."""
+
+    def cut() -> Editor:
+        editor = torus_editor()
+        for click in clicks:
+            vertex = next((v for v in editor.net.vertices if v.position == click), None)
+            editor.click(click, None, vertex=vertex)
+        assert editor.state is EditorState.CUT_EDITING
+        return editor
+
+    return cut
+
+
+def test_a_line_out_of_the_net_and_back_in_through_a_vertex() -> None:
+    """From the hole's corner I1 out of the net, back in through the perimeter's vertex E1, where only a fold leaves
+    into the face the line goes on into (its cut there ends at E1)."""
+    cut = a_line(Vec(43, 61), Vec(44, 54), Vec(49, 56))
+    assert len(cut().cut_line.points) == 3  # type: ignore[union-attr]
+    split = cut().split()  # (its second piece couldn't be placed)
+    assert len(halves(split.net)) == 2
+    assert_consistent(split.net)
+    assert approved_somehow(cut)
+
+
+def test_a_later_piece_ending_at_a_corner_in_the_middle_of_another_faces_cut() -> None:
+    """The line's last piece ends at the corner (49, 50) of one face, in the middle of the cut of the face it's in."""
+    cut = a_line(Vec(43, 59), Vec(F(105, 2), 49), Vec(49, 50))
+    split = cut().split()
+    assert len(halves(split.net)) == 2
+    assert_consistent(split.net)

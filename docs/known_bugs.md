@@ -7,14 +7,6 @@ it), vertices by their names. Remove an entry once its fix is in.
 
 Each one ends in the crash report window, and the app closes (unsaved work is lost).
 
-### A cut through a vertex in the middle (Cube with a hole)
-
-1. File → New → Cube with a hole.
-2. Click vertex I₁ (−1, 11), then vertex E₁ (0, 4), then the point (5, 6) inside a face.
-
-`ValueError: no cut of the net at … for a piece of the line`, in `cutting/split.py` `_relocated` (the cut preview
-and the cursor update). Found 2026-11-21.
-
 ### Approving some cuts from the hole's corner (Cube with a hole)
 
 1. File → New → Cube with a hole.

@@ -21,7 +21,7 @@ from cube_net.core.cutting.images import counterpart_image
 from cube_net.core.cutting.pieces import pieces, region_at
 from cube_net.core.cutting.real_cut import real_cut
 from cube_net.core.geometry import Vec, on_segment, polygon_contains
-from cube_net.core.net import EdgeKind, HalfEdge, Net, NetCopy, NetVertex, Region
+from cube_net.core.net import EdgeKind, HalfEdge, Net, NetCopy, NetVertex, Region, boundary_edge_from
 from cube_net.core.net.surgery import add_edge, new_half_edge, new_vertex, outgoing, rotation_from, split_edge
 
 
@@ -85,8 +85,27 @@ def _relocated(net: Net, piece: CutLine) -> CutLine:
                     points[end] = CutPoint(p, he, he.origin) if at_vertex else CutPoint(p, he)
                     break
         else:
-            raise ValueError(f"no cut of the net at {p} for a piece of the line")
+            found = _point_of_region_at(net, p, step) if at_vertex else None
+            if found is None:
+                raise ValueError(f"no cut of the net at {p} for a piece of the line")
+            points[end] = found
     return CutLine(points)
+
+
+def _point_of_region_at(net: Net, p: Vec, step: Vec) -> CutPoint | None:
+    """The line's point at `p`, on the region `step` (just after `p`, along the line) is in: the region's vertex at
+    `p`, or a point of its cut through `p`. That's needed where no cut of the region starts at `p`: the region's
+    cuts there end at `p`, folds leaving it (a line through a vertex of the perimeter), or `p` is a corner of another
+    region in the middle of this one's cut (where the perimeter touches itself)."""
+    region = region_at(net, step)
+    if region is None:
+        return None
+    cycle = Net.region_cycle(region)
+    vertex = next((he.origin for he in cycle if he.origin.position == p), None)
+    if vertex is not None:
+        return CutPoint(p, boundary_edge_from(net, vertex), vertex)
+    cut = next((he for he in cycle if he.kind is EdgeKind.BOUNDARY and _inside(p, he)), None)
+    return None if cut is None else CutPoint(p, cut)
 
 
 def _ends_in_their_regions(net: Net, piece: CutLine) -> CutLine:
@@ -97,7 +116,8 @@ def _ends_in_their_regions(net: Net, piece: CutLine) -> CutLine:
     for end, toward in ((0, 1), (len(points) - 1, len(points) - 2)):
         point = points[end]
         p = point.position
-        region = region_at(net, p + (points[toward].position - p) * Fraction(1, 1_000_000))
+        step = p + (points[toward].position - p) * Fraction(1, 1_000_000)
+        region = region_at(net, step)
         if region is None:
             continue
         cycle = Net.region_cycle(region)
@@ -106,12 +126,9 @@ def _ends_in_their_regions(net: Net, piece: CutLine) -> CutLine:
                 continue
         elif point.edge is None or point.edge.region is region:
             continue
-        cuts = [he for he in cycle if he.kind is EdgeKind.BOUNDARY]
-        corner = next((he for he in cuts if he.origin.position == p), None)
-        if corner is not None:
-            points[end] = CutPoint(p, corner, corner.origin)
-        elif (cut := next((he for he in cuts if _inside(p, he)), None)) is not None:
-            points[end] = CutPoint(p, cut)
+        found = _point_of_region_at(net, p, step)
+        if found is not None:
+            points[end] = found
     return CutLine(points)
 
 
