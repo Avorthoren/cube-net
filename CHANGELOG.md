@@ -13,6 +13,7 @@ What's new in every version of Cube Net. While working, write the changes under 
  - Faces and dashes colorings settings can now be not whole numbers
  - Coordinates inputs improved: denominator is set to 1 when numerator is edited
  - Style settings are not global but per project now
+ - Application remembers zoom, working sheet position and window size now
  - File path added to footer
 
 ## 1.2.0 (2026-11-15)

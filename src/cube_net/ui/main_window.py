@@ -5,6 +5,7 @@
 
 import datetime
 import os
+import time
 from collections.abc import Sequence
 from dataclasses import replace
 from enum import Enum
@@ -12,7 +13,7 @@ from fractions import Fraction
 from pathlib import Path
 
 from PyQt6.QtCore import QEvent, QObject, Qt, QTimer, QUrl
-from PyQt6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence
+from PyQt6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence, QShowEvent
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
     QApplication,
@@ -109,6 +110,7 @@ from cube_net.ui.settings_panel.panel import SettingsPanel
 from cube_net.ui.sheet.bounding_item import BoundingItem
 from cube_net.ui.sheet.coordinates_text import copied_text
 from cube_net.ui.sheet.sheet_view import SheetView
+from cube_net.ui.sheet.view_place import LastView
 from cube_net.ui.sheet.workspace import Workspace
 from cube_net.ui.style import DEFAULT_STYLE, Style, apply_style
 from cube_net.ui.template.create_network_button import CreateNetworkButton
@@ -223,6 +225,10 @@ class OpeningCancelled(Exception):
     """A file wasn't opened, and the user has been told why (a repair turned down, or failed)."""
 
 
+# How long the status bar says where the session is recorded (ms).
+RECORDING_MESSAGE_MS = 15000
+
+
 class MainWindow(QMainWindow):
     """Top-level window: the sheet view in the middle, mouse coordinates in the status bar."""
 
@@ -312,6 +318,8 @@ class MainWindow(QMainWindow):
         self.save_state = SaveStateLabel(self)
         self.statusBar().addPermanentWidget(self.save_state)
         # The file being edited, on the left (taking what room the rest leaves).
+        # A message shown before the window was, and when it ends (`time.monotonic`): see `_show_message`.
+        self._message_before_shown: tuple[str, float] | None = None
         self.path_label = PathLabel(self)
         self.statusBar().addWidget(self.path_label, 1)
         # Where the mouse is over the sheet (sheet coordinates; None: it's elsewhere), for the footer.
@@ -352,7 +360,9 @@ class MainWindow(QMainWindow):
         ignore_wheel(fields, self)  # every number field and drop-down list of the window
         self._update_title()
         self._update_vertex_labels()
-        self._resize_to_screen()
+        geometry = self.settings.window_geometry
+        if geometry is None or not self.restoreGeometry(geometry):  # as it was when the app was closed last
+            self._resize_to_screen()
 
         self._session_dir = session_dir
         # The latest input, kept in memory all the time: for a crash report (`ui/crash`).
@@ -384,8 +394,27 @@ class MainWindow(QMainWindow):
         # The application starts with nothing open (no snapshot then): the project reopened, or the one started in
         # File -> New's window, gets one.
         self._record_state(recorder)
-        self.statusBar().showMessage(tr("Recording session to {path}", path=recorder.log.path), 15000)
+        self._show_message(tr("Recording session to {path}", path=recorder.log.path), RECORDING_MESSAGE_MS)
         self._update_logging_action()
+
+    def _show_message(self, text: str, ms: int) -> None:
+        """A message in the status bar for `ms` milliseconds, over the file's path. Before the window is shown, the
+        status bar can't hide the path (it hides only what's visible), so it's shown again once the window is."""
+        self.statusBar().showMessage(text, ms)
+        if not self.isVisible():
+            self._message_before_shown = (text, time.monotonic() + ms / 1000)
+
+    def showEvent(self, event: QShowEvent | None) -> None:
+        super().showEvent(event)
+        if self._message_before_shown is None:
+            return
+        text, end = self._message_before_shown
+        self._message_before_shown = None
+        left = round((end - time.monotonic()) * 1000)
+        status_bar = self.statusBar()
+        if status_bar is not None and left > 0 and status_bar.currentMessage() == text:
+            status_bar.clearMessage()  # (the same message again would change nothing)
+            status_bar.showMessage(text, left)  # now it hides the path
 
     def stop_recording(self, reason: str) -> None:
         app = QApplication.instance()
@@ -995,14 +1024,22 @@ class MainWindow(QMainWindow):
             self.ask_for_new_project()  # nothing open: as at the first start
             return
         except ProjectFileError as e:
-            outcome = self._offer_restoring(path, e)
-            if outcome is Restoring.RESTORED:
-                return
-            self.settings.last_project = None  # don't ask about it at every start from now on
-            if self.recorder is not None:
-                self.recorder.note("project", "reopening failed", path)
-            failed = outcome is Restoring.FAILED
-            self._offer_another_project(tr("Unable to restore the file.") if failed else error_text(e))
+            self._reopening_failed(path, e)
+            return
+        last = self.settings.last_view
+        if last is not None and last.path == path:  # (another file is shown as it always is)
+            (self.template_mode.view if self.in_template_mode else self.sheet_view).show_place(last.place)
+
+    def _reopening_failed(self, path: Path, e: ProjectFileError) -> None:
+        """The last project couldn't be reopened: restoring it is offered, or another one."""
+        outcome = self._offer_restoring(path, e)
+        if outcome is Restoring.RESTORED:
+            return
+        self.settings.last_project = None  # don't ask about it at every start from now on
+        if self.recorder is not None:
+            self.recorder.note("project", "reopening failed", path)
+        failed = outcome is Restoring.FAILED
+        self._offer_another_project(tr("Unable to restore the file.") if failed else error_text(e))
 
     # --- updates -------------------------------------------------------------------------------------------------
 
@@ -1479,9 +1516,17 @@ class MainWindow(QMainWindow):
             return
         self.cut_tool.cancel_drag()  # the question below would leave the mouse release unnoticed
         if self._leaving_decided or self._confirm_leaving_project():
+            self._remember_view()
+            self.settings.window_geometry = self.saveGeometry()  # its size, place and whether it's maximized
             event.accept()
         else:
             event.ignore()
+
+    def _remember_view(self) -> None:
+        """Where the view is, for the next start (`reopen_last_project`): kept with the file shown (none: nothing)."""
+        path = None if self.nothing_open else self._document_path()
+        view = self.template_mode.view if self.in_template_mode else self.sheet_view
+        self.settings.last_view = None if path is None else LastView(path, view.place())
 
     def _create_menus(self) -> None:
         menu_bar = self.menuBar()

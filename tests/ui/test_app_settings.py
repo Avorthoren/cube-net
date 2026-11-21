@@ -41,6 +41,35 @@ def test_last_project(tmp_path: Path) -> None:
     assert settings_at(tmp_path / "s.ini").last_project is None
 
 
+def test_last_view(tmp_path: Path) -> None:
+    from cube_net.ui.sheet.view_place import LastView, ViewPlace
+
+    s = settings_at(tmp_path / "s.ini")
+    assert s.last_view is None
+    view = LastView(tmp_path / "cube.cubenet", ViewPlace(11.25, -3.0625, 123.456))
+    s.last_view = view
+    assert settings_at(tmp_path / "s.ini").last_view == view
+    s.last_view = None
+    assert settings_at(tmp_path / "s.ini").last_view is None
+
+
+@pytest.mark.parametrize("stored", ["", "1 2", "a b c", "1 2 0", "1 2 -3", "nan 2 3", "1 inf 3"])
+def test_a_last_view_stored_wrong_is_none(tmp_path: Path, stored: str) -> None:
+    s = settings_at(tmp_path / "s.ini")
+    s._settings.setValue("project/last_view_file", str(tmp_path / "cube.cubenet"))
+    s._settings.setValue("project/last_view", stored)
+    assert s.last_view is None
+
+
+def test_window_geometry(tmp_path: Path) -> None:
+    from PyQt6.QtCore import QByteArray
+
+    s = settings_at(tmp_path / "s.ini")
+    assert s.window_geometry is None
+    s.window_geometry = QByteArray(b"\x01\xd9\xd0\xcb geometry")
+    assert settings_at(tmp_path / "s.ini").window_geometry == QByteArray(b"\x01\xd9\xd0\xcb geometry")
+
+
 def test_last_project_reaches_the_file_at_once(tmp_path: Path) -> None:
     s = settings_at(tmp_path / "s.ini")
     s.last_project = tmp_path / "cube.cubenet"

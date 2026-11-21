@@ -4,15 +4,17 @@
 """`AppSettings`: settings of the application as a whole (not of a project), stored with `QSettings`."""
 
 import datetime
+import math
 from dataclasses import fields, replace
 from pathlib import Path
 
-from PyQt6.QtCore import QSettings
+from PyQt6.QtCore import QByteArray, QSettings
 
 from cube_net.core.body import CUBE
 from cube_net.core.body.body import COLOR_PATTERN
 from cube_net.core.style import stored_name
 from cube_net.ui.i18n.language import Language
+from cube_net.ui.sheet.view_place import LastView, ViewPlace
 from cube_net.ui.sheet.zoom import DEFAULT_MAX_ZOOM, MAX_ZOOM_RANGE
 from cube_net.ui.style import DEFAULT_STYLE, Style, StyleError, fitted
 
@@ -38,6 +40,9 @@ _SHOW_VERTEX_COORDINATES = "view/show_vertex_coordinates"
 _RECORD_SESSION = "debug/record_session"
 _BLINK_ON_SUCCESS = "view/blink_on_success"
 _LAST_PROJECT = "project/last"
+_LAST_VIEW_FILE = "project/last_view_file"
+_LAST_VIEW = "project/last_view"
+_WINDOW_GEOMETRY = "view/window_geometry"
 _MAX_ZOOM = "view/max_zoom"
 _SETTINGS_TAB = "view/settings_tab"
 _SETTINGS_OPEN = "view/settings_open"
@@ -190,6 +195,41 @@ class AppSettings:
         else:
             self._settings.setValue(_LAST_PROJECT, str(path))
         self._settings.sync()  # it matters most when the app doesn't get to end normally
+
+    @property
+    def last_view(self) -> LastView | None:
+        """Where the view was when the app was closed last, and the file it showed. Anything wrong with what's stored
+        gives None."""
+        path = self._settings.value(_LAST_VIEW_FILE, "", type=str)
+        try:
+            x, y, scale = (float(part) for part in str(self._settings.value(_LAST_VIEW, "", type=str)).split())
+        except ValueError:
+            return None
+        if not path or not all(math.isfinite(v) for v in (x, y, scale)) or scale <= 0:
+            return None
+        return LastView(Path(path), ViewPlace(x, y, scale))
+
+    @last_view.setter
+    def last_view(self, view: LastView | None) -> None:
+        if view is None:
+            self._settings.remove(_LAST_VIEW_FILE)
+            self._settings.remove(_LAST_VIEW)
+        else:
+            place = view.place
+            self._settings.setValue(_LAST_VIEW_FILE, str(view.path))
+            self._settings.setValue(_LAST_VIEW, f"{place.x!r} {place.y!r} {place.scale!r}")
+        self._settings.sync()
+
+    @property
+    def window_geometry(self) -> QByteArray | None:
+        """The main window's size, place and state when the app was closed last (`QWidget.saveGeometry`)."""
+        value = self._settings.value(_WINDOW_GEOMETRY)
+        return value if isinstance(value, QByteArray) and not value.isEmpty() else None
+
+    @window_geometry.setter
+    def window_geometry(self, geometry: QByteArray) -> None:
+        self._settings.setValue(_WINDOW_GEOMETRY, geometry)
+        self._settings.sync()
 
     @property
     def max_zoom(self) -> int:

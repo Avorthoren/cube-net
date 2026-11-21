@@ -31,6 +31,7 @@ from cube_net.ui import palette
 from cube_net.ui.sheet import zoom
 from cube_net.ui.sheet.net_item import NetItem
 from cube_net.ui.sheet.sheet_item import SheetItem
+from cube_net.ui.sheet.view_place import ViewPlace
 from cube_net.ui.style.look import Look
 
 type HitTest = Callable[[float, float], bool]
@@ -115,6 +116,8 @@ class SheetView(QGraphicsView):
         self._shift_held = False
         self._ctrl_held = False
         self._pending_initial_view: Box | None = None
+        # A place to show once the view is shown (`show_place`).
+        self._pending_place: ViewPlace | None = None
 
         # A view that always shows this box, filling this share of it (see `show_fixed`).
         self._fixed: tuple[Box, float] | None = None
@@ -197,12 +200,35 @@ class SheetView(QGraphicsView):
         """Zoom so that the net takes 50% of the screen height and center it. Deferred until the view is shown."""
         if not self.isVisible():
             self._pending_initial_view = net
+            self._pending_place = None
             return
         self._pending_initial_view = None
         self._scale = zoom.clamp_scale(zoom.initial_scale(self._screen_height(), float(net.height)), self.zoom_limits())
         self._apply_transform()
         self.centerOn(float(net.center.x), float(net.center.y))
         self._viewport_origin = self._viewport_origin_in_window()
+
+    def place(self) -> ViewPlace:
+        """Where the view is now: the sheet point at its window's top left corner, and its zoom."""
+        origin = self._viewport_origin_in_window()
+        corner = self.to_sheet(QPointF(-origin.x(), -origin.y()))
+        return ViewPlace(corner.x(), corner.y(), self._scale)
+
+    def show_place(self, place: ViewPlace) -> None:
+        """Show `place` (from `place`, maybe at another time, in a view of another size): its point at the window's top
+        left corner, its zoom (within the limits now). Deferred until the view is shown, instead of the initial view."""
+        if not self.isVisible():
+            self._pending_initial_view = None
+            self._pending_place = place
+            return
+        self._pending_place = None
+        self._scale = zoom.clamp_scale(place.scale, self.zoom_limits())
+        self._apply_transform()
+        self.centerOn(place.x, place.y)
+        origin = self._viewport_origin_in_window()
+        at = self.from_sheet(QPointF(place.x, place.y))  # in the middle now: on to the window's corner
+        self.pan_by(at.x() + origin.x(), at.y() + origin.y())
+        self._viewport_origin = origin
 
     def show_fixed(self, box: Box, fill: float) -> None:
         """Always show `box` in the middle, as large as `fill` (0 to 1) of the view allows, whatever the zoom limits;
@@ -481,6 +507,8 @@ class SheetView(QGraphicsView):
         self._apply_fixed()
         if self._pending_initial_view is not None:
             self.show_initial_view(self._pending_initial_view)
+        if self._pending_place is not None:
+            self.show_place(self._pending_place)
 
     # --- internals --------------------------------------------------------------------------------------------------
 

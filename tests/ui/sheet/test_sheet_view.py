@@ -518,3 +518,66 @@ def test_a_view_with_its_own_look(view: SheetView, monkeypatch: pytest.MonkeyPat
     QApplication.sendEvent(viewport, move)
     assert seen == [1.5]
     assert DEFAULT_STYLE.edge_width == net_style.EDGE_WIDTH_PX
+
+
+def test_the_place_shown_again_in_another_view(view: SheetView, qtbot: QtBot) -> None:
+    view.zoom_by(1.5, QPointF(100, 100))
+    view.pan_by(37, -21)
+    place = view.place()
+    other = SheetView()
+    qtbot.addWidget(other)
+    other.resize(640, 480)  # another size: the same point in the middle, the same zoom
+    other.set_sheet(SHEET)
+    other.show_initial_view(NET)
+    other.show_place(place)  # (before it's shown: it waits, instead of the initial view)
+    other.show()
+    qtbot.waitExposed(other)
+    again = other.place()
+    assert again.scale == place.scale
+    assert abs(again.x - place.x) < 1 / place.scale and abs(again.y - place.y) < 1 / place.scale
+
+
+def test_a_place_zoomed_beyond_the_limits_is_brought_within(view: SheetView) -> None:
+    from cube_net.ui.sheet.view_place import ViewPlace
+
+    high = view.zoom_limits()[1]
+    view.show_place(ViewPlace(11.5, 12.0, high * 10))
+    assert view.scale_factor() == high
+
+
+def test_the_place_stays_when_the_view_moves_in_its_window_afterwards(qtbot: QtBot) -> None:
+    """As at a start: the place is shown, then the instrument panel left of the view gets wider (its buttons come);
+    the sheet is where it was in the window when the place was taken."""
+    from PyQt6.QtWidgets import QHBoxLayout, QWidget
+
+    def window_with(panel_px: int) -> tuple[QWidget, QWidget, SheetView]:
+        window = QWidget()
+        qtbot.addWidget(window)
+        window.resize(900, 600)
+        layout = QHBoxLayout(window)
+        layout.setContentsMargins(0, 0, 0, 0)
+        panel = QWidget()
+        panel.setFixedWidth(panel_px)
+        view = SheetView()
+        view.set_sheet(SHEET)
+        view.show_initial_view(NET)
+        layout.addWidget(panel)
+        layout.addWidget(view)
+        return window, panel, view
+
+    first, _, view = window_with(90)
+    first.show()
+    qtbot.waitExposed(first)
+    view.zoom_by(1.4, QPointF(150, 120))
+    view.pan_by(-35, 18)
+    place = view.place()
+    in_window = view.viewport().mapTo(first, view.from_sheet(QPointF(11, 12)).toPoint())
+    second, panel, again = window_with(60)
+    second.show()
+    qtbot.waitExposed(second)
+    again.show_place(place)
+    panel.setFixedWidth(90)
+    qtbot.waitUntil(
+        lambda: again.viewport().mapTo(second, QPoint(0, 0)).x() == view.viewport().mapTo(first, QPoint(0, 0)).x()
+    )
+    assert again.viewport().mapTo(second, again.from_sheet(QPointF(11, 12)).toPoint()) == in_window

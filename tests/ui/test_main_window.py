@@ -5,13 +5,13 @@ from fractions import Fraction as F
 from pathlib import Path
 
 import pytest
-from PyQt6.QtCore import QPoint, QRect, QSettings, Qt
+from PyQt6.QtCore import QPoint, QPointF, QRect, QSettings, Qt
 from PyQt6.QtWidgets import QToolBar, QWidget
 from pytestqt.qtbot import QtBot
 
 from cube_net.core.body import CUBE
 from cube_net.core.geometry import Vec
-from cube_net.core.project import project_from_bytes
+from cube_net.core.project import project_from_bytes, save_project
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.dialogs.new_project_window import NewProjectChoice, Start, builtin_project
 from cube_net.ui.main_window import (
@@ -24,6 +24,7 @@ from cube_net.ui.main_window import (
 )
 from cube_net.ui.save_changes_dialog import SaveChoice
 from cube_net.ui.session.snapshots import snapshots_in
+from cube_net.ui.sheet.view_place import ViewPlace
 from cube_net.ui.style import DEFAULT_STYLE, Style
 
 
@@ -4785,3 +4786,101 @@ class TestRepairingLongNumbers:
         assert told and told[0].startswith("Automatic repairment completed.")
         assert window.in_template_mode and window.template_mode.is_dirty
         assert window.template_mode.editor.template == cube_with_a_hole().state.template
+
+
+class TestLastView:
+    """Closing the app and starting it again shows the file reopened where the view was, zoomed as it was."""
+
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path, empty=True)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def moved(self, window: MainWindow) -> ViewPlace:
+        view = window.template_mode.view if window.in_template_mode else window.sheet_view
+        view.zoom_by(1.7, QPointF(120, 90))
+        view.pan_by(53, -31)
+        return view.place()
+
+    def reopened(self, qtbot: QtBot, tmp_path: Path, window: MainWindow) -> MainWindow:
+        window.close()
+        again = self.make(qtbot, tmp_path)
+        again.reopen_last_project()
+        return again
+
+    def near(self, a: ViewPlace, b: ViewPlace) -> bool:
+        return a.scale == b.scale and abs(a.x - b.x) < 1 / a.scale and abs(a.y - b.y) < 1 / a.scale
+
+    def test_a_project(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.start_new_project()
+        assert window.save_project_to(tmp_path / "cube.cubenet")
+        place = self.moved(window)
+        again = self.reopened(qtbot, tmp_path, window)
+        assert self.near(again.sheet_view.place(), place)
+
+    def test_a_template(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.core.project import save_template
+        from cube_net.core.project.builtin_templates import cube_with_a_hole
+
+        path = tmp_path / "torus.nettemplate"
+        save_template(cube_with_a_hole(), path)
+        window = self.make(qtbot, tmp_path)
+        assert window.open_project_from(path)
+        place = self.moved(window)
+        again = self.reopened(qtbot, tmp_path, window)
+        assert again.in_template_mode and self.near(again.template_mode.view.place(), place)
+
+    def test_another_file_opened_is_shown_as_always(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.start_new_project()
+        assert window.save_project_to(tmp_path / "cube.cubenet")
+        first = window.sheet_view.place()
+        self.moved(window)
+        window.close()
+        other = tmp_path / "other.cubenet"
+        save_project(builtin_project(Start.CUBE), other)
+        window.settings.last_project = other  # (opened by another way since: the view kept isn't its)
+        again = self.make(qtbot, tmp_path)
+        again.reopen_last_project()
+        assert self.near(again.sheet_view.place(), first)
+
+    def test_nothing_kept_for_an_untitled_project(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", lambda *_: SaveChoice.DISCARD)
+        window = self.make(qtbot, tmp_path)
+        window.start_new_project()
+        self.moved(window)
+        window.close()
+        assert window.settings.last_view is None
+
+    def test_the_window_size_too(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.resize(733, 517)
+        qtbot.waitUntil(lambda: window.size().width() == 733)
+        window.close()
+        again = self.make(qtbot, tmp_path)
+        assert (again.width(), again.height()) == (733, 517)
+
+    def test_the_first_start_fills_most_of_the_screen(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        screen = window.screen()
+        assert screen is not None
+        assert window.width() == int(screen.availableGeometry().width() * 0.8)
+
+
+class TestStatusMessages:
+    def test_a_message_shown_before_the_window_still_hides_the_path(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = MainWindow(settings=settings_in(tmp_path, record=True), session_dir=tmp_path)  # it says it records
+        qtbot.addWidget(window)
+        assert window.statusBar().currentMessage().startswith("Recording session to")
+        window.show()
+        qtbot.waitExposed(window)
+        assert window.statusBar().currentMessage().startswith("Recording session to")
+        assert not window.path_label.isVisible()  # under the message, not drawn over by it
+        window.statusBar().clearMessage()
+        assert window.path_label.isVisible()
+        window.stop_recording("test over")
