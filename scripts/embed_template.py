@@ -10,7 +10,8 @@ that one in Cube Net (and saving it), run this to copy it into the application:
 
 It writes `src/cube_net/core/project/builtin/cube_with_a_hole.nettemplate` with only what a new project takes from a
 template: the template, its origin and its style (no history). The template must be valid (Validate in Cube Net finds
-no problem) and have a style (saved by a version that keeps one with the template: open and save it again if not).
+no problem), have no number longer than the application allows (`MAX_NUMBER_DIGITS` digits), and have a style (saved
+by a version that keeps one with the template: open and save it again if not).
 `--to <name>` writes another built-in file of that folder instead.
 """
 
@@ -18,9 +19,11 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from cube_net.core.geometry import MAX_NUMBER_DIGITS
 from cube_net.core.history import History
 from cube_net.core.project import ProjectFileError, TemplateDocument, load_document, template_to_bytes
 from cube_net.core.project.builtin_templates import CUBE_WITH_A_HOLE_FILE
+from cube_net.core.project.longest_number import longest_number
 from cube_net.core.template import validate
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -33,7 +36,7 @@ class EmbedError(Exception):
 
 def embedded(document: TemplateDocument) -> TemplateDocument:
     """What goes into the application: the template as it is now, without its history. Raises `EmbedError` if it's
-    not valid or has no style."""
+    not valid, has no style, or has a number longer than the application allows (`MAX_NUMBER_DIGITS`)."""
     if not document.state.template.closed:
         raise EmbedError("the template isn't valid (its loop isn't closed)")
     failure = validate(document.state.template)
@@ -42,7 +45,14 @@ def embedded(document: TemplateDocument) -> TemplateDocument:
         raise EmbedError(f"the template isn't valid ({failure.problem.value}{': ' + names if names else ''})")
     if document.style is None:
         raise EmbedError("the template has no style: open it in Cube Net and save it, then run this again")
-    return TemplateDocument(document.state, History(), document.style)
+    result = TemplateDocument(document.state, History(), document.style)
+    longest = longest_number(result)
+    if longest > MAX_NUMBER_DIGITS:
+        raise EmbedError(
+            f"the template has a number {longest} digits long: the application supports numbers up to "
+            f"{MAX_NUMBER_DIGITS} digits long"
+        )
+    return result
 
 
 def embed(source: Path, target: Path) -> None:

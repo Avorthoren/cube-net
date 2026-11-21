@@ -59,3 +59,19 @@ def test_nothing_is_written_for_a_bad_one(tmp_path: Path, capsys: pytest.Capture
 def test_usage(tmp_path: Path) -> None:
     assert main([], builtin=tmp_path) == 2
     assert main(["a", "--to"], builtin=tmp_path) == 2
+
+
+def test_nothing_is_written_for_one_with_a_number_too_long(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    from fractions import Fraction
+
+    from cube_net.core.geometry import MAX_NUMBER_DIGITS, Vec
+    from cube_net.core.origin import Origin
+
+    document = with_history()
+    long = Vec(Fraction(1, 10**MAX_NUMBER_DIGITS), 0)  # its denominator: one digit too many
+    source = tmp_path / "x.nettemplate"
+    save_template(replace(document, state=replace(document.state, origin=Origin(long, long))), source)
+    assert main([str(source)], builtin=tmp_path) == 1
+    assert not (tmp_path / CUBE_WITH_A_HOLE_FILE).exists()
+    error = capsys.readouterr().err
+    assert f"a number {MAX_NUMBER_DIGITS + 1} digits long" in error and f"up to {MAX_NUMBER_DIGITS} digits" in error

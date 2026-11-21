@@ -24,8 +24,8 @@ In the application, **Help → Help** (F1) explains how it all works, with anima
 It supports only bodies that have networks, in which every pair of related (those that were cut to "unfold" the body,
 and that should be glued again to "wrap" the body) boundary segments are either parallel or perpendicular. In this case
 it's guaranteed that if all initial vertices coordinates are rational - they'll stay rational after any chain of
-rearrangements. It allows the application to store all coordinates exactly, making exact calculations, not losing
-anything due to rounding errors.
+rearrangements. It allows the application to store all coordinates exactly (up to 2100 decimal digits), making exact
+calculations, not losing anything due to rounding errors.
 
 Initially, application was developed solely for cube networks manipulations. Hence, the name: Cube Net.
 
