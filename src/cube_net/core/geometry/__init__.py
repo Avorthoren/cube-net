@@ -5,6 +5,7 @@
 
 from cube_net.core.geometry.box import Box
 from cube_net.core.geometry.convex_hull import convex_hull
+from cube_net.core.geometry.long_numbers import MAX_NUMBER_DIGITS, Axis, LongNumber, Part, digits, long_number
 from cube_net.core.geometry.polygon import loops_contain, polygon_contains, signed_area
 from cube_net.core.geometry.predicates import (
     IntersectionKind,
@@ -19,15 +20,21 @@ from cube_net.core.geometry.sectors import sectors_overlap, strictly_within
 from cube_net.core.geometry.vec import Scalar, Vec, to_fraction
 
 __all__ = [
+    "MAX_NUMBER_DIGITS",
     "QUANTUM",
+    "Axis",
     "Box",
     "IntersectionKind",
+    "LongNumber",
+    "Part",
     "Rigid90",
     "Scalar",
     "SegmentIntersection",
     "Vec",
     "classify_segments",
     "convex_hull",
+    "digits",
+    "long_number",
     "loops_contain",
     "on_segment",
     "orient",

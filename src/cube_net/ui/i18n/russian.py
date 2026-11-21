@@ -57,6 +57,34 @@ RUSSIAN: dict[str, str] = {
         "проект. Отчёт об ошибке сохранён в:"
     ),
     "Error report couldn't be saved.": "Не удалось сохранить отчёт об ошибке.",
+    # A number too long (ui/too_long_message.py).
+    "Your action was rejected.": "Ваше действие отклонено.",
+    (
+        "The application supports numbers up to {max} digits long, while you tried to create {object}, whose {axis} "
+        "coordinate would require a numerator {n} digits long."
+    ): (
+        "Приложение поддерживает числа длиной до {max} цифр, а вы пытались создать {object}: для координаты {axis} "
+        "потребовался бы числитель длиной в {n} цифр."
+    ),  # see RUSSIAN_PLURALS
+    (
+        "The application supports numbers up to {max} digits long, while you tried to create {object}, whose {axis} "
+        "coordinate would require a denominator {n} digits long."
+    ): (
+        "Приложение поддерживает числа длиной до {max} цифр, а вы пытались создать {object}: для координаты {axis} "
+        "потребовался бы знаменатель длиной в {n} цифр."
+    ),  # see RUSSIAN_PLURALS
+    "x ≈ {x}, y ≈ {y}": "x ≈ {x}, y ≈ {y}",
+    "a vertex ({at})": "вершину ({at})",
+    "the point where the cut crosses segment {segment} ({at})": "точку, где разрез пересекает отрезок {segment} ({at})",
+    "the cut's end on segment {segment} ({at})": "конец разреза на отрезке {segment} ({at})",
+    "the point where the cut crosses fold {segment} ({at})": (
+        "точку, где разрез пересекает линию сгиба {segment} ({at})"
+    ),
+    "vertex {name} of the glued half ({at})": "вершину {name} приклеенной половины ({at})",
+    "the origin ({at})": "начало координат ({at})",
+    "the point where the hole's side crosses fold {segment} ({at})": (
+        "точку, где сторона отверстия пересекает линию сгиба {segment} ({at})"
+    ),
     "An unexpected error occurred, and the application has to close. Crash report saved to:": (
         "Произошла непредвиденная ошибка, и приложение будет закрыто. Отчёт о сбое сохранён в:"
     ),
@@ -523,6 +551,22 @@ RUSSIAN: dict[str, str] = {
 
 # Texts with a number {n} whose Russian depends on it: the forms for 1 (21, 31...), for 2-4 (22-24...), for the rest.
 RUSSIAN_PLURALS: dict[str, tuple[str, str, str]] = {
+    (
+        "The application supports numbers up to {max} digits long, while you tried to create {object}, whose {axis} "
+        "coordinate would require a numerator {n} digits long."
+    ): tuple(  # type: ignore[assignment]
+        "Приложение поддерживает числа длиной до {max} цифр, а вы пытались создать {object}: для координаты {axis} "
+        f"потребовался бы числитель длиной в {{n}} {form}."
+        for form in ("цифру", "цифры", "цифр")
+    ),
+    (
+        "The application supports numbers up to {max} digits long, while you tried to create {object}, whose {axis} "
+        "coordinate would require a denominator {n} digits long."
+    ): tuple(  # type: ignore[assignment]
+        "Приложение поддерживает числа длиной до {max} цифр, а вы пытались создать {object}: для координаты {axis} "
+        f"потребовался бы знаменатель длиной в {{n}} {form}."
+        for form in ("цифру", "цифры", "цифр")
+    ),
     "State {n} actions ago was restored.": (
         "Восстановлено состояние {n} действие назад.",
         "Восстановлено состояние {n} действия назад.",

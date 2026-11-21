@@ -27,6 +27,14 @@ def test_crossings_in_order_along_the_segment(net: Net, cut: Callable[[str], Hal
     assert all(c.edge is not None for c in crossings)
 
 
+def test_crossings_are_exact_not_rounded(net: Net) -> None:
+    """Where a segment crosses a cut is a rational point on it already: kept as it is (83/6 isn't on any grid of
+    thousandths), not moved to a nearby one."""
+    crossings = segment_crossings(net, Vec(10, F(27, 2)), Vec(13, F(29, 2)))  # in at face 1's left side, out at its top
+    assert crossings is not None
+    assert [c.position for c in crossings] == [Vec(11, F(83, 6)), Vec(F(23, 2), 14)]
+
+
 def test_touching_the_perimeter_is_no_crossing(net: Net) -> None:
     assert segment_crossings(net, v("11.5", "14"), v("12.5", "12")) is None  # through the vertex D_1 at (12, 13)
     assert segment_crossings(net, v("11.2", "14"), v("11.8", "14")) is None  # along a cut

@@ -49,7 +49,7 @@ def test_the_origin_moved_and_the_coordinates_hint(qtbot: QtBot) -> None:
     assert hint is not None
     play(demo, advanced.ADVANCED[:-3])  # the mouse rests on J_1
     editor = demo.workspace.editor
-    assert editor.origin.shown(Vec(F(41333, 1000), 62)) == Vec(F(-8, 3), 12)
-    assert hint.lines() == coordinate_lines(Vec(F(-8, 3), 12))
+    assert editor.origin.shown(Vec(F(124, 3), 62)) == Vec(F(1, 2), 12)  # J_1, exactly where the segment crosses
+    assert hint.lines() == coordinate_lines(Vec(F(1, 2), 12))
     play(demo, advanced.ADVANCED[-3:])  # and on A_3
-    assert hint.lines() == coordinate_lines(Vec(F(-11999, 3000), 12))
+    assert hint.lines() == coordinate_lines(Vec(F(-5, 6), 12))

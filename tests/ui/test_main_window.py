@@ -4576,3 +4576,22 @@ class TestCrashReports:
         window.end_recording_after_crash()
         assert window.recorder is None
         assert session_lines(log)[-1] == "stop crashed"
+
+
+class TestTooLongNumbers:
+    def test_a_refusal_is_told_in_a_warning(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from fractions import Fraction
+
+        from cube_net.core.geometry import MAX_NUMBER_DIGITS, Vec
+        from cube_net.core.origin import Origin
+
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        told: list[str] = []
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda _p, _t, text, **_: told.append(text))
+        long = Vec(Fraction(1, 10**MAX_NUMBER_DIGITS), 0)
+        window.cut_tool.move_origin(Origin(long, long))
+        assert len(told) == 1 and told[0].startswith("Your action was rejected.<br>") and "the origin" in told[0]
+        assert window.editor.origin == Origin()

@@ -1399,3 +1399,34 @@ class TestVertexAt:
         view.left_pressed.emit(11.4, 13.5)
         shown = origin.shown(positions(tool)[1])
         assert (shown.x * 1000).denominator == 1 and (shown.y * 1000).denominator == 1
+
+
+class TestTooLongNumbers:
+    """A point whose number would be too long: told about, not flashed; Place a vertex's window says it."""
+
+    def test_place_a_vertex_says_it(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.core.cutting.placement import Axis
+        from cube_net.core.geometry import MAX_NUMBER_DIGITS
+
+        view, tool, _ = setup
+        tool.describe_too_long = lambda found: f"too long: {found.kind.value}"
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        placement = tool.placement_at(11.6, 13.5)
+        assert placement is not None
+        long = F(1, 10**MAX_NUMBER_DIGITS)
+        assert tool.place(placement, placement.constraint.point_from(Axis.BOTH, F(23, 2) + long, F(27, 2))) == (
+            "too long: vertex"
+        )
+        assert len(positions(tool)) == 1  # nothing added
+
+    def test_moving_the_origin_tells_it(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.core.geometry import MAX_NUMBER_DIGITS
+        from cube_net.core.origin import Origin
+
+        _, tool, _ = setup
+        told: list[str] = []
+        tool.too_long.connect(told.append)
+        tool.describe_too_long = lambda found: f"too long: {found.kind.value}"
+        long = Vec(F(1, 10**MAX_NUMBER_DIGITS), 0)
+        tool.move_origin(Origin(long, long))
+        assert told == ["too long: origin"] and tool.editor.origin == Origin()

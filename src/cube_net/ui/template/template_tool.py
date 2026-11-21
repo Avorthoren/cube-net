@@ -43,6 +43,7 @@ from cube_net.core.template import (
     TemplateState,
     on_the_sheet,
 )
+from cube_net.core.template.too_long import TemplateTooLong
 from cube_net.ui.crash.crash_window import REFUSED_TEXT
 from cube_net.ui.i18n import tr
 from cube_net.ui.qt_geometry import to_qpointf
@@ -51,6 +52,7 @@ from cube_net.ui.sheet.cursors import CursorKind
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.template.corners import owned_arcs, shared, vertex_toward
 from cube_net.ui.template.template_item import TemplateItem
+from cube_net.ui.too_long_message import template_too_long_text
 
 # How long a rejected segment stays black (as for cuts).
 FLASH_MS = 200
@@ -283,7 +285,9 @@ class TemplateTool(QObject):
                 self.unlock_slope()
                 self._after_action("close" if self._editor.template.closed else "add", p)
         if rejection is not None:
-            self._show_rejection(rejection, p)
+            self._show_rejection(rejection, p, told=False)
+            if rejection.too_long is not None:
+                return self._too_long_text(rejection.too_long)
             return template_problem_text(rejection.problem)
         return None
 
@@ -346,7 +350,10 @@ class TemplateTool(QObject):
             self._follow_mouse()
 
     def move_origin(self, origin: Origin) -> None:
-        self._editor.move_origin(origin)
+        rejection = self._editor.move_origin(origin)
+        if rejection is not None:
+            self._show_rejection(rejection, origin.position)
+            return
         self.origin_changed.emit()
         self.changed.emit()
 
@@ -596,15 +603,23 @@ class TemplateTool(QObject):
         self.origin_changed.emit()
         self.changed.emit()
 
-    def _show_rejection(self, rejection: TemplateRejection, p: Vec) -> None:
+    def _show_rejection(self, rejection: TemplateRejection, p: Vec, told: bool = True) -> None:
         """Flash what breaks the rules; a refusal by the safety net (a bug: the template would be inconsistent) is
-        said in a warning instead (`unexpected`)."""
+        said in a warning instead (`unexpected`), and so is a point whose number is too long (`warned`; unless `told`
+        is False: Place a vertex's window says it)."""
         self.rejected.emit(p, rejection.problem)
         if rejection.problem is TemplateProblem.UNEXPECTED:
             self.unexpected.emit()
             return
+        if rejection.too_long is not None:
+            if told:
+                self.warned.emit(self._too_long_text(rejection.too_long))
+            return
         self.item.set_flash(rejection.segments)
         self._flash_timer.start()
+
+    def _too_long_text(self, found: TemplateTooLong) -> str:
+        return template_too_long_text(found, self._editor.template, self._editor.origin)
 
     def _quantize(self, x: float, y: float) -> Vec:
         return self._editor.origin.quantize(x, y)

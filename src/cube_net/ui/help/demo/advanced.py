@@ -7,8 +7,9 @@
 A cut starts at (41, 61), on the edge of the hole; its next point is typed in Place a vertex's window: (42, 64), off
 the net. The slope of the next segment is set (-4 : 1) and the mouse wanders about: the segment keeps its slope. The
 end is typed too (y = -2 from the origin, at (46, 48)): the line ends where it reaches the net again. The half with the
-counterpart of (53, 49.25)-(53, 51) is glued onto it and approved. Then the origin is moved: J_1, at x = -2.667 from it,
-is given x = -8/3; the mouse rests on J_1 and on A_3, which show their coordinates from the moved origin.
+counterpart of (53, 49.25)-(53, 51) is glued onto it and approved. Then the origin is moved: J_1, where the first
+segment crosses the hole's edge (at x = -8/3 from it, exactly), is given x = 1/2; the mouse rests on J_1 and on A_3,
+which show their coordinates from the moved origin.
 """
 
 from fractions import Fraction as F
@@ -39,7 +40,7 @@ WAVES: tuple[Point, ...] = ((48.5, 60.0), (40.5, 57.0), (48.5, 54.0), (41.0, 51.
 GLUE: Point = (52.92, 50.04)
 APPROVE: Point = (53.0, 50.125)
 
-# J_1 and A_3 of the net after the cut (the names the project gives them).
+# J_1 and A_3 of the net after the cut (the names the project gives them): J_1 is at (124/3, 62).
 J_1: Point = (41.333, 62.0)
 A_3: Point = (40.0, 62.0)
 
@@ -109,10 +110,10 @@ ADVANCED: list[Step] = [
     *click(),
     Wait(700),
     Type("\t\t", 300),
-    Type("-8"),
+    Type("1"),
     Wait(300),
     Type("\t", 300),
-    Type("3"),
+    Type("2"),
     Wait(700),
     Type("\n"),
     Wait(600),

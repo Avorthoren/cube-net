@@ -37,8 +37,9 @@ def on_the_perimeter(net: Net, p: Vec) -> HalfEdge | None:
 
 def segment_crossings(net: Net, a: Vec, b: Vec) -> list[CutPoint] | None:
     """Where the segment a-b crosses cuts (properly: not at a vertex of the perimeter), in order from a, each a point
-    on its cut. None if it touches the perimeter anywhere else than at a or b, runs along it, or crosses two cuts at one
-    point (a slit: it would leave the net and come back at once)."""
+    on its cut, exactly where they cross (not rounded as `project_onto` rounds a point it projects: this one is on the
+    cut already). None if it touches the perimeter anywhere else than at a or b, runs along it, or crosses two cuts at
+    one point (a slit: it would leave the net and come back at once)."""
     if a == b:
         return []
     found: list[tuple[Vec, HalfEdge]] = []
@@ -57,4 +58,4 @@ def segment_crossings(net: Net, a: Vec, b: Vec) -> list[CutPoint] | None:
         return None
     d = b - a
     found.sort(key=lambda item: (item[0] - a).dot(d))
-    return [CutPoint(project_onto(he, p), he) for p, he in found]
+    return [CutPoint(p, he) for p, he in found]

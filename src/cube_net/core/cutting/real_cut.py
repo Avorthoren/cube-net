@@ -10,8 +10,8 @@ piece joins two places of the perimeter that are already joined around the net (
 that earlier pieces have joined: cutting from the outside into a hole only opens a ring). So the line ends with the
 first piece that divides the net, in exactly two.
 
-A crossing of a cut is a point of that cut (rounded along it like any point put on a cut, `project_onto`), so a piece
-starts or ends on the perimeter exactly.
+A crossing of a cut is exactly where the segment crosses it (a point of that cut), so a piece starts or ends on the
+perimeter exactly.
 """
 
 from __future__ import annotations

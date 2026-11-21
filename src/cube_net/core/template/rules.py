@@ -34,6 +34,7 @@ from cube_net.core.geometry import (
 from cube_net.core.sheet import TEMPLATE_SHEET_HEIGHT, TEMPLATE_SHEET_WIDTH
 from cube_net.core.template.loop_geometry import gaps_at, pieces, vertex_gaps, winding_number
 from cube_net.core.template.template import Template
+from cube_net.core.template.too_long import TemplateTooLong
 
 # The fewest vertices a closed loop keeps.
 MIN_VERTICES = 6
@@ -76,6 +77,9 @@ class TemplateProblem(Enum):
     # user's mistake. Refused, so that it never reaches a file.
     UNEXPECTED = "unexpected"
 
+    # A point the change would make has a number longer than `MAX_NUMBER_DIGITS` digits (`too_long` says which).
+    TOO_LONG = "too long"
+
 
 @dataclass(frozen=True, slots=True)
 class TemplateRejection:
@@ -83,6 +87,9 @@ class TemplateRejection:
 
     # The segments that break the rules (to be shown in black for a moment).
     segments: tuple[Segment, ...] = ()
+
+    # The point whose number is too long (TOO_LONG).
+    too_long: TemplateTooLong | None = None
 
 
 def on_the_sheet(p: Vec) -> bool:

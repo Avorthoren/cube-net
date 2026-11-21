@@ -16,6 +16,12 @@ gets fixed.
    rotation by k·90° plus a translation, so coordinates stay rational forever. Tests like "touches", "is collinear" and
    "lies on the perimeter" then need no tolerance. Floats are used only for drawing (and for the bounding-rectangle
    *display*, though see §4.7: even its area is rational).
+   Points the application works out (where a cut line crosses a cut or a fold, Shift's and a locked slope's points,
+   a rearranged net) are exact too, never rounded; only mouse clicks are (see 3). Their numbers grow with the
+   generations of cuts, so an action that would make a numerator or a denominator longer than `MAX_NUMBER_DIGITS`
+   (2100) digits is refused, telling which point it is (`geometry/long_numbers.py`, `cutting/too_long.py`,
+   `template/too_long.py`, `ui/too_long_message.py`). 2100 keeps every number well below the 4300 digits Python turns
+   into text by default, so saving never fails.
 3. **One entry point for user input.** Every point that comes from the mouse goes through one `quantize()` function
    (sheet floats → `Fraction`). For now it rounds each coordinate to 1/1000 unit, which keeps fractions small and
    readable. Snapping will go there later without touching anything else.

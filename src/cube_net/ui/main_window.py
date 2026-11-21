@@ -29,7 +29,7 @@ from PyQt6.QtWidgets import (
 from cube_net import __version__
 from cube_net.core.body import CUBE, Body
 from cube_net.core.bounding import min_area_rectangle
-from cube_net.core.cutting import slope_of
+from cube_net.core.cutting import TooLong, slope_of
 from cube_net.core.editor import EditorSnapshot
 from cube_net.core.geometry import Vec
 from cube_net.core.history import ActionKind, HistoryEntry
@@ -100,6 +100,7 @@ from cube_net.ui.template.draw_hole_button import DrawHoleButton
 from cube_net.ui.template.net_area import NetArea
 from cube_net.ui.template.template_mode import TemplateMode
 from cube_net.ui.template.validate_button import ValidateButton
+from cube_net.ui.too_long_message import project_too_long_text
 from cube_net.ui.updates.appimage_update import install_appimage, start_appimage
 from cube_net.ui.updates.installation import (
     Installation,
@@ -311,6 +312,10 @@ class MainWindow(QMainWindow):
         self.unlock_slope_action.triggered.connect(self._on_escape)
         self.addAction(self.unlock_slope_action)
         self.cut_tool.slope_changed.connect(self._on_slope_changed)
+        # An action refused because a point it would make has a number too long: the names of the net's vertices tell
+        # which point.
+        self.cut_tool.describe_too_long = self._too_long_text
+        self.cut_tool.too_long.connect(lambda text: tell(self, "Cube Net", text, icon=MessageIcon.WARNING))
         template_tool = self.template_mode.tool
         template_tool.slope_changed.connect(self._on_slope_changed)
         template_tool.origin_changed.connect(self._on_origin_changed)
@@ -368,6 +373,9 @@ class MainWindow(QMainWindow):
         self.recorder = None
         self.statusBar().showMessage(tr("Session recording stopped"), 5000)
         self._update_logging_action()
+
+    def _too_long_text(self, found: TooLong) -> str:
+        return project_too_long_text(found, self.editor.net, self.point_labels, self.editor.origin)
 
     # --- crash reports --------------------------------------------------------------------------------------------
 

@@ -33,7 +33,7 @@ from collections.abc import Callable, Sequence
 
 from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
 
-from cube_net.core.cutting import CutPoint, straighten
+from cube_net.core.cutting import CutPoint, TooLong, straighten
 from cube_net.core.cutting.placement import (
     Action,
     Constraint,
@@ -57,6 +57,7 @@ from cube_net.ui.sheet.cut_hover import cut_hitbox, fold_target, perimeter_targe
 from cube_net.ui.sheet.cut_line_item import CutLineItem
 from cube_net.ui.sheet.ruler_tool import RulerTool
 from cube_net.ui.sheet.sheet_view import SheetView
+from cube_net.ui.too_long_message import REJECTED
 
 # How long a rejected segment stays black (docs/idea.txt).
 FLASH_MS = 200
@@ -68,6 +69,9 @@ class CutTool(QObject):
 
     # An action was rejected (the position of the point it was about).
     rejected = pyqtSignal(Vec)
+
+    # An action was rejected because a point it would make has a number too long: what to tell the user.
+    too_long = pyqtSignal(str)
 
     # The line was edited: "insert", "delete" or "move", the point's index, its position.
     edited = pyqtSignal(str, int, Vec)
@@ -99,6 +103,8 @@ class CutTool(QObject):
         self._view = view
         self._editor = editor
         self._ruler = ruler
+        # What to tell the user about a point whose number is too long (the main window's: it knows the names).
+        self.describe_too_long: Callable[[TooLong], str] = lambda found: tr(REJECTED)
 
         # Points drawn by others whose coordinates the hint shows too, as for vertices (the bounding rectangle's
         # corners, while it's shown): see `coordinates_at`.
@@ -417,7 +423,9 @@ class CutTool(QObject):
     def move_origin(self, origin: Origin) -> None:
         """Show and take the coordinates from `origin` (an action, if it moved)."""
         before = self._editor.origin
-        self._editor.move_origin(origin)
+        rejection = self._editor.move_origin(origin)
+        if rejection is not None and rejection.too_long is not None:
+            self.too_long.emit(self.describe_too_long(rejection.too_long))
         if self._editor.origin != before:
             self.origin_changed.emit()
 
@@ -482,7 +490,7 @@ class CutTool(QObject):
             return Constraint.on_fold(target.fold).fixed_at(target.position)
         return Constraint.along(anchor, self._slope)
 
-    def place(self, placement: Placement, p: Vec) -> Problem | None:
+    def place(self, placement: Placement, p: Vec) -> Problem | str | None:
         """Put the point of `placement` exactly at `p` (typed: nothing is rounded); or why it can't go there, and
         nothing changes (a dragged point stays dragged)."""
         net = self._editor.net
@@ -504,16 +512,17 @@ class CutTool(QObject):
         else:
             point = CutPoint(p, fold=fold_through(net, p))
         if placement.action is Action.START:
-            self._editor.start_at(point)
+            if (rejection := self._editor.start_at(point)) is not None:
+                return self._refused(rejection)
         elif placement.action is Action.ADD:
             if self._editor.too_many_points(point):
                 return Problem.TOO_MANY_POINTS
-            if self._editor.add_point(point) is not None:
-                return Problem.BREAKS_LINE
+            if (rejection := self._editor.add_point(point)) is not None:
+                return self._refused(rejection)
         else:
             assert placement.index is not None
-            if self._editor.move_point(placement.index, point) is not None:
-                return Problem.BREAKS_LINE
+            if (rejection := self._editor.move_point(placement.index, point)) is not None:
+                return self._refused(rejection)
             self._drag_index, self._drag_target, self._drag_over_perimeter = None, None, False
             self._drag_free = False
             self._end_slope()
@@ -732,8 +741,18 @@ class CutTool(QObject):
         else:
             self.edited.emit("delete", i, position)
 
+    def _refused(self, rejection: Rejection) -> Problem | str:
+        """What Place a vertex says about a refused point: the rules it breaks, or the whole message about a number
+        too long."""
+        return Problem.BREAKS_LINE if rejection.too_long is None else self.describe_too_long(rejection.too_long)
+
     def _reject(self, rejection: Rejection, position: Vec) -> None:
-        """Show the offending segments in black for a moment (with the rejection's preview of the line, if any)."""
+        """Show the offending segments in black for a moment (with the rejection's preview of the line, if any); a
+        point whose number is too long is told about instead (`too_long`)."""
+        if rejection.too_long is not None:
+            self.rejected.emit(position)
+            self.too_long.emit(self.describe_too_long(rejection.too_long))
+            return
         self.item.set_flash(rejection.segments)
         if rejection.preview is not None:
             self.item.set_points(rejection.preview)

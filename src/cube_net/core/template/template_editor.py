@@ -39,6 +39,7 @@ from cube_net.core.template.rules import (
     on_the_sheet,
 )
 from cube_net.core.template.template import Fold, Label, LoopVertex, Template
+from cube_net.core.template.too_long import origin_too_long, template_too_long
 from cube_net.core.template.validation import reindexed
 
 
@@ -126,9 +127,7 @@ class TemplateEditor:
         if p == self.template.position(vertex_id):
             return None  # released where it was: not an action
         problem = self.move_problem(vertex_id, p)
-        if problem is None and not self._record(ActionKind.MOVE_VERTEX, self._moved(vertex_id, p)):
-            return TemplateRejection(TemplateProblem.UNEXPECTED)
-        return problem
+        return problem if problem is not None else self._record(ActionKind.MOVE_VERTEX, self._moved(vertex_id, p))
 
     def delete_vertex(self, vertex_id: int) -> TemplateRejection | None:
         """Delete a vertex: its two sides become one, and the folds that end at it go too (and those left hanging); a
@@ -192,9 +191,9 @@ class TemplateEditor:
         §8.4)."""
         self._require_closed()
         problem = self.fold_line_problem(start, points, end)
-        if problem is None and not self._record(ActionKind.ADD_FOLD, self.template.with_fold_line(start, points, end)):
-            return TemplateRejection(TemplateProblem.UNEXPECTED)
-        return problem
+        if problem is not None:
+            return problem
+        return self._record(ActionKind.ADD_FOLD, self.template.with_fold_line(start, points, end))
 
     def fold_line_problem(self, start: int, points: Sequence[Vec], end: int | None) -> TemplateRejection | None:
         """What's wrong with the fold line (None: nothing); `end` None: it isn't finished yet, its last point is the
@@ -260,11 +259,17 @@ class TemplateEditor:
 
     # --- the origin, undo and redo ------------------------------------------------------------------------------------
 
-    def move_origin(self, origin: Origin) -> None:
-        if origin != self.origin:
-            before = self.snapshot()
-            self.origin = origin
-            self.history.record(ActionKind.MOVE_ORIGIN, before, self.snapshot())
+    def move_origin(self, origin: Origin) -> TemplateRejection | None:
+        """The coordinates are shown and typed from `origin` from now on; refused if its numbers are too long."""
+        if origin == self.origin:
+            return None
+        found = origin_too_long(origin.position)
+        if found is not None:
+            return TemplateRejection(TemplateProblem.TOO_LONG, too_long=found)
+        before = self.snapshot()
+        self.origin = origin
+        self.history.record(ActionKind.MOVE_ORIGIN, before, self.snapshot())
+        return None
 
     def undo(self) -> bool:
         return self._go_to(self.history.undo())
@@ -282,24 +287,25 @@ class TemplateEditor:
 
     def _apply(self, kind: ActionKind, after: Template, changed: list[tuple[int, int]]) -> TemplateRejection | None:
         problem = check(after, changed)
-        if problem is None and not self._record(kind, after):
-            return TemplateRejection(TemplateProblem.UNEXPECTED)
-        return problem
+        return problem if problem is not None else self._record(kind, after)
 
     def _recorded(self, kind: ActionKind, after: Template) -> TemplateRejection | None:
-        """`_record`, saying UNEXPECTED where the safety net refused it."""
-        return None if self._record(kind, after) else TemplateRejection(TemplateProblem.UNEXPECTED)
+        return self._record(kind, after)
 
-    def _record(self, kind: ActionKind, after: Template) -> bool:
-        """Make `after` the template, as an action. A safety net: a template whose faces don't add up (a bug) is never
-        kept, so never saved (False: nothing changed)."""
+    def _record(self, kind: ActionKind, after: Template) -> TemplateRejection | None:
+        """Make `after` the template, as an action; or refuse it (nothing changes): if a point it makes has a number
+        too long (TOO_LONG), or as a safety net, if its faces don't add up (UNEXPECTED: a bug), so that it never reaches
+        a file."""
+        found = template_too_long(self.template, after)
+        if found is not None:
+            return TemplateRejection(TemplateProblem.TOO_LONG, too_long=found)
         if after.closed and not faces_consistent(after):
             self.refused = after
-            return False
+            return TemplateRejection(TemplateProblem.UNEXPECTED)
         before = self.snapshot()
         self.template = after
         self.history.record(kind, before, self.snapshot())
-        return True
+        return None
 
     def _require_closed(self) -> None:
         if not self.template.closed:

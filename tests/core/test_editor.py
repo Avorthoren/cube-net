@@ -8,9 +8,9 @@ from random import Random
 import pytest
 
 from cube_net.core.body import CUBE
-from cube_net.core.cutting import MAX_POINTS_AFTER_FIRST, CutLine, CutPoint
+from cube_net.core.cutting import MAX_POINTS_AFTER_FIRST, CutLine, CutPoint, TooLongKind
 from cube_net.core.editor import Editor, EditorState
-from cube_net.core.geometry import Vec, quantize
+from cube_net.core.geometry import MAX_NUMBER_DIGITS, Axis, LongNumber, Part, Vec, digits, quantize
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_vertex_at, default_net, validate_net
 
@@ -759,7 +759,9 @@ class TestLongSession:
         editor.undo()
         editor.undo()
 
-    def test_coordinates_stay_small_and_the_net_valid(self) -> None:
+    def test_numbers_never_longer_than_the_limit_and_the_net_valid(self) -> None:
+        """Crossings are exact, so numbers grow with the generations of cuts (to ~1000 digits by 30 of them): an action
+        that would make one longer than the limit is refused, the net stays as it was."""
         rng = Random(7)
         editor = Editor(default_net())
         tries = 0
@@ -768,9 +770,62 @@ class TestLongSession:
             self.try_a_cut(editor, rng)
         assert editor.approved_cuts == 30
         validate_net(editor.net)
-        positions = [v.position for v in editor.net.vertices]
-        largest = max(max(p.x.denominator, p.y.denominator) for p in positions)
-        assert largest < 10**100  # with the exact closest point it's thousands of digits by 45 cuts, and growing fast
+        numbers = [n for v in editor.net.vertices for c in (v.position.x, v.position.y) for n in c.as_integer_ratio()]
+        assert max(digits(n) for n in numbers) <= MAX_NUMBER_DIGITS
+
+
+class TestTooLongNumbers:
+    """An action that would make a number longer than `MAX_NUMBER_DIGITS` digits is refused, saying which point."""
+
+    # A step that makes a point near x = 11.5 as long as it may be (its numerator: 2100 digits), while a point 2/5 or
+    # 4/5 of it away (where the line crosses something) has one digit more.
+    E = F(1, 7 * 10 ** (MAX_NUMBER_DIGITS - 2))
+
+    def start(self, editor: Editor, cut: Callable[[str], HalfEdge]) -> None:
+        assert editor.start_at(editor.point_on_cut(v("11.5", "14"), cut("B_1-A_1"))) is None
+
+    def test_a_vertex(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        long = Vec(F(23, 2), 14 - F(1, 10**MAX_NUMBER_DIGITS))
+        rejection = editor.start_at(CutPoint(long, cut("B_1-A_1")))
+        assert rejection is not None and rejection.too_long is not None
+        assert rejection.too_long.kind is TooLongKind.VERTEX and rejection.too_long.position == long
+        assert rejection.too_long.number == LongNumber(Axis.Y, Part.NUMERATOR, MAX_NUMBER_DIGITS + 2)
+        assert editor.state is EditorState.DEFAULT and not editor.history.can_undo  # nothing happened
+
+    def test_the_end_where_the_line_is_cut_short(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        self.start(editor, cut)
+        beyond = Vec(F(23, 2) + self.E, 9)  # fine itself; the line leaves the net at y = 10, x = 11.5 + 4/5 * E
+        rejection = editor.add_point(CutPoint(beyond))
+        assert rejection is not None and rejection.too_long is not None
+        assert rejection.too_long.kind is TooLongKind.END
+        assert rejection.too_long.position == Vec(F(23, 2) + self.E * F(4, 5), 10)
+        assert rejection.too_long.edge is not None and rejection.too_long.number.digits > MAX_NUMBER_DIGITS
+        assert positions(editor) == [v("11.5", "14")]  # the line as it was
+
+    def test_where_the_line_crosses_a_fold(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        self.start(editor, cut)
+        rejection = editor.add_point(CutPoint(Vec(F(23, 2) + self.E, F(23, 2))))  # inside, below the fold at y = 13
+        assert rejection is not None and rejection.too_long is not None
+        assert rejection.too_long.kind is TooLongKind.FOLD_CROSSING
+        assert rejection.too_long.position == Vec(F(23, 2) + self.E * F(2, 5), 13)
+        assert rejection.too_long.edge is not None
+
+    def test_the_origin(self, net: Net) -> None:
+        from cube_net.core.origin import Origin
+
+        editor = Editor(net)
+        long = Vec(F(1, 10**MAX_NUMBER_DIGITS), 0)
+        rejection = editor.move_origin(Origin(long, long))
+        assert rejection is not None and rejection.too_long is not None
+        assert rejection.too_long.kind is TooLongKind.ORIGIN and editor.origin.position == Vec(0, 0)
+
+    def test_short_numbers_are_fine(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        self.start(editor, cut)
+        assert editor.add_point(CutPoint(Vec(F(23, 2) + self.E * 5, F(23, 2)))) is None  # a fifth of it: short again
 
 
 class TestTypedPoints:

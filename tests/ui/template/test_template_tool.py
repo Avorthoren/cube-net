@@ -454,3 +454,26 @@ def test_the_right_click_menu_while_drawing_a_fold_line(setup: tuple[SheetView, 
     assert menu.offered_at(11.0, 11.0)  # but Set slope and Move the origin are there
     click(view, 11.0, 11.0)
     assert len(tool.editor.template.fold_vertices) == 1 and len(tool.editor.template.faces) == 2
+
+
+def test_a_number_too_long_is_said_in_place_a_vertex(setup: tuple[SheetView, TemplateTool]) -> None:
+    from cube_net.core.geometry import MAX_NUMBER_DIGITS
+
+    _view, tool = setup
+    placement = tool.placement_at(10, 10)
+    assert placement is not None
+    text = tool.place(placement, Vec(10, 10 + F(1, 10**MAX_NUMBER_DIGITS)))
+    assert text is not None and text.startswith("Your action was rejected.<br>") and "create a vertex" in text
+    assert not tool.editor.template.vertices
+
+
+def test_moving_the_origin_too_far_is_warned(setup: tuple[SheetView, TemplateTool]) -> None:
+    from cube_net.core.geometry import MAX_NUMBER_DIGITS
+    from cube_net.core.origin import Origin
+
+    _view, tool = setup
+    warned: list[str] = []
+    tool.warned.connect(warned.append)
+    long = Vec(F(1, 10**MAX_NUMBER_DIGITS), 0)
+    tool.move_origin(Origin(long, long))
+    assert len(warned) == 1 and "create the origin" in warned[0] and tool.editor.origin == Origin()

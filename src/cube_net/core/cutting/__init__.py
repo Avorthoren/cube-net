@@ -20,6 +20,7 @@ from cube_net.core.cutting.rules import (
 )
 from cube_net.core.cutting.split import SplitNet, connected_regions, split_net
 from cube_net.core.cutting.straight import along, closest_straight_point, line_meets_segment, slope_of, straighten
+from cube_net.core.cutting.too_long import TooLong, TooLongKind, line_too_long, net_too_long, point_too_long
 
 __all__ = [
     "MAX_POINTS_AFTER_FIRST",
@@ -32,6 +33,8 @@ __all__ = [
     "Rearranged",
     "SplitNet",
     "Stop",
+    "TooLong",
+    "TooLongKind",
     "along",
     "approve",
     "closest_straight_point",
@@ -41,9 +44,12 @@ __all__ = [
     "endpoint_point",
     "invalid_segments",
     "line_meets_segment",
+    "line_too_long",
+    "net_too_long",
     "on_the_perimeter",
     "overlapping_cuts",
     "pieces",
+    "point_too_long",
     "project_onto",
     "real_cut",
     "rearrange",

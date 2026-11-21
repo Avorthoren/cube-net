@@ -386,3 +386,52 @@ def test_deleting_what_held_a_loop_of_folds_deletes_the_loop() -> None:
     assert editor.delete_fold(Fold(0, 4)) is None
     assert editor.template.folds == () and editor.template.fold_vertices == () and len(editor.template.faces) == 1
     assert editor.undo() and len(editor.template.folds) == 5 and len(editor.template.faces) == 3
+
+
+class TestTooLongNumbers:
+    """An action that would make a number longer than `MAX_NUMBER_DIGITS` digits is refused, saying which point."""
+
+    def test_a_vertex(self) -> None:
+        from cube_net.core.geometry import MAX_NUMBER_DIGITS, Axis, LongNumber, Part
+        from cube_net.core.template.too_long import TemplateTooLongKind
+
+        editor = TemplateEditor()
+        long = Vec(10, 10 + F(1, 10**MAX_NUMBER_DIGITS))
+        rejection = editor.add_point(long)
+        assert rejection is not None and rejection.problem is TemplateProblem.TOO_LONG
+        assert rejection.too_long is not None and rejection.too_long.kind is TemplateTooLongKind.VERTEX
+        assert rejection.too_long.number == LongNumber(Axis.Y, Part.NUMERATOR, MAX_NUMBER_DIGITS + 2)
+        assert not editor.template.vertices and not editor.history.can_undo
+
+    def test_a_dragged_vertex(self) -> None:
+        from cube_net.core.geometry import MAX_NUMBER_DIGITS
+
+        editor = drawn(PILLOW)
+        rejection = editor.move_vertex(4, Vec(11, 11 + F(1, 10**MAX_NUMBER_DIGITS)))
+        assert rejection is not None and rejection.problem is TemplateProblem.TOO_LONG
+        assert editor.template.position(4) == Vec(11, 11)
+
+    def test_where_a_holes_side_crosses_a_fold(self) -> None:
+        from cube_net.core.geometry import MAX_NUMBER_DIGITS
+        from cube_net.core.template.too_long import TemplateTooLongKind
+
+        editor = drawn(PILLOW)
+        assert editor.add_fold(1, 4) is None  # x = 11
+        e = F(1, 7 * 10 ** (MAX_NUMBER_DIGITS - 2))  # a point with it is fine, half of it is a digit longer
+        for p in [Vec(F(21, 2), F(21, 2)), Vec(F(23, 2), F(21, 2) + e), Vec(F(23, 2), F(41, 4))]:
+            assert editor.add_hole_point(p) is None
+        rejection = editor.add_hole_point(Vec(F(21, 2), F(21, 2)))  # closing it: its sides cross the fold
+        assert rejection is not None and rejection.too_long is not None
+        assert rejection.too_long.kind is TemplateTooLongKind.HOLE_CROSSING
+        assert rejection.too_long.position == Vec(11, F(21, 2) + e / 2)
+        assert rejection.too_long.fold == Fold(1, 4)
+        assert not editor.template.holes[-1].closed
+
+    def test_the_origin(self) -> None:
+        from cube_net.core.geometry import MAX_NUMBER_DIGITS
+
+        editor = drawn(PILLOW)
+        long = Vec(F(1, 10**MAX_NUMBER_DIGITS), 0)
+        rejection = editor.move_origin(Origin(long, long))
+        assert rejection is not None and rejection.problem is TemplateProblem.TOO_LONG
+        assert editor.origin == Origin()
