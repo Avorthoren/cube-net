@@ -354,9 +354,14 @@ RUSSIAN: dict[str, str] = {
         "Помимо тел, доступных по умолчанию (куб и куб с отверстием, он же тор), пользователь может задавать свои "
         "тела, рисуя одну из развёрток. Для этого и нужны шаблоны (Файл → Новый шаблон)."
     ),
-    "Validated template then can be used: File → New → Custom template.": (
-        "Проверенный шаблон затем можно использовать: Файл → Новый → Свой шаблон."
+    (
+        "Validated template then can be used: File → New → Custom template. Or use {create} button while template is "
+        "opened."
+    ): (
+        "Проверенный шаблон затем можно использовать: Файл → Новый → Свой шаблон. Или используйте кнопку {create}, "
+        "пока шаблон открыт."
     ),
+    "Create network": "Создать развёртку",
     (
         'The application supports only templates in which every pair of related (those that were cut to "unfold" the '
         'body, and that should be glued again to "wrap" the body) boundary segments are either parallel or '
@@ -718,6 +723,8 @@ RUSSIAN: dict[str, str] = {
         "Вершины перенумерованы автоматически.\nДругих проблем не найдено."
     ),
     "No problems found.": "Проблем не найдено.",
+    "Save the template?": "Сохранить шаблон?",
+    "Create\nnetwork": "Создать\nразвёртку",
     "You have faces without a color. Double-click on a face to assign its color.": (
         "У некоторых граней нет цвета. Щёлкните дважды по грани, чтобы назначить ей цвет."
     ),

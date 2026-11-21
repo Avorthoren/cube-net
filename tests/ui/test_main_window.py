@@ -4350,6 +4350,107 @@ class TestTemplates:
         for x, y in [*self.PILLOW, self.PILLOW[0]]:
             view.left_pressed.emit(float(x), float(y))
 
+    def torus_template_in(self, window: MainWindow, tmp_path: Path, new_color: str | None = None) -> Path:
+        """The built-in Cube with a hole, saved and opened; `new_color`: then its one-piece face of the first colour
+        used once gets that colour (an unsaved change)."""
+        from collections import Counter
+
+        from cube_net.core.project import save_template
+        from cube_net.core.project.builtin_templates import cube_with_a_hole
+
+        path = tmp_path / "torus.nettemplate"
+        save_template(cube_with_a_hole(), path)
+        assert window.open_project_from(path)
+        if new_color is not None:
+            faces = window.template_mode.editor.template.faces
+            counts = Counter(face.color for face in faces)
+            index = next(i for i, face in enumerate(faces) if counts[face.color] == 1)
+            window.template_mode.tool.set_face_color(index, new_color)
+        return path
+
+    def validated(self, window: MainWindow, monkeypatch: pytest.MonkeyPatch, save: bool = False) -> list[str]:
+        asked: list[str] = []
+        monkeypatch.setattr(
+            "cube_net.ui.template.template_mode.ask_yes_no", lambda _p, text: asked.append(text) or save
+        )
+        window.validate_action.trigger()
+        return asked
+
+    def test_validated_saved_when_the_user_says_so(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.core.project import TemplateDocument, load_document
+        from cube_net.core.template import ValidationStatus
+
+        window = self.make(qtbot, tmp_path)
+        path = self.torus_template_in(window, tmp_path, "#123456")
+        assert self.validated(window, monkeypatch, save=True) == ["No problems found.\nSave the template?"]
+        assert not window.is_dirty
+        document = load_document(path)
+        assert isinstance(document, TemplateDocument) and document.validation is ValidationStatus.VALID
+        assert "#123456" in [face.color for face in document.state.template.faces]
+
+    def test_validated_untitled_saved_as(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.core.project.builtin_templates import cube_with_a_hole
+
+        window = self.make(qtbot, tmp_path)
+        window._show_template(cube_with_a_hole(), None)
+        path = tmp_path / "mine"
+        monkeypatch.setattr("cube_net.ui.main_window.QFileDialog.getSaveFileName", lambda *_: (str(path), ""))
+        self.validated(window, monkeypatch, save=True)
+        assert path.with_suffix(".nettemplate").exists() and not window.is_dirty
+
+    def test_create_network_only_while_validated(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        window = self.make(qtbot, tmp_path)
+        button = window.create_network_button
+        assert not button.action.isVisible()  # a project
+        self.torus_template_in(window, tmp_path)
+        assert button.action.isVisible() and button.button.text() == "Create\nnetwork"
+        assert not button.button.isEnabled()
+        self.validated(window, monkeypatch)
+        assert button.button.isEnabled()
+        window.template_mode.tool.set_face_color(0, "#123456")  # not the template validated any more
+        assert not button.button.isEnabled()
+        window.undo_action.trigger()
+        assert button.button.isEnabled()  # the validated one again
+
+    @pytest.mark.parametrize("choice", [SaveChoice.SAVE, SaveChoice.DISCARD, SaveChoice.CANCEL])
+    def test_create_network_from_the_template_as_it_is(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, choice: SaveChoice
+    ) -> None:
+        from cube_net.core.project import TemplateDocument, load_document
+
+        window = self.make(qtbot, tmp_path)
+        path = self.torus_template_in(window, tmp_path, "#123456")
+        self.validated(window, monkeypatch)
+        asked: list[str] = []
+        monkeypatch.setattr(
+            "cube_net.ui.main_window.ask_save_changes", lambda _parent, name: asked.append(name) or choice
+        )
+        window.create_network_button.button.click()
+        assert asked == ["torus.nettemplate"]
+        saved = load_document(path)
+        assert isinstance(saved, TemplateDocument)
+        assert ("#123456" in [face.color for face in saved.state.template.faces]) is (choice is SaveChoice.SAVE)
+        if choice is SaveChoice.CANCEL:
+            assert window.in_template_mode
+            return
+        assert not window.in_template_mode and window.project_path is None
+        colors = window._project().settings.face_colors
+        assert colors is not None and "#123456" in colors
+
+    def test_create_network_without_unsaved_changes_asks_nothing(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.torus_template_in(window, tmp_path)
+        self.validated(window, monkeypatch, save=True)  # (saved: no unsaved changes)
+        monkeypatch.setattr("cube_net.ui.main_window.ask_save_changes", lambda *_: pytest.fail("asked"))
+        window.create_network_button.button.click()
+        assert not window.in_template_mode and len(window.editor.net.vertices) == 36
+
     def test_new_template_shows_the_template_sheet_and_its_instruments(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
         window.new_template_action.trigger()

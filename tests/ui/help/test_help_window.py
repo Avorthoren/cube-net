@@ -370,7 +370,8 @@ def test_what_templates_are_for_is_one_paragraph_of_two_lines(qtbot: QtBot) -> N
     document = make(qtbot).template_blocks[0].document()
     assert document is not None
     paragraph = document.find(TEMPLATES_INTRO).block()
-    assert paragraph.text() == f"{TEMPLATES_INTRO} {TEMPLATES_USE}"  # (a line break inside one paragraph)
+    use = TEMPLATES_USE.format(create="Create\u00a0network")  # (kept on one line)
+    assert paragraph.text() == f"{TEMPLATES_INTRO}\u2028{use}"  # (a line break inside one paragraph)
 
 
 def test_every_line_of_a_paragraph_as_high_as_the_others_whatever_font_draws_its_characters(qtbot: QtBot) -> None:

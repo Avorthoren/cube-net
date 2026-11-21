@@ -133,7 +133,10 @@ TEMPLATES_INTRO = (
     "In addition to bodies available by default (cube and cube with a hole a.k.a. torus) user can define custom bodies "
     "by drawing one of the networks. That's what Templates are for (File → New Template)."
 )
-TEMPLATES_USE = "Validated template then can be used: File → New → Custom template."
+TEMPLATES_USE = (
+    "Validated template then can be used: File → New → Custom template. Or use {create} button while template is "
+    "opened."
+)
 TEMPLATES_EXACT = (
     'The application supports only templates in which every pair of related (those that were cut to "unfold" the '
     'body, and that should be glued again to "wrap" the body) boundary segments are either parallel or perpendicular. '
@@ -148,6 +151,7 @@ TEMPLATES_CHECKS = (
     "guarantee that it's a valid network, but the author of this application didn't prove that."
 )
 VALIDATE_WORD = "Validate"
+CREATE_NETWORK_WORD = "Create network"
 DRAW_LOOP_TITLE = "Draw outer boundary loop"
 FOLDS_TITLE = "Add fold-lines and inner loops"
 FOLDS_TEXT = "Fold-lines and boundaries define faces of the body (and their parts):"
@@ -397,7 +401,7 @@ class HelpWindow(QWidget):
     def _template_page(self) -> None:
         """The Template tab: what templates are for, how one is made, step by step, and what Validate checks."""
         networks_link = lambda section: lambda: {"networks": _link(section, tr(NETWORKS_LINK))}  # noqa: E731
-        self._lines(TEMPLATES_INTRO, TEMPLATES_USE)
+        self._lines(TEMPLATES_INTRO, TEMPLATES_USE, lambda: {"create": _bold(tr(CREATE_NETWORK_WORD))})
         self._paragraph(TEMPLATES_EXACT, lambda: {"max": str(MAX_NUMBER_DIGITS)})
         self._paragraph(TEMPLATES_CHECKS, lambda: {"validate": _bold(tr(VALIDATE_WORD))})
         self._title(DRAW_LOOP_TITLE, 1)
@@ -562,9 +566,15 @@ class HelpWindow(QWidget):
 
         self._text().add(html)
 
-    def _lines(self, first: str, second: str) -> None:
-        """A paragraph of two texts, the second on a line of its own."""
-        self._text().add(lambda: _paragraph_html(f"{tr(first)}<br>{tr(second)}", False))
+    def _lines(self, first: str, second: str, values: Callable[[], dict[str, str]] | None = None) -> None:
+        """A paragraph of two texts, the second on a line of its own; `values` gives what goes into the second one's
+        {placeholders}, in the current language."""
+
+        def html() -> str:
+            filled = tr(second) if values is None else tr(second).format(**values())
+            return _paragraph_html(f"{tr(first)}<br>{filled}", False)
+
+        self._text().add(html)
 
     def _title(self, text: str, number: int | None = None, section: str | None = None) -> None:
         """The title of a part of the page, with its step number if it's one of the steps; `section`: the name a link

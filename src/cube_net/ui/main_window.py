@@ -47,6 +47,7 @@ from cube_net.core.project import (
     restore_document,
     save_project,
 )
+from cube_net.core.project.from_template import project_from_template
 from cube_net.core.project.repair import RepairError, long_vertices, needs_repair, repair_project, vertex_names
 from cube_net.core.project.template_repair import (
     needs_template_repair,
@@ -110,6 +111,7 @@ from cube_net.ui.sheet.coordinates_text import copied_text
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.sheet.workspace import Workspace
 from cube_net.ui.style import DEFAULT_STYLE, Style, apply_style
+from cube_net.ui.template.create_network_button import CreateNetworkButton
 from cube_net.ui.template.draw_hole_button import DrawHoleButton
 from cube_net.ui.template.net_area import NetArea
 from cube_net.ui.template.template_mode import TemplateMode
@@ -340,6 +342,7 @@ class MainWindow(QMainWindow):
         template_tool.origin_changed.connect(self._on_origin_changed)
         template_tool.line_changed.connect(self._update_edit_actions)
         self.template_mode.changed.connect(self._on_template_changed)
+        self.template_mode.save_wanted.connect(self._save)
 
         self._create_instruments()
         self._create_menus()
@@ -539,6 +542,9 @@ class MainWindow(QMainWindow):
         self.validate_button = ValidateButton(toolbar, with_separator=False)  # below that
         self.validate_button.set_visible(False)
         self.validate_button.clicked.connect(self._on_validate)
+        self.create_network_button = CreateNetworkButton(toolbar)  # below that
+        self.create_network_button.set_visible(False)
+        self.create_network_button.clicked.connect(self._on_create_network)
 
         spacer = QWidget(toolbar)  # pushes what follows to the bottom of the panel
         spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
@@ -583,6 +589,7 @@ class MainWindow(QMainWindow):
         self.ruler_total_action.setVisible(False)
         self.validate_button.set_visible(False)
         self.draw_hole_button.set_visible(False)
+        self.create_network_button.set_visible(False)
         self.bounding.set_shown(False)
         self.approve_action.setVisible(True)
         self.settings_panel.style_tab.setEnabled(False)
@@ -613,6 +620,7 @@ class MainWindow(QMainWindow):
         self.validate_button.set_visible(template)
         self.draw_hole_action.setVisible(template)
         self.draw_hole_button.set_visible(template)
+        self.create_network_button.set_visible(template)
         self.approve_action.setVisible(not template)
         self.settings_panel.set_template_mode(template)
         self._mouse = None
@@ -652,6 +660,19 @@ class MainWindow(QMainWindow):
     def _on_validate(self) -> None:
         if self.in_template_mode:
             self.template_mode.validate()
+
+    def _on_create_network(self) -> None:
+        """Create network: a new project from the template as it is in the window, as File -> New -> Custom template
+        makes one from its file. Unsaved changes are asked about first, but the project is made from them whatever
+        the answer (Don't save: they're gone with the template, but the project has them); Cancel: nothing happens."""
+        if not self.in_template_mode or not self.template_mode.can_create_network():
+            return
+        document = self.template_mode.document()
+        path = self.template_mode.path
+        if not self._confirm_leaving_project():
+            return
+        start = Start.CUSTOM.value if path is None else f"{Start.CUSTOM.value} {path}"
+        self.start_new_project(project_from_template(document), start)
 
     def _on_undo(self) -> None:
         if self.in_template_mode:
@@ -738,6 +759,7 @@ class MainWindow(QMainWindow):
             self.draw_hole_action.setEnabled(tool.can_start_hole())
             self.draw_hole_button.set_enabled(tool.can_start_hole())
             self.validate_button.set_enabled(self.template_mode.can_validate())
+            self.create_network_button.set_enabled(self.template_mode.can_create_network())
             self.unlock_slope_action.setEnabled(True)  # Escape always means something while making a template
         else:
             dragging = self.cut_tool.busy  # a point is being dragged, or a button of the line is pressed

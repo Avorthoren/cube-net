@@ -2,9 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 """`TemplatePanel`: the instrument panel of an animation of making a template, down its sheet's left side, as the
-window has it while a template is made: Net area, Draw hole and Validate, made of the window's own widgets. They're
-enabled when the window's are, and look hovered and pushed as the pointer goes over them and clicks (the animation's
-mouse isn't the real one, which Qt would follow)."""
+window has it while a template is made: Net area, Draw hole, Validate and Create network, made of the window's own
+widgets. They're enabled when the window's are, and look hovered and pushed as the pointer goes over them and clicks
+(the animation's mouse isn't the real one, which Qt would follow)."""
 
 from PyQt6.QtCore import QRect, Qt
 from PyQt6.QtGui import QPalette
@@ -14,6 +14,7 @@ from cube_net.core.template import Template, TemplateState, ValidationStatus, te
 from cube_net.ui import palette
 from cube_net.ui.help.demo.steps import DRAW_HOLE, VALIDATE
 from cube_net.ui.instruments.button_look import tool_buttons_style
+from cube_net.ui.template.create_network_button import CreateNetworkButton
 from cube_net.ui.template.draw_hole_button import DrawHoleButton
 from cube_net.ui.template.net_area import NetArea
 from cube_net.ui.template.template_tool import TemplateTool
@@ -33,6 +34,7 @@ class TemplatePanel:
         self.net_area = NetArea(toolbar)
         self.draw_hole = DrawHoleButton(toolbar)
         self.validate = ValidateButton(toolbar, with_separator=False)
+        self.create_network = CreateNetworkButton(toolbar)  # (it does nothing in an animation)
         # Its buttons, by name.
         self.buttons: dict[str, QAbstractButton] = {DRAW_HOLE: self.draw_hole.button, VALIDATE: self.validate.button}
         self.fit()
@@ -61,6 +63,9 @@ class TemplatePanel:
             and not tool.drawing_hole
             and not tool.busy()
             and self.validate.status is not ValidationStatus.VALID
+        )
+        self.create_network.set_enabled(
+            self.validate.status is ValidationStatus.VALID and not tool.busy() and not tool.drawing_hole
         )
 
     def hover(self, button: QAbstractButton | None) -> None:

@@ -149,4 +149,7 @@ def load_document(path: Path) -> Project | TemplateDocument:
     try:
         return document_from_bytes(content)
     except ProjectFileError as e:
-        raise ProjectFileError("Can't open {path}. {problem}", path=path, problem=e) from e
+        problem = e
+        if path.suffix == TEMPLATE_SUFFIX and e.template == "It isn't a Cube Net project.":
+            problem = ProjectFileError("It isn't a Cube Net template.")  # what a file named so was expected to be
+        raise ProjectFileError("Can't open {path}. {problem}", path=path, problem=problem) from e

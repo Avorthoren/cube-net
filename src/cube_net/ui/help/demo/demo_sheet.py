@@ -76,7 +76,7 @@ from cube_net.ui.style import DEFAULT_CUBE_LOOK, DEFAULT_STYLE, Look
 from cube_net.ui.template.assign_vertex_window import AssignVertexWindow
 from cube_net.ui.template.template_tool import TemplateTool
 from cube_net.ui.template.validate_button import ValidateButton
-from cube_net.ui.template.validation_messages import failure_text, no_problems_text
+from cube_net.ui.template.validation_messages import failure_text, no_problems_text, with_save_question
 
 # What the view shows by default: the default net with some room around it.
 AROUND_THE_NET = Box(Vec(9, F(48, 5)), Vec(14, F(72, 5)))
@@ -457,19 +457,25 @@ class DemoSheet(QWidget):
         self._open(picker, closed)
 
     def _validate(self) -> None:
-        """Validate (as `TemplateMode.validate`): the first problem in a message; or that there's none."""
+        """Validate (as `TemplateMode.validate`): the first problem in a message; or that there's none, and whether to
+        save the template (an animation has no file: either answer just closes it)."""
         assert isinstance(self.tool, TemplateTool) and self.validate_button is not None
         failure = validate(self.tool.editor.template)
+        buttons = QDialogButtonBox.StandardButton
         if failure is None:
             self.tool.align_hatches()  # the pieces of each face hatched alike
             self.validate_button.set_status(ValidationStatus.VALID)
-            window = MessageWindow("Cube Net", no_problems_text())
+            window = MessageWindow("Cube Net", with_save_question(no_problems_text()), icon=MessageIcon.QUESTION)
+            yes = window.add_standard(buttons.Yes)
+            no = window.add_standard(buttons.No)
+            window.set_default(yes)  # (as `ask_yes_no`)
+            window.set_escape(no)
         else:
             self.validate_button.set_status(ValidationStatus.INVALID)
             window = MessageWindow("Cube Net", failure_text(failure), icon=MessageIcon.WARNING)
-        ok = window.add_standard(QDialogButtonBox.StandardButton.Ok)
-        window.set_default(ok)
-        window.set_escape(ok)
+            ok = window.add_standard(buttons.Ok)
+            window.set_default(ok)
+            window.set_escape(ok)
         window.adjustSize()
         self._open(window, lambda _result: None)
 

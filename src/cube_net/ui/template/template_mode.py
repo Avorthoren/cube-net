@@ -44,7 +44,12 @@ from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.style import DEFAULT_STYLE, Style
 from cube_net.ui.template.assign_vertex_window import AssignVertexWindow
 from cube_net.ui.template.template_tool import TemplateTool
-from cube_net.ui.template.validation_messages import failure_text, no_problems_text, reindexed_text
+from cube_net.ui.template.validation_messages import (
+    failure_text,
+    no_problems_text,
+    reindexed_text,
+    with_save_question,
+)
 
 # The template sheet.
 SHEET = Box(Vec(0, 0), Vec(TEMPLATE_SHEET_WIDTH, TEMPLATE_SHEET_HEIGHT))
@@ -56,6 +61,10 @@ FIRST_VIEW = Box(Vec(45, 45), Vec(55, 55))
 class TemplateMode(QObject):
     # The template, its origin or its history changed (the window's title, the area, the actions follow).
     changed = pyqtSignal()
+
+    # The user wants the template saved now (Yes to a successful validation's question): the window saves it, as Save
+    # does (a template without a file gets one first).
+    save_wanted = pyqtSignal()
 
     def __init__(self, parent: QWidget, note: Callable[..., None]) -> None:
         """`note`: writes a line to the session log, if one is being recorded."""
@@ -164,6 +173,10 @@ class TemplateMode(QObject):
             and self.status() is not ValidationStatus.VALID
         )
 
+    def can_create_network(self) -> bool:
+        """The template as it is now validated (Valid), and nothing being dragged: a project can be made from it."""
+        return self.status() is ValidationStatus.VALID and not self.tool.busy() and not self.tool.drawing_hole
+
     def validate(self) -> None:
         """Validate (V): the first problem found, in a message (Invalid); gaps in indices, the last check, may be
         closed (Yes: Valid then); or that there's no problem (Valid)."""
@@ -175,7 +188,7 @@ class TemplateMode(QObject):
             self.tool.align_hatches()  # the pieces of each face hatched alike
             self._set_status(self.editor.template, ValidationStatus.VALID)
             self._note("template", "validate", "ok")
-            tell(self._parent, "Cube Net", no_problems_text())
+            self._offer_saving(no_problems_text())
             return
         self._set_status(template, ValidationStatus.INVALID)
         self._note("template", "validate", failure.problem.value, *failure.names, *failure.colors)
@@ -188,7 +201,12 @@ class TemplateMode(QObject):
         self.tool.align_hatches()
         self._set_status(self.editor.template, ValidationStatus.VALID)  # nothing else was wrong
         self._note("template", "reindexed")
-        tell(self._parent, "Cube Net", reindexed_text())
+        self._offer_saving(reindexed_text())
+
+    def _offer_saving(self, success: str) -> None:
+        """The successful validation's message, asking whether to save the template now (Yes: `save_wanted`)."""
+        if ask_yes_no(self._parent, with_save_question(success)):
+            self.save_wanted.emit()
 
     def _set_status(self, template: Template, status: ValidationStatus) -> None:
         self._validated = (template, status)

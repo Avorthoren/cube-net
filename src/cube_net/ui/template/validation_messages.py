@@ -24,6 +24,9 @@ REINDEXED = "Vertices automatically reindexed.\nNo other problems found."
 # When nothing was wrong.
 NO_PROBLEMS = "No problems found."
 
+# After either of those, on the next line: the question whether to save the template now.
+SAVE_QUESTION = "Save the template?"
+
 # A vertex's label in a name: its name (1 or 2 capital letters), then its index.
 LABEL = re.compile(r"\b([A-Z]{1,2})([0-9]+)\b")
 
@@ -37,6 +40,12 @@ def no_problems_text() -> str:
 
 def reindexed_text() -> str:
     return tr(REINDEXED)
+
+
+def with_save_question(text: str) -> str:
+    """A message of a successful validation (`no_problems_text`, `reindexed_text`), and whether to save the template
+    now on the next line."""
+    return f"{text}\n{tr(SAVE_QUESTION)}"
 
 
 def listed(items: Sequence[str]) -> str:

@@ -43,15 +43,26 @@ def mode(qtbot: QtBot) -> TemplateMode:
 
 
 def told(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """What the messages say (the question after a successful validation is answered No)."""
     texts: list[str] = []
     monkeypatch.setattr("cube_net.ui.template.template_mode.tell", lambda _p, _t, text, **_: texts.append(text))
+    monkeypatch.setattr("cube_net.ui.template.template_mode.ask_yes_no", lambda *_: False)
     return texts
 
 
-def test_no_problems(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("answer", [True, False])
+def test_no_problems_and_whether_to_save(
+    mode: TemplateMode, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot, answer: bool
+) -> None:
     texts = told(monkeypatch)
+    asked: list[str] = []
+    monkeypatch.setattr("cube_net.ui.template.template_mode.ask_yes_no", lambda _p, text: asked.append(text) or answer)
+    saves: list[bool] = []
+    mode.save_wanted.connect(lambda: saves.append(True))
     mode.validate()
-    assert texts == ["No problems found."]
+    assert asked == ["No problems found.\nSave the template?"] and texts == []
+    assert saves == ([True] if answer else [])
+    assert mode.status() is ValidationStatus.VALID  # whatever the answer
 
 
 @pytest.mark.parametrize(
@@ -83,12 +94,12 @@ def test_gaps_in_indices(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch, an
     asked: list[str] = []
     monkeypatch.setattr("cube_net.ui.template.template_mode.ask_yes_no", lambda _p, text: asked.append(text) or answer)
     mode.validate()
-    assert asked == ["Indices for vertex A have gaps. Reindex automatically?"]
+    assert asked[0] == "Indices for vertex A have gaps. Reindex automatically?"
     if answer:
-        assert texts == ["Vertices automatically reindexed.\nNo other problems found."]
-        assert str(mode.editor.template.vertex(a3).label) == "A3"
+        assert asked[1:] == ["Vertices automatically reindexed.\nNo other problems found.\nSave the template?"]
+        assert texts == [] and str(mode.editor.template.vertex(a3).label) == "A3"
     else:
-        assert texts == [] and str(mode.editor.template.vertex(a3).label) == "A7"
+        assert asked[1:] == [] and texts == [] and str(mode.editor.template.vertex(a3).label) == "A7"
 
 
 # A style, not the default one.

@@ -109,6 +109,15 @@ def test_not_a_project_file(tmp_path: Path) -> None:
         load_project(path)
 
 
+def test_a_file_named_as_a_template_that_isnt_one_is_called_so(tmp_path: Path) -> None:
+    from cube_net.core.project import load_document
+
+    path = tmp_path / "x.nettemplate"
+    path.write_text("Hello!")
+    with pytest.raises(ProjectFileError, match="isn't a Cube Net template"):
+        load_document(path)
+
+
 def test_a_cut_off_file(tmp_path: Path) -> None:
     path = path_in(tmp_path)
     save_project(project_of(approving()), path)
