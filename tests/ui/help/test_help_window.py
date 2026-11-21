@@ -251,3 +251,31 @@ def test_the_tabs_in_russian(qtbot: QtBot) -> None:
     window = make(qtbot)
     TRANSLATIONS.set_language(Language.RUSSIAN)
     assert [window.tabs.tabText(i) for i in range(window.tabs.count())] == ["Развёртка", "Шаблон", "Горячие клавиши"]
+
+
+def test_the_tabs_start_where_the_first_paragraph_does(qtbot: QtBot) -> None:
+    from PyQt6.QtCore import QPoint
+
+    window = make(qtbot)
+    bar = window.tabs.tabBar()
+    assert bar is not None
+    top = window.first_paragraph_top()
+    heading = window.blocks[0].document()
+    assert heading is not None and top is not None
+    assert top > 0 and bar.mapTo(window, QPoint(0, 0)).y() == top  # under "How it works"
+    assert "How it works" in heading.findBlockByNumber(1).text()
+    assert heading.findBlockByNumber(2).text().startswith("This application lets you build")
+
+
+def test_the_tabs_follow_the_first_paragraph_when_the_page_is_laid_out_again(qtbot: QtBot) -> None:
+    from PyQt6.QtCore import QPoint
+
+    window = make(qtbot)
+    bar = window.tabs.tabBar()
+    column = window.blocks[0].parentWidget()
+    assert bar is not None and column is not None and column.layout() is not None
+    before = window.first_paragraph_top()
+    assert before is not None
+    column.layout().setContentsMargins(0, 28 + 40, 0, 40)  # type: ignore[union-attr]
+    qtbot.waitUntil(lambda: window.first_paragraph_top() == before + 40)
+    qtbot.waitUntil(lambda: bar.mapTo(window, QPoint(0, 0)).y() == before + 40)

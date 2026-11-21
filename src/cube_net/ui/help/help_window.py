@@ -15,8 +15,8 @@ from collections.abc import Callable, Sequence
 from fractions import Fraction as F
 from html import escape
 
-from PyQt6.QtCore import QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QKeyEvent
+from PyQt6.QtCore import QEvent, QObject, QPoint, QSize, QSizeF, Qt, QTimer, pyqtSignal
+from PyQt6.QtGui import QKeyEvent, QShowEvent
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -120,6 +120,9 @@ HOTKEYS_TITLE = "Hotkeys"
 NETWORK_TAB = "Network"
 TEMPLATE_TAB = "Template"
 
+# The first paragraph's number in the Network page's first block of text (after the name and "How it works").
+FIRST_PARAGRAPH = 2
+
 # Room between the application's name at the top and the language list after it (px).
 LANGUAGE_GAP_PX = 20
 
@@ -185,6 +188,12 @@ class HelpWindow(QWidget):
         self._paragraph(VIEW_TEXT, bullet=True)
         self.scroll = self._finish_page(NETWORK_TAB, HelpTab.NETWORK)
         self.language = self.languages[0]
+        # The tabs follow the first paragraph wherever the page's layout puts it (it's laid out after the window is
+        # shown, and again when the fonts or the texts change).
+        self._tabs_top: int | None = None
+        self.blocks[0].installEventFilter(self)
+        first_layout = self.blocks[0].document().documentLayout()  # type: ignore[union-attr]
+        first_layout.documentSizeChanged.connect(self._on_first_text_resized)  # type: ignore[union-attr]
         self._start_page([])  # its content is to come
         self._finish_page(TEMPLATE_TAB, HelpTab.TEMPLATE)
         self._start_page(self.hotkey_blocks)
@@ -200,6 +209,43 @@ class HelpWindow(QWidget):
         self.show_tab(tab)
         self.tabs.currentChanged.connect(lambda _index: self.tab_changed.emit(self.tab()))
         self.restore_default_size()
+
+    def showEvent(self, a0: QShowEvent | None) -> None:
+        super().showEvent(a0)
+        self.align_tabs()
+        QTimer.singleShot(0, self.align_tabs)  # once the page is laid out for the window's size
+
+    def _on_first_text_resized(self, _size: QSizeF) -> None:
+        self.align_tabs()  # (a method, not a lambda: Qt disconnects it when the window is gone)
+
+    def eventFilter(self, a0: QObject | None, a1: QEvent | None) -> bool:
+        """The first block of text moved or changed its size: the tabs follow its first paragraph."""
+        if a1 is not None and a1.type() in (QEvent.Type.Move, QEvent.Type.Resize):
+            self.align_tabs()
+        return False
+
+    def align_tabs(self) -> None:
+        """The tabs start where the Network page's first paragraph does (its first line's top, under the name and "How
+        it works"), as far as the page is from the window's top when it isn't scrolled."""
+        top = self.first_paragraph_top()
+        if top is not None and top != self._tabs_top:
+            self._tabs_top = top
+            self.tabs.setStyleSheet(f"QTabWidget::tab-bar {{ top: {top}px; }}")
+
+    def first_paragraph_top(self) -> int | None:
+        """Where the Network page's first paragraph's first line starts, from the page's top (px); None while its text
+        is being set anew (not laid out)."""
+        block = self.blocks[0]
+        document = block.document()
+        layout = document.documentLayout() if document is not None else None
+        paragraph = document.findBlockByNumber(FIRST_PARAGRAPH) if document is not None else None
+        lines = paragraph.layout() if paragraph is not None and paragraph.isValid() else None
+        viewport = block.viewport()
+        page = self.scroll.widget()
+        if layout is None or lines is None or lines.lineCount() == 0 or viewport is None or page is None:
+            return None
+        top = layout.blockBoundingRect(paragraph).top() + lines.lineAt(0).y()
+        return viewport.mapTo(page, QPoint(0, round(top))).y()
 
     def tab(self) -> HelpTab:
         """The tab shown."""
@@ -282,6 +328,7 @@ class HelpWindow(QWidget):
     def _place_languages(self) -> None:
         for language, block in self._language_places:
             _place_language(language, block)
+        self.align_tabs()  # the texts above the first paragraph may be of another height now
 
     def _paragraph(self, text: str, values: Callable[[], dict[str, str]] | None = None, bullet: bool = False) -> None:
         """A paragraph (an item of a list, if `bullet`); `values` gives what goes into its {placeholders}, in the
