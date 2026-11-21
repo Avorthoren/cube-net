@@ -123,22 +123,27 @@ def test_good_to_know_undo_the_rectangle_and_the_view(qtbot: QtBot) -> None:
     assert after_title.startswith("•") and after_title[1:].lstrip().startswith(UNDO_TEXT)
     assert text.index(UNDO_TEXT) < text.index("exact area value") < text.index(VIEW_TEXT)
     assert "right-click" not in text  # it's in Advanced features now
-    assert "Hold Shift while cutting" not in text  # it's with the hotkeys now
-    assert text.index(MORE_TITLE) < text.index(HOTKEYS_TITLE)  # the hotkeys come after it
+    assert "Hold Shift while cutting" not in text
+    assert HOTKEYS_TITLE not in text  # the hotkeys have a tab of their own
+    assert text.rstrip().endswith(VIEW_TEXT)  # Good to know is the Network tab's end
 
 
-def test_the_hotkeys_by_group(qtbot: QtBot) -> None:
+def test_the_hotkeys_by_group_on_their_tab(qtbot: QtBot) -> None:
+    from cube_net.ui.help.help_tab import HelpTab
     from cube_net.ui.help.help_window import HOTKEYS_TITLE
     from cube_net.ui.help.hotkeys import HOTKEYS
 
-    text = make(qtbot).blocks[-1].toPlainText()
-    for group in HOTKEYS:
-        assert group.title in text
-        for hotkey in group.hotkeys:
-            assert hotkey.shown() in text and hotkey.action in text
+    window = make(qtbot)
+    [block] = window.hotkey_blocks
+    assert window.pages[HelpTab.HOTKEYS].isAncestorOf(block)
+    text = block.toPlainText()
     hotkeys = text[text.index(HOTKEYS_TITLE) :]
-    assert "Shift + drag a vertex" in hotkeys and "hold Shift" in hotkeys
-    assert "right-click" not in hotkeys  # Good to know tells about it
+    for group in HOTKEYS:
+        assert group.title in hotkeys
+        for hotkey in group.hotkeys:
+            assert hotkey.shown() in hotkeys and hotkey.action in hotkeys
+    assert "Shift + drag a vertex" in hotkeys and "hold Shift" in hotkeys and "right-click" in hotkeys
+    assert "Making a template" in hotkeys
 
 
 def test_the_language_list_by_the_name(qtbot: QtBot) -> None:
@@ -221,14 +226,13 @@ def test_every_tab_has_the_language_list(qtbot: QtBot) -> None:
     assert chosen == [Language.RUSSIAN]
 
 
-def test_the_template_and_hotkeys_tabs_are_empty_for_now(qtbot: QtBot) -> None:
+def test_the_template_tab_is_empty_for_now(qtbot: QtBot) -> None:
     from cube_net.ui.help.help_tab import HelpTab
     from cube_net.ui.help.text_block import TextBlock
 
     window = make(qtbot)
-    for tab in (HelpTab.TEMPLATE, HelpTab.HOTKEYS):
-        blocks = window.pages[tab].findChildren(TextBlock)
-        assert len(blocks) == 1 and "How it works" in blocks[0].toPlainText()  # the name, and nothing else yet
+    blocks = window.pages[HelpTab.TEMPLATE].findChildren(TextBlock)
+    assert len(blocks) == 1 and blocks[0].toPlainText().split() == ["Cube", "Net", "How", "it", "works"]
 
 
 def test_opens_with_the_tab_asked_and_tells_when_another_is_chosen(qtbot: QtBot) -> None:

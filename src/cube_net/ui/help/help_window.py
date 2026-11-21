@@ -143,8 +143,9 @@ class HelpWindow(QWidget):
         self.setWindowFlag(Qt.WindowType.Window)
         bind(self, self.setWindowTitle, "{name} Help", name=APP_NAME)
         self.players: list[DemoPlayer] = []
-        # The Network tab's blocks of text (`TextBlock`), in order.
+        # The Network tab's blocks of text (`TextBlock`), in order, and the Hotkeys tab's.
         self.blocks: list[TextBlock] = []
+        self.hotkey_blocks: list[TextBlock] = []
         # Every tab's language list, and the block of the name it's placed after.
         self.languages: list[LanguageBox] = []
         self._language_places: list[tuple[LanguageBox, TextBlock]] = []
@@ -182,14 +183,14 @@ class HelpWindow(QWidget):
         self._paragraph(UNDO_TEXT, bullet=True)
         self._paragraph(BOUNDS_TEXT, lambda: {"bounds": f"<b>{tr('Bounds')}</b>"}, bullet=True)
         self._paragraph(VIEW_TEXT, bullet=True)
-        self._title(HOTKEYS_TITLE)
-        for group in HOTKEYS:
-            self._hotkeys(group)
         self.scroll = self._finish_page(NETWORK_TAB, HelpTab.NETWORK)
         self.language = self.languages[0]
         self._start_page([])  # its content is to come
         self._finish_page(TEMPLATE_TAB, HelpTab.TEMPLATE)
-        self._start_page([])  # its content is to come
+        self._start_page(self.hotkey_blocks)
+        self._title(HOTKEYS_TITLE)
+        for group in HOTKEYS:
+            self._hotkeys(group)
         self._finish_page(HOTKEYS_TITLE, HelpTab.HOTKEYS)
         TRANSLATIONS.changed.connect(self._place_languages)  # after the texts' own refresh: it's connected before
 

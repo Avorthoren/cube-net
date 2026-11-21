@@ -324,14 +324,20 @@ RUSSIAN: dict[str, str] = {
         "наведя указатель мыши на её приближённое значение."
     ),
     "Hotkeys": "Горячие клавиши",
-    "Projects": "Проекты",
-    "Open a project": "Открыть проект",
-    "Save the project": "Сохранить проект",
+    "Projects and templates": "Проекты и шаблоны",
+    "New template": "Новый шаблон",
+    "Open a project or a template": "Открыть проект или шаблон",
+    "Save the project or the template": "Сохранить проект или шаблон",
     "Save it under another name": "Сохранить под другим именем",
     "Quit": "Выйти",
     "Undo and redo": "Отмена и повтор",
     "Undo the last action": "Отменить последнее действие",
     "Redo it": "Повторить его",
+    "Exact values": "Точные значения",
+    "right-click": "щёлкнуть правой кнопкой",
+    "Place a vertex, set a slope, or move the origin (on a vertex)": (
+        "Поставить вершину, задать наклон или сдвинуть начало координат (на вершине)"
+    ),
     "Making a cut": "Создание разреза",
     "hold {key}": "удерживать {key}",
     "The new segment is horizontal or vertical": "Новый отрезок горизонтален или вертикален",
@@ -344,6 +350,17 @@ RUSSIAN: dict[str, str] = {
     "click a vertex": "щёлкнуть по вершине",
     "Delete it (any but the first and the last)": "Удалить её (кроме первой и последней)",
     "Gluing": "Склейка",
+    "Making a template": "Создание шаблона",
+    "Give up the fold line being drawn or the drag, and unlock the slope set with Set slope": (
+        "Отменить рисуемую линию сгиба или перетаскивание и снять наклон, заданный через «Задать наклон»"
+    ),
+    "Draw a hole": "Нарисовать отверстие",
+    "Validate the template": "Проверить шаблон",
+    "Delete it and its fold lines": "Удалить её и её линии сгиба",
+    "click a fold line segment": "щёлкнуть по отрезку линии сгиба",
+    "Delete it, with whatever is left hanging": "Удалить его вместе со всем, что останется висеть",
+    "double-click a face": "дважды щёлкнуть по грани",
+    "Choose its color": "Выбрать её цвет",
     "Approve the rearranged net (when its halves don't overlap)": (
         "Утвердить новую развёртку (когда её половины не перекрываются)"
     ),

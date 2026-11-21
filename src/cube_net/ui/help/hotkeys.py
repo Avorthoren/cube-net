@@ -63,13 +63,17 @@ def native_modifier(modifier: str) -> str:
 # Unlocking a slope set with Set slope: while cutting and while dragging.
 _UNLOCK = Hotkey("Esc", "", "Unlock the slope set with Set slope")
 
+# The new segment straight: while cutting, and while drawing a template's loop, a hole or a fold line.
+_STRAIGHT = Hotkey("Shift", "", "The new segment is horizontal or vertical", held=True)
+
 HOTKEYS = (
     HotkeyGroup(
-        "Projects",
+        "Projects and templates",
         (
             Hotkey("Ctrl+N", "", "New project"),
-            Hotkey("Ctrl+O", "", "Open a project"),
-            Hotkey("Ctrl+S", "", "Save the project"),
+            Hotkey("Ctrl+T", "", "New template"),
+            Hotkey("Ctrl+O", "", "Open a project or a template"),
+            Hotkey("Ctrl+S", "", "Save the project or the template"),
             Hotkey("Ctrl+Shift+S", "", "Save it under another name"),
             Hotkey("Ctrl+Q", "", "Quit"),
         ),
@@ -82,12 +86,10 @@ HOTKEYS = (
         ),
     ),
     HotkeyGroup(
-        "Making a cut",
-        (
-            Hotkey("Shift", "", "The new segment is horizontal or vertical", held=True),
-            _UNLOCK,
-        ),
+        "Exact values",
+        (Hotkey("", "right-click", "Place a vertex, set a slope, or move the origin (on a vertex)"),),
     ),
+    HotkeyGroup("Making a cut", (_STRAIGHT, _UNLOCK)),
     HotkeyGroup(
         "Adjusting the cut",
         (
@@ -99,6 +101,18 @@ HOTKEYS = (
     HotkeyGroup(
         "Gluing",
         (Hotkey("Ctrl+Enter", "", "Approve the rearranged net (when its halves don't overlap)"),),
+    ),
+    HotkeyGroup(
+        "Making a template",
+        (
+            _STRAIGHT,
+            Hotkey("Esc", "", "Give up the fold line being drawn or the drag, and unlock the slope set with Set slope"),
+            Hotkey("H", "", "Draw a hole"),
+            Hotkey("V", "", "Validate the template"),
+            Hotkey("Ctrl", "click a vertex", "Delete it and its fold lines"),
+            Hotkey("Ctrl", "click a fold line segment", "Delete it, with whatever is left hanging"),
+            Hotkey("", "double-click a face", "Choose its color"),
+        ),
     ),
     HotkeyGroup(
         "Instruments",

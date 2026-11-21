@@ -38,15 +38,10 @@ def the_applications_keys(qtbot: QtBot, tmp_path: Path) -> list[set[str]]:
     return keys
 
 
-# The keys of making templates: New Template, Validate and Draw hole. They'll have their own help page
-# (docs/template_idea.txt).
-TEMPLATE_KEYS = [{"Ctrl+T"}, {"V"}, {"H"}]
-
-
 def test_every_shortcut_of_the_application_is_in_the_help(qtbot: QtBot, tmp_path: Path) -> None:
     listed = listed_keys()
     missing = [keys for keys in the_applications_keys(qtbot, tmp_path) if not keys & listed]
-    assert missing == TEMPLATE_KEYS
+    assert missing == []
 
 
 def test_every_key_in_the_help_is_a_shortcut(qtbot: QtBot, tmp_path: Path) -> None:
@@ -56,7 +51,7 @@ def test_every_key_in_the_help_is_a_shortcut(qtbot: QtBot, tmp_path: Path) -> No
 
 def test_a_key_can_do_two_things() -> None:
     escapes = [hotkey for group in HOTKEYS for hotkey in group.hotkeys if hotkey.keys == "Esc"]
-    assert len({hotkey.action for hotkey in escapes}) == 2  # unlock a slope; close the help
+    assert len({hotkey.action for hotkey in escapes}) == 3  # unlock a slope; give up a fold line; close the help
 
 
 def test_how_they_are_written() -> None:
