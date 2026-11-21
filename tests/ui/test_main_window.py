@@ -4595,3 +4595,66 @@ class TestTooLongNumbers:
         window.cut_tool.move_origin(Origin(long, long))
         assert len(told) == 1 and told[0].startswith("Your action was rejected.<br>") and "the origin" in told[0]
         assert window.editor.origin == Origin()
+
+
+class TestRepairingLongNumbers:
+    """Opening a project with numbers too long: the user is asked, and it's repaired (or not opened)."""
+
+    def saved_long_project(self, tmp_path: Path) -> Path:
+        from tests.core.project.test_repair import THIRD, long_project
+
+        from cube_net.core.project import save_project
+        from cube_net.core.project.file import any_length
+
+        path = tmp_path / "long.cubenet"
+        with any_length():
+            save_project(long_project(11 + THIRD), path)
+        return path
+
+    def make(self, qtbot: QtBot, tmp_path: Path) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=False), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        return window
+
+    def test_repaired_when_the_user_wants(self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from cube_net.core.project.repair import needs_repair
+
+        path = self.saved_long_project(tmp_path)
+        window = self.make(qtbot, tmp_path)
+        asked: list[str] = []
+        told: list[str] = []
+        monkeypatch.setattr("cube_net.ui.main_window.ask_yes_no", lambda _p, text, *_: asked.append(text) or True)
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda _p, _t, text, **_: told.append(text))
+        assert window.open_project_from(path)
+        assert len(asked) == 1 and asked[0].startswith("Unable to open the file.<br>This version of the application")
+        assert "Caution: this will wipe out undo/redo history" in asked[0]
+        assert len(told) == 1 and told[0].startswith("Automatic repairment completed.<br>Vertices ")
+        assert not needs_repair(window._project()) and window.is_dirty  # not saved by itself
+
+    def test_not_opened_when_the_user_doesnt(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        path = self.saved_long_project(tmp_path)
+        window = self.make(qtbot, tmp_path)
+        before = window.editor.net
+        monkeypatch.setattr("cube_net.ui.main_window.ask_yes_no", lambda *_: False)
+        assert not window.open_project_from(path)
+        assert window.editor.net is before and window.project_path is None
+
+    def test_not_opened_when_the_repair_fails(
+        self, qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from cube_net.core.project.repair import RepairError
+
+        path = self.saved_long_project(tmp_path)
+        window = self.make(qtbot, tmp_path)
+        told: list[str] = []
+        monkeypatch.setattr("cube_net.ui.main_window.ask_yes_no", lambda *_: True)
+        monkeypatch.setattr("cube_net.ui.main_window.tell", lambda _p, _t, text, **_: told.append(text))
+
+        def failing(_project: object) -> object:
+            raise RepairError("a bug")
+
+        monkeypatch.setattr("cube_net.ui.main_window.repair_project", failing)
+        assert not window.open_project_from(path)
+        assert told == ["Unexpected error during project repairment."] and window.project_path is None

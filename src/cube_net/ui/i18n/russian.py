@@ -57,6 +57,27 @@ RUSSIAN: dict[str, str] = {
         "проект. Отчёт об ошибке сохранён в:"
     ),
     "Error report couldn't be saved.": "Не удалось сохранить отчёт об ошибке.",
+    # A file with numbers too long (ui/repair_messages.py).
+    "Unable to open the file.": "Не удалось открыть файл.",
+    (
+        "This version of the application supports numbers up to {max} decimal digits long, while selected file has "
+        "vertices ({names}) whose coordinates numerators and/or denominators are longer."
+    ): (
+        "Эта версия приложения поддерживает числа длиной до {max} десятичных цифр, а в выбранном файле есть вершины "
+        "({names}), у координат которых числители и/или знаменатели длиннее."
+    ),
+    (
+        'Do you want to apply automatic fix that will move "bad" vertices in closest appropriate positions (vertices '
+        "on body edges will be moved along those edges)? Caution: this will wipe out undo/redo history, any "
+        "unfinished cut or unapproved rearrangement."
+    ): (
+        "Применить автоматическое исправление, которое переместит «плохие» вершины в ближайшие подходящие положения "
+        "(вершины на рёбрах тела будут перемещены вдоль этих рёбер)? Внимание: это сотрёт историю отмены и повтора, "
+        "любой незаконченный разрез и неутверждённую перестановку."
+    ),
+    "Unexpected error during project repairment.": "Непредвиденная ошибка при исправлении проекта.",
+    "Automatic repairment completed.": "Автоматическое исправление завершено.",
+    "Vertices {names} were adjusted.": "Вершины {names} были скорректированы.",
     # A number too long (ui/too_long_message.py).
     "Your action was rejected.": "Ваше действие отклонено.",
     (

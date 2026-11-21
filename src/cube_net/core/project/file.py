@@ -7,8 +7,11 @@ import gzip
 import json
 import os
 import shutil
+import sys
 import tempfile
 import zlib
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from cube_net.core.project.codec import decode_project, encode_project
@@ -38,23 +41,26 @@ def template_to_bytes(document: TemplateDocument) -> bytes:
 
 def project_from_bytes(content: bytes) -> Project:
     """The project from what's in a project file. Raises `ProjectFileError` if there's anything wrong with it."""
-    return decode_project(_data(content))
+    with any_length():
+        return decode_project(_data(content))
 
 
 def document_from_bytes(content: bytes) -> Project | TemplateDocument:
     """A project or a template, whichever the file holds (its "kind" says; a file without one is a project of an
     older version). Raises `ProjectFileError` if there's anything wrong with it."""
-    data = _data(content)
-    if isinstance(data, dict) and data.get("kind") == TEMPLATE_KIND:
-        return decode_template(data)
-    return decode_project(data)
+    with any_length():
+        data = _data(content)
+        if isinstance(data, dict) and data.get("kind") == TEMPLATE_KIND:
+            return decode_template(data)
+        return decode_project(data)
 
 
 def restorable(path: Path) -> bool:
     """Can a damaged file be tried to be restored from its history (`restore.py`): it's readable, and has actions to
     undo?"""
     try:
-        return can_restore(_data(path.read_bytes()))
+        with any_length():
+            return can_restore(_data(path.read_bytes()))
     except OSError, ProjectFileError:
         return False
 
@@ -63,9 +69,22 @@ def restore_document(path: Path) -> tuple[Project | TemplateDocument, int] | Non
     """The document from `path` as it was the fewest actions ago that it opens, and how many actions ago; None if it
     can't be restored. The file isn't changed."""
     try:
-        return restore(_data(path.read_bytes()))
+        with any_length():
+            return restore(_data(path.read_bytes()))
     except OSError, ProjectFileError:
         return None
+
+
+@contextmanager
+def any_length() -> Iterator[None]:
+    """Numbers of any length read from text meanwhile: Python reads integers of at most 4300 digits by default, and a
+    file made before the limit (`MAX_NUMBER_DIGITS`), or by hand, may have longer ones (it's repaired then)."""
+    before = sys.get_int_max_str_digits()
+    sys.set_int_max_str_digits(0)
+    try:
+        yield
+    finally:
+        sys.set_int_max_str_digits(before)
 
 
 def _to_bytes(data: object) -> bytes:

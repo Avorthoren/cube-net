@@ -9,6 +9,7 @@ import re
 
 from cube_net.core.geometry import digits
 from cube_net.core.project.codec import encode_project
+from cube_net.core.project.file import any_length
 from cube_net.core.project.project import Project
 from cube_net.core.project.template_codec import TemplateDocument, encode_template
 
@@ -18,7 +19,8 @@ NUMBER = re.compile(r"-?(\d+)(?:/(\d+))?")
 
 def longest_number(document: Project | TemplateDocument) -> int:
     """The most digits of a numerator or a denominator anywhere in `document` (0 if it has no numbers)."""
-    data = encode_template(document) if isinstance(document, TemplateDocument) else encode_project(document)
+    with any_length():  # (they're written as text)
+        data = encode_template(document) if isinstance(document, TemplateDocument) else encode_project(document)
     return _longest(data)
 
 

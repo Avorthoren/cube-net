@@ -47,6 +47,7 @@ from cube_net.core.project import (
     restore_document,
     save_project,
 )
+from cube_net.core.project.repair import RepairError, long_vertices, needs_repair, repair_project, vertex_names
 from cube_net.core.project_settings import ProjectSettings, format_threshold
 from cube_net.core.sheet import sheet_box
 from cube_net.core.update_policy import due_today, offer_automatically
@@ -72,6 +73,7 @@ from cube_net.ui.menu_entry_dialog import ask_menu_entry, confirm_menu_entry_rem
 from cube_net.ui.no_wheel import ignore_wheel
 from cube_net.ui.origin_moved_message import tell_origin_moved
 from cube_net.ui.path_label import PathLabel
+from cube_net.ui.repair_messages import repair_failed_text, repaired_text, too_long_question
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.save_state_label import SaveStateLabel
 from cube_net.ui.session.recent_lines import RecentLines
@@ -100,6 +102,7 @@ from cube_net.ui.template.draw_hole_button import DrawHoleButton
 from cube_net.ui.template.net_area import NetArea
 from cube_net.ui.template.template_mode import TemplateMode
 from cube_net.ui.template.validate_button import ValidateButton
+from cube_net.ui.template.validation_messages import shown_name
 from cube_net.ui.too_long_message import project_too_long_text
 from cube_net.ui.updates.appimage_update import install_appimage, start_appimage
 from cube_net.ui.updates.installation import (
@@ -200,6 +203,10 @@ def format_ruler_total(total: float | None) -> str:
 
 def format_coordinates(x: float, y: float) -> str:
     return f"x: {x:.3f}   y: {y:.3f}"
+
+
+class OpeningCancelled(Exception):
+    """A file wasn't opened, and the user has been told why (a repair turned down, or failed)."""
 
 
 class MainWindow(QMainWindow):
@@ -849,6 +856,8 @@ class MainWindow(QMainWindow):
         nothing changes."""
         try:
             self._load_and_show(path)
+        except OpeningCancelled:
+            return False
         except ProjectFileError as e:
             outcome = self._offer_restoring(path, e)
             if outcome is Restoring.RESTORED:
@@ -887,15 +896,38 @@ class MainWindow(QMainWindow):
         return Restoring.RESTORED
 
     def _load_and_show(self, path: Path) -> None:
+        """Show the project (or the template) from `path`. Raises `ProjectFileError` if it can't be loaded, and
+        `OpeningCancelled` if the user turned down repairing it, or the repair failed (they've been told)."""
         document = load_document(path)
         if isinstance(document, TemplateDocument):
             self._show_template(document, path)
+        elif needs_repair(document):
+            self._show_project(self._repaired(document, path), path)
+            self._saved_revision = -1  # repaired: not what the file holds
         else:
             self._show_project(document, path)
         self.settings.last_project = path
         if self.recorder is not None:
             self.recorder.note("template" if isinstance(document, TemplateDocument) else "project", "opened", path)
             self._record_state(self.recorder)
+
+    def _repaired(self, project: Project, path: Path) -> Project:
+        """A project with numbers too long (`MAX_NUMBER_DIGITS`): repaired, if the user wants it (`repair_project`).
+        Raises `OpeningCancelled` if not, or if the repair fails."""
+        net = project.state.net
+        names = [shown_name(name) for name in vertex_names(net, project.labels, long_vertices(project))]
+        if not ask_yes_no(self, too_long_question(names)):
+            self._note("project", "repair declined", path)
+            raise OpeningCancelled
+        try:
+            repaired = repair_project(project)
+        except RepairError as e:
+            self._note("project", "repair failed", path, str(e)[:200])
+            tell(self, APP_TITLE, repair_failed_text(), icon=MessageIcon.ERROR)
+            raise OpeningCancelled from e
+        self._note("project", "repaired", path)
+        tell(self, APP_TITLE, repaired_text(names))
+        return repaired
 
     def reopen_last_project(self) -> None:
         """At start: back to the project the user worked on last, if any (otherwise the window's new one stays)."""
@@ -905,6 +937,9 @@ class MainWindow(QMainWindow):
             return
         try:
             self._load_and_show(path)
+        except OpeningCancelled:
+            self.ask_for_new_project()  # nothing open: as at the first start
+            return
         except ProjectFileError as e:
             outcome = self._offer_restoring(path, e)
             if outcome is Restoring.RESTORED:
@@ -1086,6 +1121,8 @@ class MainWindow(QMainWindow):
         the last one. If it can't be loaded, the user decides, as when the last one can't."""
         try:
             self._load_and_show(path)
+        except OpeningCancelled:
+            self.ask_for_new_project()  # nothing open: as at the first start
         except ProjectFileError as e:
             if self.recorder is not None:
                 self.recorder.note("project", "opening failed", path)
@@ -1112,6 +1149,8 @@ class MainWindow(QMainWindow):
                 return
             try:
                 self._load_and_show(Path(name))
+            except OpeningCancelled:
+                message = tr("Unable to open the file.")
             except ProjectFileError as e:
                 message = error_text(e)
             else:
