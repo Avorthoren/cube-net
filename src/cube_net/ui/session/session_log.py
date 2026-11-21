@@ -25,17 +25,8 @@ class SessionLog:
 
     @classmethod
     def create_in(cls, directory: Path, now: datetime | None = None) -> SessionLog:
-        """A new log with a unique name, e.g. `session-20261107-153012-345-4242.log` (time with milliseconds and
-        process id; a counter is appended in the unlikely case that such a file already exists)."""
-        directory.mkdir(parents=True, exist_ok=True)
-        moment = now or datetime.now()
-        base = f"session-{moment:%Y%m%d-%H%M%S}-{moment.microsecond // 1000:03d}-{os.getpid()}"
-        path = directory / f"{base}.log"
-        counter = 2
-        while path.exists():
-            path = directory / f"{base}-{counter}.log"
-            counter += 1
-        return cls(path)
+        """A new log with a unique name, e.g. `session-20261107-153012-345-4242.log` (`unique_log_path`)."""
+        return cls(unique_log_path(directory, "session", now))
 
     def header(self, text: str) -> None:
         self._write(f"# {text}")
@@ -56,3 +47,17 @@ class SessionLog:
     def _write(self, line: str) -> None:
         if self._file is not None:
             self._file.write(line + "\n")
+
+
+def unique_log_path(directory: Path, prefix: str, now: datetime | None = None) -> Path:
+    """A path for a new file in `directory` (made if missing), e.g. `<prefix>-20261107-153012-345-4242.log`: time with
+    milliseconds and process id; a counter is appended in the unlikely case that such a file already exists."""
+    directory.mkdir(parents=True, exist_ok=True)
+    moment = now or datetime.now()
+    base = f"{prefix}-{moment:%Y%m%d-%H%M%S}-{moment.microsecond // 1000:03d}-{os.getpid()}"
+    path = directory / f"{base}.log"
+    counter = 2
+    while path.exists():
+        path = directory / f"{base}-{counter}.log"
+        counter += 1
+    return path

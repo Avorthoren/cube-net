@@ -13,11 +13,12 @@ import platform
 import sys
 from pathlib import Path
 
-from PyQt6.QtCore import QT_VERSION_STR, QStandardPaths, QUrl
+from PyQt6.QtCore import QT_VERSION_STR, QObject, QStandardPaths, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import QApplication
 
 from cube_net import __version__
+from cube_net.ui.session.recent_lines import RecentLines
 from cube_net.ui.session.session_log import SessionLog
 from cube_net.ui.session.session_recorder import SessionRecorder
 
@@ -26,6 +27,7 @@ STARTED_AT_LAUNCH = "at app launch"
 STARTED_BY_USER = "turned on by the user"
 STOPPED_BY_USER = "turned off by the user"
 WINDOW_CLOSED = "the main window was closed"
+CRASHED = "crashed"
 
 
 def session_log_directory() -> Path:
@@ -55,6 +57,14 @@ def start_session_recording(app: QApplication, reason: str, directory: Path | No
     app.installEventFilter(recorder)
     app.aboutToQuit.connect(lambda: _finish(log, "quit"))
     print(f"Recording session to {log.path}", file=sys.stderr)
+    return recorder
+
+
+def start_recent_input(app: QApplication, owner: QObject) -> SessionRecorder:
+    """Record all input into lines kept in memory (`RecentLines`), for as long as `owner` lives: what a crash report
+    shows of what led to the crash, recording or not."""
+    recorder = SessionRecorder(RecentLines(), parent=owner)  # gone with it, and so is its filter
+    app.installEventFilter(recorder)
     return recorder
 
 

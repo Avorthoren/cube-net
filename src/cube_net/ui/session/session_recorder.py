@@ -30,6 +30,7 @@ from PyQt6.QtCore import QEvent, QObject, QPointF, Qt, QTimer
 from PyQt6.QtGui import QKeyEvent, QKeySequence, QMouseEvent, QShortcutEvent, QWheelEvent
 from PyQt6.QtWidgets import QAbstractButton, QMenu, QWidget
 
+from cube_net.ui.session.recent_lines import RecentLines
 from cube_net.ui.session.session_log import SessionLog
 from cube_net.ui.sheet.sheet_view import SheetView
 
@@ -72,7 +73,8 @@ def format_modifiers(modifiers: Qt.KeyboardModifier) -> list[str]:
 
 
 class SessionRecorder(QObject):
-    def __init__(self, log: SessionLog, parent: QObject | None = None) -> None:
+    def __init__(self, log: SessionLog | RecentLines, parent: QObject | None = None) -> None:
+        """`log`: the session file, or the recent lines kept in memory all the time (`RecentLines`)."""
         super().__init__(parent)
         self._log = log
         self._sheet: SheetView | None = None
@@ -82,7 +84,7 @@ class SessionRecorder(QObject):
         self._last_view: str | None = None
 
     @property
-    def log(self) -> SessionLog:
+    def log(self) -> SessionLog | RecentLines:
         return self._log
 
     def watch_sheet(self, view: SheetView) -> None:

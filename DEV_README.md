@@ -59,6 +59,13 @@ releases share theirs. The date of the last automatic update check is among the 
 A session log records what the user did, for reproducing a problem: `python -m cube_net.ui.session.snapshots LOG`
 turns its snapshots into files, `.cubenet` for a project and `.nettemplate` for a template.
 
+A crash report (`crash-report-<time>-<pid>.log`, in the same folder) is written when an exception nothing caught
+happens: the window tells the user where it is, and the application closes (`src/cube_net/ui/crash`). It has the
+traceback, the environment (versions, system, screen, language, time), the state of the application as a session log
+starts with it, the latest ~500 lines of input (kept in memory all the time, recording or not), and the session log,
+if one was being recorded. Its first snapshot is the document open at the crash, unsaved changes included:
+`python -m cube_net.ui.session.snapshots REPORT` turns it into a file as well.
+
 ## 2. Tests and checks
 
 From the repository's root, with the virtual environment active:

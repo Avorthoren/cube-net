@@ -69,3 +69,27 @@ def test_open_folder_uses_the_default_location(session_logs_in_tmp: Path, monkey
     monkeypatch.setattr("cube_net.ui.session.start.QDesktopServices.openUrl", lambda _url: False)
     assert not open_session_log_folder()
     assert session_logs_in_tmp.is_dir()
+
+
+def test_recent_input_is_kept_for_as_long_as_its_owner_lives(qapp: QApplication) -> None:
+    from PyQt6.QtCore import QEvent, QObject, QPointF, Qt
+    from PyQt6.QtGui import QMouseEvent
+    from PyQt6.QtWidgets import QWidget
+
+    from cube_net.ui.session.recent_lines import RecentLines
+    from cube_net.ui.session.start import start_recent_input
+
+    owner = QObject()
+    recorder = start_recent_input(qapp, owner)
+    assert isinstance(recorder.log, RecentLines) and recorder.parent() is owner
+    widget = QWidget()
+    press = QMouseEvent(
+        QEvent.Type.MouseButtonPress,
+        QPointF(3, 4),
+        QPointF(3, 4),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    QApplication.sendEvent(widget, press)
+    assert any(" press L " in line for line in recorder.log.lines())

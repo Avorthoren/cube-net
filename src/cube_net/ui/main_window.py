@@ -52,6 +52,7 @@ from cube_net.core.update_policy import due_today, offer_automatically
 from cube_net.core.version import newer
 from cube_net.ui import palette
 from cube_net.ui.app_settings import AppSettings
+from cube_net.ui.crash.crash_report import CrashSection
 from cube_net.ui.desktop_integration import AppImage, DesktopEntry, data_home
 from cube_net.ui.dialogs.message_window import MessageIcon, ask_yes_no, tell
 from cube_net.ui.dialogs.new_project_window import NewProjectChoice, Start, builtin_project, choose_new_project
@@ -71,14 +72,18 @@ from cube_net.ui.origin_moved_message import tell_origin_moved
 from cube_net.ui.path_label import PathLabel
 from cube_net.ui.save_changes_dialog import SaveChoice, ask_save_changes
 from cube_net.ui.save_state_label import SaveStateLabel
+from cube_net.ui.session.recent_lines import RecentLines
+from cube_net.ui.session.session_log import SessionLog
 from cube_net.ui.session.session_recorder import SessionRecorder
 from cube_net.ui.session.snapshots import snapshot_text
 from cube_net.ui.session.start import (
+    CRASHED,
     STARTED_AT_LAUNCH,
     STARTED_BY_USER,
     STOPPED_BY_USER,
     WINDOW_CLOSED,
     open_session_log_folder,
+    start_recent_input,
     start_session_recording,
     stop_session_recording,
 )
@@ -319,6 +324,13 @@ class MainWindow(QMainWindow):
         self._resize_to_screen()
 
         self._session_dir = session_dir
+        # The latest input, kept in memory all the time: for a crash report (`ui/crash`).
+        self.recent_input: SessionRecorder | None = None
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            self.recent_input = start_recent_input(app, self)
+            self.recent_input.watch_sheet(self.sheet_view)
+            self.recent_input.watch_main_window(self)
         if empty:
             self.show_nothing()
         if self.settings.record_session:
@@ -352,6 +364,34 @@ class MainWindow(QMainWindow):
         self.recorder = None
         self.statusBar().showMessage(tr("Session recording stopped"), 5000)
         self._update_logging_action()
+
+    # --- crash reports --------------------------------------------------------------------------------------------
+
+    def crash_sections(self) -> list[CrashSection]:
+        """What a crash report has of the application (`ui/crash`): its state now, as a recording starts with it (the
+        project's snapshot included), the latest input, and the session log, if it's being recorded."""
+        sections = [CrashSection("State", self._crash_state)]
+        recent = self.recent_input
+        if recent is not None and isinstance(recent.log, RecentLines):
+            lines = recent.log
+            sections.append(CrashSection("Recent input", lambda: "\n".join(lines.lines())))
+        recorder = self.recorder
+        if recorder is not None and isinstance(recorder.log, SessionLog):
+            path = recorder.log.path
+            sections.append(CrashSection("Session log", lambda: f"{path}\n\n{path.read_text(encoding='utf-8')}"))
+        return sections
+
+    def _crash_state(self) -> str:
+        lines = RecentLines(size=10_000)
+        recorder = SessionRecorder(lines)  # not watching the input: only what `_record_state` says goes into it
+        recorder.watch_sheet(self.sheet_view)
+        self._record_state(recorder)
+        recorder.record_view()
+        return "\n".join(lines.lines())
+
+    def end_recording_after_crash(self) -> None:
+        """The application is about to close after a crash: the session file says so in its last line."""
+        self.stop_recording(CRASHED)
 
     def _record_state(self, recorder: SessionRecorder, snapshot: bool = True) -> None:
         """Everything needed to reproduce the session from this point on: the whole project in its snapshot, and what

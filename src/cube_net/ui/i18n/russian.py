@@ -41,6 +41,22 @@ RUSSIAN: dict[str, str] = {
     "Stop logging": "Остановить логирование",
     "Logs": "Журналы",
     "Open the folder with session logs": "Открыть папку с журналами сеансов",
+    # The crash window (ui/crash).
+    "An unexpected error occurred, and the application has to close.": (
+        "Произошла непредвиденная ошибка, и приложение будет закрыто."
+    ),
+    "Crash report couldn't be saved.": "Не удалось сохранить отчёт о сбое.",
+    "An unexpected error occurred, and the application has to close. Crash report saved to:": (
+        "Произошла непредвиденная ошибка, и приложение будет закрыто. Отчёт о сбое сохранён в:"
+    ),
+    "You can contact the author of this app, providing this report and some context about how this happened.": (
+        "Вы можете связаться с автором приложения, предоставив этот отчёт и некоторые подробности о том, как это "
+        "произошло."
+    ),
+    "Contacts:": "Контакты:",
+    "GitHub issue": "Issue на GitHub",
+    "Open folder": "Открыть папку",
+    "Close application": "Закрыть приложение",
     # The status bar and the window's title.
     "Recording session to {path}": "Сеанс записывается в {path}",
     "Session recording stopped": "Запись сеанса остановлена",

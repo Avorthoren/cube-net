@@ -80,6 +80,9 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     monkeypatch.setattr(app, "MainWindow", FakeWindow)
     monkeypatch.setattr(app, "QIcon", lambda path: Path(path).name)
     monkeypatch.setattr(app, "FileRequests", lambda open_file, parent: FileRequests(open_file))
+    # The real handler would take over the hooks of the test process itself.
+    monkeypatch.setattr(app, "install_crash_handler", lambda _app, _folder: done.append("crash handler"))
+    monkeypatch.setattr(app, "attach_main_window", lambda _handler, _window: done.append("crash handler: window"))
     return done
 
 
@@ -90,7 +93,9 @@ def test_the_window_is_shown_and_then_reopens_the_last_project(calls: list[str])
         "application",
         "desktop entry cube-net",
         "icon cube_net.png",
+        "crash handler",  # before anything else: a crash at start is reported too
         "window",
+        "crash handler: window",
         "show",
         "menu entry",
         "file requests",
@@ -136,7 +141,14 @@ def test_the_smoke_test_shows_the_window_and_quits(calls: list[str], monkeypatch
     monkeypatch.setattr(app, "QTimer", FakeTimer)
     assert app.main(["cube-net", app.SMOKE_TEST]) == 7
     # Its own settings (not the user's), no project opened or reopened.
-    assert calls[3:] == ["window with its own settings", "show", f"quit in {app.SMOKE_TEST_MS} ms", "exec"]
+    assert calls[3:] == [
+        "crash handler",
+        "window with its own settings",
+        "crash handler: window",
+        "show",
+        f"quit in {app.SMOKE_TEST_MS} ms",
+        "exec",
+    ]
 
 
 def test_a_run_from_source_has_its_own_settings_and_logs() -> None:

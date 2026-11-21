@@ -4518,3 +4518,47 @@ class TestRestoring:
         monkeypatch.setattr(window, "_on_open", lambda: opened.append(True))
         assert not window.open_project_from(self.damaged(tmp_path))
         assert asked[-1] == "Unable to restore the file. Open another?" and opened == [True]
+
+
+class TestCrashReports:
+    """What a crash report has of the main window (`ui/crash`)."""
+
+    def make(self, qtbot: QtBot, tmp_path: Path, record: bool = False) -> MainWindow:
+        window = MainWindow(settings=settings_in(tmp_path, record=record), session_dir=tmp_path)
+        qtbot.addWidget(window)
+        window.show()
+        qtbot.waitExposed(window)
+        return window
+
+    def test_the_state_with_the_snapshot_and_the_recent_input(self, qtbot: QtBot, tmp_path: Path) -> None:
+        import time
+
+        from cube_net.core.project import project_from_bytes
+        from cube_net.ui.crash.crash_report import write_crash_report
+        from cube_net.ui.session.snapshots import snapshots_in
+
+        window = self.make(qtbot, tmp_path)
+        qtbot.keyClick(window.sheet_view.viewport(), Qt.Key.Key_A)
+        sections = window.crash_sections()
+        assert [s.title for s in sections] == ["State", "Recent input"]  # no recording: no session log
+        assert "state cut default" in sections[0].text()
+        assert "key A" in sections[1].text()
+        try:
+            raise ValueError("broken")
+        except ValueError as e:
+            path = write_crash_report(
+                tmp_path / "crashes", (ValueError, e, e.__traceback__), sections, time.monotonic()
+            )
+        [snapshot] = snapshots_in(path)  # the developer gets the project back from it
+        restored = project_from_bytes(snapshot).state.net
+        assert [v.position for v in restored.vertices] == [v.position for v in window.editor.net.vertices]
+
+    def test_the_session_log_too_and_it_ends(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path, record=True)
+        assert window.recorder is not None
+        log = window.recorder.log.path
+        sections = {s.title: s for s in window.crash_sections()}
+        assert sections["Session log"].text().startswith(f"{log}\n\n# Cube Net")
+        window.end_recording_after_crash()
+        assert window.recorder is None
+        assert session_lines(log)[-1] == "stop crashed"
