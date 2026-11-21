@@ -65,6 +65,10 @@ class ValidateButton(QObject):
             self.separator.setVisible(visible)
         self.action.setVisible(visible)
 
+    @property
+    def status(self) -> ValidationStatus:
+        return self._status
+
     def set_status(self, status: ValidationStatus) -> None:
         self._status = status
         self._show()

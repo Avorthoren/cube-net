@@ -346,6 +346,164 @@ RUSSIAN: dict[str, str] = {
     "No overlaps: approved": "Без наложений: утверждено",
     "Overlaps: cancelled": "С наложениями: отменено",
     "Advanced features": "Расширенные возможности",
+    # The Template tab of Help -> Help.
+    (
+        "In addition to bodies available by default (cube and cube with a hole a.k.a. torus) user can define custom "
+        "bodies by drawing one of the networks. That's what Templates are for (File → New Template)."
+    ): (
+        "Помимо тел, доступных по умолчанию (куб и куб с отверстием, он же тор), пользователь может задавать свои "
+        "тела, рисуя одну из развёрток. Для этого и нужны шаблоны (Файл → Новый шаблон)."
+    ),
+    "Validated template then can be used: File → New → Custom template.": (
+        "Проверенный шаблон затем можно использовать: Файл → Новый → Свой шаблон."
+    ),
+    (
+        'The application supports only templates in which every pair of related (those that were cut to "unfold" the '
+        'body, and that should be glued again to "wrap" the body) boundary segments are either parallel or '
+        "perpendicular. In this case it's guaranteed that if all initial vertices coordinates are rational - they'll "
+        "stay rational after any chain of rearrangements. It allows the application to store all coordinates exactly "
+        "(up to {max} decimal digits), making exact calculations, not losing anything due to rounding errors."
+    ): (
+        "Приложение поддерживает только шаблоны, в которых каждая пара связанных отрезков границы (тех, что были "
+        "разрезаны, чтобы «развернуть» тело, и должны быть снова склеены, чтобы «свернуть» его) параллельна или "
+        "перпендикулярна. В этом случае гарантируется, что если координаты всех начальных вершин рациональны, они "
+        "останутся рациональными после любой цепочки перестановок. Это позволяет приложению хранить все координаты "
+        "точно (до {max} десятичных цифр) и вести точные вычисления, ничего не теряя из-за ошибок округления."
+    ),
+    (
+        "The application doesn't prove formally that figure you drew is in fact valid network of some body, but it "
+        "performs various checks to exclude most of invalid cases. Most of them are not performed automatically and "
+        "should be triggered by the user with {validate} button. To be more specific, it's possible that performed "
+        "checks guarantee that it's a valid network, but the author of this application didn't prove that."
+    ): (
+        "Приложение не доказывает формально, что нарисованная вами фигура действительно является корректной "
+        "развёрткой какого-то тела, но выполняет различные проверки, чтобы исключить большинство некорректных случаев. "
+        "Большинство из них не выполняются автоматически, и пользователь должен запустить их кнопкой {validate}. "
+        "Точнее говоря, возможно, что выполняемые проверки гарантируют, что это корректная развёртка, но автор "
+        "приложения этого не доказал."
+    ),
+    "Validate": "Проверить",
+    "Draw outer boundary loop": "Нарисуйте внешний контур границы",
+    "Add fold-lines and inner loops": "Добавьте линии сгиба и внутренние контуры",
+    "Fold-lines and boundaries define faces of the body (and their parts):": (
+        "Линии сгиба и границы задают грани тела (и их части):"
+    ),
+    (
+        "Adjust the template if needed: drag any of its vertices, click the circle in the middle of a segment to add "
+        "a vertex there, or hold Ctrl and click a vertex (or fold-line segment) to delete it. All similar to "
+        "{networks}."
+    ): (
+        "При необходимости поправьте шаблон: перетащите любую его вершину, щёлкните по кружку в середине отрезка, "
+        "чтобы добавить там вершину, или щёлкните по вершине (или отрезку линии сгиба) с нажатой Ctrl, чтобы удалить "
+        "её. Всё как в {networks}."
+    ),
+    "Networks": "Развёртках",
+    "Define vertices and faces": "Задайте вершины и грани",
+    (
+        "Faces of the body defined by their color: double-click on the area to set its color. This means, that pieces "
+        "of <b>exactly</b> the same color are considered parts of the same body face, and they have to be able to be "
+        "glued accordingly."
+    ): (
+        "Грани тела задаются их цветом: дважды щёлкните по области, чтобы задать её цвет. Это значит, что куски "
+        "<b>в точности</b> одного цвета считаются частями одной грани тела, и они должны склеиваться соответственно."
+    ),
+    (
+        "Vertices of the template that represent the same vertex of the body should have the same unique name (one or "
+        "two latin letters). Different images of the same body's vertex should have unique integer indices: "
+        "right-click on the vertex → {assign}."
+    ): (
+        "Вершины шаблона, представляющие одну и ту же вершину тела, должны иметь одно и то же уникальное имя (одна или "
+        "две латинские буквы). Разные образы одной вершины тела должны иметь уникальные целые индексы: правый щелчок "
+        "по вершине → {assign}."
+    ),
+    (
+        "Keep in mind, that every image of body's edge or cut on the surface of the body should have images of all "
+        "vertices that belong to that edge or cut. For example: since green body's face (D-B-F-G) shown in animation "
+        "below is cut through its edge D-B in point S we should create not only S1 (on the boundary of the top piece "
+        "of the green face of the network) and S2 (bottom piece of the green face), but also S3 (on the boundary of "
+        "the top blue face of the network), because it has another representation of the B-D body's edge."
+    ): (
+        "Помните, что каждый образ ребра тела или разреза на поверхности тела должен содержать образы всех вершин, "
+        "лежащих на этом ребре или разрезе. Например: поскольку зелёная грань тела (D-B-F-G), показанная на анимации "
+        "ниже, разрезана по своему ребру D-B в точке S, нужно создать не только S1 (на границе верхнего куска зелёной "
+        "грани развёртки) и S2 (нижний кусок зелёной грани), но и S3 (на границе верхней синей грани развёртки), "
+        "потому что на ней есть ещё одно представление ребра B-D тела."
+    ),
+    "Validate it": "Проверьте его",
+    (
+        "Similar to {networks} you can set specific coordinates for vertices or slopes for lines when creating or "
+        "dragging vertices. And you can move the origin."
+    ): (
+        "Как и в {networks}, можно задать точные координаты вершин или наклон линий, когда вы создаёте или "
+        "перетаскиваете вершины. А ещё можно сдвинуть начало координат."
+    ),
+    "Exact validation steps": "Точные шаги проверки",
+    (
+        "Drawing rules are kept all the time: an action that breaks them (sides crossing, for example) is refused at "
+        "once. {validate} checks the rest, in this order, and tells about the first check that fails:"
+    ): (
+        "Правила рисования соблюдаются всё время: действие, которое их нарушает (например, пересечение сторон), "
+        "отклоняется сразу. {validate} проверяет остальное, в таком порядке, и сообщает о первой непройденной проверке:"
+    ),
+    "Every face has a color.": "У каждой грани есть цвет.",
+    "Every vertex has a label.": "У каждой вершины есть метка.",
+    (
+        "No segment of a boundary or of a fold-line joins two images of the same vertex of the body (like A1-A3): an "
+        "edge can't go from a vertex to itself."
+    ): (
+        "Ни один отрезок границы или линии сгиба не соединяет два образа одной и той же вершины тела (как A1-A3): "
+        "ребро не может идти из вершины в неё же."
+    ),
+    (
+        "Every segment of the boundaries (the outer one and the inner loops) has exactly one counterpart: another "
+        "boundary segment between vertices with the same two names. They are the two sides of one cut, glued together "
+        "when the body is wrapped."
+    ): (
+        "У каждого отрезка границ (внешней и внутренних контуров) есть ровно одна пара: другой отрезок границы между "
+        "вершинами с теми же двумя именами. Это две стороны одного разреза, которые склеиваются, когда тело "
+        "сворачивается."
+    ),
+    "Counterparts are parallel or perpendicular (so that coordinates stay rational).": (
+        "Пары параллельны или перпендикулярны (чтобы координаты оставались рациональными)."
+    ),
+    "Counterparts have the same length.": "Пары одинаковой длины.",
+    (
+        "Counterparts run in opposite directions along their loops (otherwise one of them would have to be turned "
+        "over to glue them)."
+    ): (
+        "Пары идут вдоль своих контуров в противоположных направлениях (иначе одну из них пришлось бы перевернуть, "
+        "чтобы их склеить)."
+    ),
+    "No fold-line segment joins the same two names as a pair of counterparts: an edge is a cut or a fold.": (
+        "Ни один отрезок линии сгиба не соединяет те же два имени, что и пара отрезков границы: ребро — либо разрез, "
+        "либо сгиб."
+    ),
+    "No two fold-line segments join the same two names.": (
+        "Никакие два отрезка линий сгиба не соединяют одни и те же два имени."
+    ),
+    "All images of each vertex of the body are glued together into one point.": (
+        "Все образы каждой вершины тела склеиваются в одну точку."
+    ),
+    "Every fold-line separates two faces of different colors.": "Каждая линия сгиба разделяет две грани разных цветов.",
+    "The pieces of each color are glued together into one face.": "Куски каждого цвета склеиваются в одну грань.",
+    "The body has at least 4 faces.": "У тела не меньше 4 граней.",
+    ("No face touches itself: a slit, or a point where a boundary touches itself, must lie between two faces."): (
+        "Ни одна грань не касается сама себя: прорезь или точка, где граница касается сама себя, должна лежать между "
+        "двумя гранями."
+    ),
+    "Every face, glued from its pieces, is one flat piece of paper: it doesn't overlap itself.": (
+        "Каждая грань, склеенная из своих кусков, — один плоский лист бумаги: она не накладывается сама на себя."
+    ),
+    "The indices of every name go 1, 2, 3, ... without gaps.": "Индексы каждого имени идут 1, 2, 3, ... без пропусков.",
+    (
+        "If the indices of some names have gaps (and nothing else is wrong), the application offers to renumber them: "
+        "the images of each name keep their order, and get the indices 1, 2, 3, ... (A2 and A5 become A1 and A2). The "
+        "template is valid then."
+    ): (
+        "Если в индексах некоторых имён есть пропуски (а всё остальное в порядке), приложение предлагает "
+        "перенумеровать их: образы каждого имени сохраняют свой порядок и получают индексы 1, 2, 3, ... (A2 и A5 "
+        "становятся A1 и A2). После этого шаблон корректен."
+    ),
     (
         "You can set specific coordinates for vertices or slopes for lines when creating or dragging vertices: try "
         "right-click."

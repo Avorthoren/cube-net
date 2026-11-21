@@ -196,3 +196,114 @@ def test_the_coordinates_hint_if_wanted(qtbot: QtBot) -> None:
     qtbot.waitExposed(sheet)
     play(sheet, [Move((11.0, 14.0), 0)])  # A_1
     assert sheet.coordinates_hint is not None and sheet.coordinates_hint.lines() == coordinate_lines(Vec(11, 14))
+
+
+def make_template(qtbot: QtBot, panel: bool = False) -> DemoSheet:
+    from cube_net.ui.help.demo import template_scenes
+
+    shown = template_scenes.PANEL_SHOWN if panel else template_scenes.SHOWN
+    sheet = DemoSheet(template_scenes.SIZE, shown, template=template_scenes.folds_start(), panel=panel)
+    qtbot.addWidget(sheet)
+    sheet.show()
+    qtbot.waitExposed(sheet)
+    return sheet
+
+
+def test_a_template_without_a_panel_has_no_buttons(qtbot: QtBot) -> None:
+    from cube_net.ui.template.template_tool import TemplateTool
+
+    sheet = make_template(qtbot)
+    assert isinstance(sheet.tool, TemplateTool) and sheet.workspace is None
+    assert sheet.panel is None and sheet.validate_button is None
+
+
+def test_the_panel_down_the_left_side_with_all_its_buttons_and_the_template_right_of_it(qtbot: QtBot) -> None:
+    from PyQt6.QtCore import QPointF
+
+    from cube_net.ui.help.demo import template_scenes
+    from cube_net.ui.help.demo.steps import DRAW_HOLE, VALIDATE
+
+    sheet = make_template(qtbot, panel=True)
+    panel = sheet.panel
+    assert panel is not None and sheet.validate_button is panel.validate
+    assert list(panel.buttons) == [DRAW_HOLE, VALIDATE]
+    assert panel.area().topLeft() == QPoint(0, 0) and panel.area().height() == sheet.height()
+    left = sheet.view.from_sheet(QPointF(float(template_scenes.PANEL_SHOWN.lo.x), 50.0)).x()
+    assert left >= panel.width() - 1
+
+
+def test_the_mouse_goes_to_validate_and_clicks_it(qtbot: QtBot) -> None:
+    from cube_net.ui.dialogs.message_window import MessageWindow
+    from cube_net.ui.help.demo.steps import VALIDATE, Press, ToWidget
+
+    sheet = make_template(qtbot, panel=True)
+    play(sheet, [Move((39.0, 52.0), 0), ToWidget(VALIDATE, 0)])
+    assert sheet.validate_button is not None
+    button = sheet.validate_button.button
+    assert sheet._button_here() is button and button.testAttribute(Qt.WidgetAttribute.WA_UnderMouse)
+    assert sheet.pointer.kind() is CursorKind.ARROW
+    play(sheet, [Press()])
+    assert button.isDown()
+    play(sheet, click()[1:])
+    assert not button.isDown()
+    assert isinstance(sheet.small_window, MessageWindow)  # (its faces have no colours)
+    play(sheet, [Type("\n")])
+    assert sheet.small_window is None
+
+
+def test_draw_hole_on_the_panel_starts_a_hole(qtbot: QtBot) -> None:
+    from cube_net.ui.help.demo import template_scenes
+    from cube_net.ui.help.demo.steps import DRAW_HOLE, ToWidget
+    from cube_net.ui.template.template_tool import TemplateTool
+
+    sheet = DemoSheet(
+        template_scenes.SIZE, template_scenes.PANEL_SHOWN, template=template_scenes.loop_start(), panel=True
+    )
+    qtbot.addWidget(sheet)
+    sheet.show()
+    assert sheet.panel is not None and sheet.panel.draw_hole is not None
+    play(sheet, [Move((39.0, 52.0), 0), ToWidget(DRAW_HOLE, 0), *click()])
+    assert isinstance(sheet.tool, TemplateTool) and sheet.tool.drawing_hole
+    assert not sheet.panel.draw_hole.button.isEnabled()  # as the window's, while a hole is drawn
+
+
+def test_a_click_on_the_panel_off_its_buttons_reaches_nothing(qtbot: QtBot) -> None:
+    from cube_net.ui.help.demo import template_scenes
+    from cube_net.ui.template.template_tool import TemplateTool
+
+    sheet = DemoSheet(
+        template_scenes.SIZE, template_scenes.PANEL_SHOWN, template=template_scenes.empty_start(), panel=True
+    )
+    qtbot.addWidget(sheet)
+    sheet.show()
+    assert sheet.panel is not None
+    bottom = sheet.view.to_sheet(QPointF(sheet.panel.width() / 2, sheet.height() - 20))
+    play(sheet, [Move((bottom.x(), bottom.y()), 0), *click()])
+    assert isinstance(sheet.tool, TemplateTool) and sheet.tool.editor.template.vertices == ()
+
+
+def test_a_double_click_on_a_face_opens_its_colour_whose_code_is_selected_and_pasted_over(qtbot: QtBot) -> None:
+    from PyQt6.QtWidgets import QColorDialog, QLineEdit
+
+    from cube_net.core.template import ValidationStatus
+    from cube_net.ui.help.demo import template_scenes
+    from cube_net.ui.help.demo.steps import COLOR_CODE, DoubleClick, Paste, ToWidget
+    from cube_net.ui.template.template_tool import TemplateTool
+
+    sheet = make_template(qtbot, panel=True)
+    assert isinstance(sheet.tool, TemplateTool) and sheet.validate_button is not None
+    sheet.validate_button.set_status(ValidationStatus.INVALID)
+    play(sheet, [Move(template_scenes.GREEN_PIECES[0], 0), DoubleClick()])
+    assert isinstance(sheet.small_window, QColorDialog)
+    window = sheet.small_window
+    play(sheet, [ToWidget(COLOR_CODE, 0), *click()])
+    field = window.focusWidget()
+    assert isinstance(field, QLineEdit) and field.text() == "#ffffff" and not field.hasSelectedText()
+    play(sheet, [Keys(Qt.KeyboardModifier.ControlModifier), Type("a", 0)])
+    assert field.selectedText() == "#ffffff" and sheet.pointer._ctrl  # (the key cap shown)
+    play(sheet, [Paste(template_scenes.GREEN), Keys(Qt.KeyboardModifier.NoModifier)])
+    assert field.text() == template_scenes.GREEN and window.currentColor().name().upper() == template_scenes.GREEN
+    play(sheet, [Type("\n")])
+    assert sheet.small_window is None
+    assert [face.color for face in sheet.tool.editor.template.faces].count(template_scenes.GREEN) == 1
+    assert sheet.validate_button.status is ValidationStatus.UNDEFINED  # not the template validated any more

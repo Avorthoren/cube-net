@@ -15,8 +15,8 @@ from collections.abc import Callable, Sequence
 from fractions import Fraction as F
 from html import escape
 
-from PyQt6.QtCore import QEvent, QObject, QPoint, QSize, QSizeF, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QKeyEvent, QShowEvent
+from PyQt6.QtCore import QEvent, QObject, QPoint, QSize, QSizeF, Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QFont, QFontMetricsF, QKeyEvent, QShowEvent
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -30,10 +30,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from cube_net.core.geometry import Box, Vec
-from cube_net.core.project import Project
+from cube_net.core.geometry import MAX_NUMBER_DIGITS, Box, Vec
+from cube_net.core.project import Project, TemplateDocument
 from cube_net.ui.help.about_dialog import APP_NAME
-from cube_net.ui.help.demo import advanced, scenes
+from cube_net.ui.help.demo import advanced, scenes, template_scenes
 from cube_net.ui.help.demo.demo_sheet import AROUND_THE_NET
 from cube_net.ui.help.demo.player import DemoPlayer
 from cube_net.ui.help.demo.steps import Step
@@ -44,6 +44,7 @@ from cube_net.ui.help.text_block import ACCENT, BADGE_PX, BADGE_SCHEME, TextBloc
 from cube_net.ui.i18n import TRANSLATIONS, bind, tr
 from cube_net.ui.language_box import LanguageBox
 from cube_net.ui.no_wheel import ignore_wheel
+from cube_net.ui.template.validation_messages import subscripted
 
 # The page and its text.
 PAGE = "#FFFFFF"
@@ -55,6 +56,9 @@ NAME_SIZE = 2.2
 SUBTITLE_SIZE = 1.3
 TITLE_SIZE = 1.45
 PARAGRAPH_SIZE = 1.1
+
+# The height of a paragraph's lines, in its font's lines.
+LINE_HEIGHT = 1.45
 
 # The widths of the column of text and of the window around it (px).
 COLUMN_PX = 880
@@ -124,6 +128,106 @@ TEMPLATE_TAB = "Template"
 # The first paragraph's number in the Network page's first block of text (after the name and "How it works").
 FIRST_PARAGRAPH = 2
 
+# The Template tab's texts.
+TEMPLATES_INTRO = (
+    "In addition to bodies available by default (cube and cube with a hole a.k.a. torus) user can define custom bodies "
+    "by drawing one of the networks. That's what Templates are for (File → New Template)."
+)
+TEMPLATES_USE = "Validated template then can be used: File → New → Custom template."
+TEMPLATES_EXACT = (
+    'The application supports only templates in which every pair of related (those that were cut to "unfold" the '
+    'body, and that should be glued again to "wrap" the body) boundary segments are either parallel or perpendicular. '
+    "In this case it's guaranteed that if all initial vertices coordinates are rational - they'll stay rational after "
+    "any chain of rearrangements. It allows the application to store all coordinates exactly (up to {max} decimal "
+    "digits), making exact calculations, not losing anything due to rounding errors."
+)
+TEMPLATES_CHECKS = (
+    "The application doesn't prove formally that figure you drew is in fact valid network of some body, but it "
+    "performs various checks to exclude most of invalid cases. Most of them are not performed automatically and "
+    "should be triggered by the user with {validate} button. To be more specific, it's possible that performed checks "
+    "guarantee that it's a valid network, but the author of this application didn't prove that."
+)
+VALIDATE_WORD = "Validate"
+DRAW_LOOP_TITLE = "Draw outer boundary loop"
+FOLDS_TITLE = "Add fold-lines and inner loops"
+FOLDS_TEXT = "Fold-lines and boundaries define faces of the body (and their parts):"
+TEMPLATE_ADJUST_TEXT = (
+    "Adjust the template if needed: drag any of its vertices, click the circle in the middle of a segment to add a "
+    "vertex there, or hold Ctrl and click a vertex (or fold-line segment) to delete it. All similar to {networks}."
+)
+NAMES_TITLE = "Define vertices and faces"
+FACES_TEXT = (
+    "Faces of the body defined by their color: double-click on the area to set its color. This means, that pieces of "
+    "<b>exactly</b> the same color are considered parts of the same body face, and they have to be able to be glued "
+    "accordingly."
+)
+VERTICES_TEXT = (
+    "Vertices of the template that represent the same vertex of the body should have the same unique name (one or "
+    "two latin letters). Different images of the same body's vertex should have unique integer indices: right-click "
+    "on the vertex → {assign}."
+)
+IMAGES_TEXT = (
+    "Keep in mind, that every image of body's edge or cut on the surface of the body should have images of all "
+    "vertices that belong to that edge or cut. For example: since green body's face (D-B-F-G) shown in animation "
+    "below is cut through its edge D-B in point S we should create not only S1 (on the boundary of the top piece of "
+    "the green face of the network) and S2 (bottom piece of the green face), but also S3 (on the boundary of the top "
+    "blue face of the network), because it has another representation of the B-D body's edge."
+)
+VALIDATE_TITLE = "Validate it"
+TEMPLATE_ADVANCED_TEXT = (
+    "Similar to {networks} you can set specific coordinates for vertices or slopes for lines when creating or "
+    "dragging vertices. And you can move the origin."
+)
+NETWORKS_LINK = "Networks"
+CHECKS_TITLE = "Exact validation steps"
+CHECKS_TEXT = (
+    "Drawing rules are kept all the time: an action that breaks them (sides crossing, for example) is refused at "
+    "once. {validate} checks the rest, in this order, and tells about the first check that fails:"
+)
+CHECK_COLORS = "Every face has a color."
+CHECK_LABELS = "Every vertex has a label."
+CHECK_SELF_EDGES = (
+    "No segment of a boundary or of a fold-line joins two images of the same vertex of the body (like A1-A3): an edge "
+    "can't go from a vertex to itself."
+)
+CHECK_COUNTERPARTS = (
+    "Every segment of the boundaries (the outer one and the inner loops) has exactly one counterpart: another "
+    "boundary segment between vertices with the same two names. They are the two sides of one cut, glued together "
+    "when the body is wrapped."
+)
+CHECK_PARALLEL = "Counterparts are parallel or perpendicular (so that coordinates stay rational)."
+CHECK_LENGTHS = "Counterparts have the same length."
+CHECK_DIRECTIONS = (
+    "Counterparts run in opposite directions along their loops (otherwise one of them would have to be turned over "
+    "to glue them)."
+)
+CHECK_CUT_AND_FOLD = (
+    "No fold-line segment joins the same two names as a pair of counterparts: an edge is a cut or a fold."
+)
+CHECK_SAME_FOLDS = "No two fold-line segments join the same two names."
+CHECK_GLUED_NAMES = "All images of each vertex of the body are glued together into one point."
+CHECK_FOLD_COLORS = "Every fold-line separates two faces of different colors."
+CHECK_PIECES = "The pieces of each color are glued together into one face."
+CHECK_FOUR_FACES = "The body has at least 4 faces."
+CHECK_TOUCHES_ITSELF = (
+    "No face touches itself: a slit, or a point where a boundary touches itself, must lie between two faces."
+)
+CHECK_FLAT = "Every face, glued from its pieces, is one flat piece of paper: it doesn't overlap itself."
+CHECK_INDICES = "The indices of every name go 1, 2, 3, ... without gaps."
+REINDEX_TEXT = (
+    "If the indices of some names have gaps (and nothing else is wrong), the application offers to renumber them: the "
+    "images of each name keep their order, and get the indices 1, 2, 3, ... (A2 and A5 become A1 and A2). The "
+    "template is valid then."
+)
+
+# Links to sections of the page: "section:<name>".
+SECTION_SCHEME = "section"
+ADJUST_SECTION = "adjust"
+ADVANCED_SECTION = "advanced"
+
+# Room above a section's title when a link goes there (px).
+SECTION_ROOM_PX = 16
+
 # Room between the application's name at the top and the language list after it (px).
 LANGUAGE_GAP_PX = 20
 
@@ -147,8 +251,12 @@ class HelpWindow(QWidget):
         self.setWindowFlag(Qt.WindowType.Window)
         bind(self, self.setWindowTitle, "{name} Help", name=APP_NAME)
         self.players: list[DemoPlayer] = []
+        # The Network tab's animations, and the Template tab's.
+        self.network_players: list[DemoPlayer] = []
+        self.template_players: list[DemoPlayer] = []
         # The Network tab's blocks of text (`TextBlock`), in order, and the Hotkeys tab's.
         self.blocks: list[TextBlock] = []
+        self.template_blocks: list[TextBlock] = []
         self.hotkey_blocks: list[TextBlock] = []
         # Every tab's language list, and the block of the name it's placed after.
         self.languages: list[LanguageBox] = []
@@ -162,6 +270,8 @@ class HelpWindow(QWidget):
         self.tabs.setDocumentMode(True)
         # Each tab's page scrolls under the tabs, which stay where they are.
         self.pages: dict[HelpTab, QScrollArea] = {}
+        # The sections links go to: their title's block and text (to find it there).
+        self._section_titles: dict[str, tuple[TextBlock, str]] = {}
         # Each page's scroll area and centring layout, by its viewport (`_reserve_scroll_bar`).
         self._page_layouts: dict[QWidget, tuple[QScrollArea, QHBoxLayout]] = {}
 
@@ -171,7 +281,7 @@ class HelpWindow(QWidget):
         self._title(CUT_TITLE, 1)
         self._paragraph(CUT_TEXT)
         self._players([self._player(scenes.CUT, [], WIDE)])
-        self._title(ADJUST_TITLE, 2)
+        self._title(ADJUST_TITLE, 2, section=ADJUST_SECTION)
         self._paragraph(ADJUST_TEXT)
         self._players([self._player(scenes.ADJUST, [scenes.CUT], WIDE)])
         self._title(GLUE_TITLE, 3)
@@ -180,14 +290,14 @@ class HelpWindow(QWidget):
         good = self._player(scenes.GLUE_GOOD, before, HALF, AROUND_BOTH_RESULTS)
         bad = self._player(scenes.GLUE_BAD, before, HALF, AROUND_BOTH_RESULTS)
         self._players([good, bad], [self._caption(GOOD_CAPTION), self._caption(BAD_CAPTION)])
-        self._title(ADVANCED_TITLE, 4)
+        self._title(ADVANCED_TITLE, 4, section=ADVANCED_SECTION)
         self._paragraph(ADVANCED_EXACT_TEXT)
         self._paragraph(ADVANCED_OUTSIDE_TEXT)
         self._paragraph(ADVANCED_ORIGIN_TEXT)
         self._players([self._player(advanced.ADVANCED, [], advanced.SIZE, advanced.SHOWN, torus_project(), True)])
         self._title(MORE_TITLE)
         self._paragraph(UNDO_TEXT, bullet=True)
-        self._paragraph(BOUNDS_TEXT, lambda: {"bounds": f"<b>{tr('Bounds')}</b>"}, bullet=True)
+        self._paragraph(BOUNDS_TEXT, lambda: {"bounds": _bold(tr("Bounds"))}, bullet=True)
         self._paragraph(VIEW_TEXT, bullet=True)
         self.scroll = self._finish_page(NETWORK_TAB, HelpTab.NETWORK)
         self.language = self.languages[0]
@@ -197,7 +307,8 @@ class HelpWindow(QWidget):
         self.blocks[0].installEventFilter(self)
         first_layout = self.blocks[0].document().documentLayout()  # type: ignore[union-attr]
         first_layout.documentSizeChanged.connect(self._on_first_text_resized)  # type: ignore[union-attr]
-        self._start_page([])  # its content is to come
+        self._start_page(self.template_blocks)
+        self._template_page()
         self._finish_page(TEMPLATE_TAB, HelpTab.TEMPLATE)
         self._start_page(self.hotkey_blocks)
         self._title(HOTKEYS_TITLE)
@@ -277,6 +388,79 @@ class HelpWindow(QWidget):
             return
         super().keyPressEvent(event)
 
+    def _template_page(self) -> None:
+        """The Template tab: what templates are for, how one is made, step by step, and what Validate checks."""
+        networks_link = lambda section: lambda: {"networks": _link(section, tr(NETWORKS_LINK))}  # noqa: E731
+        self._lines(TEMPLATES_INTRO, TEMPLATES_USE)
+        self._paragraph(TEMPLATES_EXACT, lambda: {"max": str(MAX_NUMBER_DIGITS)})
+        self._paragraph(TEMPLATES_CHECKS, lambda: {"validate": _bold(tr(VALIDATE_WORD))})
+        self._title(DRAW_LOOP_TITLE, 1)
+        self._players([self._template_player(template_scenes.DRAW_LOOP, template_scenes.empty_start())])
+        self._title(FOLDS_TITLE, 2)
+        self._paragraph(FOLDS_TEXT)
+        self._players([self._template_player(template_scenes.FOLDS_AND_HOLE, template_scenes.loop_start(), panel=True)])
+        self._title(ADJUST_TITLE, 3)
+        self._paragraph(TEMPLATE_ADJUST_TEXT, networks_link(ADJUST_SECTION))
+        self._title(NAMES_TITLE, 4)
+        self._paragraph(FACES_TEXT, names=True)
+        self._paragraph(VERTICES_TEXT, lambda: {"assign": _bold(tr("Assign label"))}, names=True)
+        self._paragraph(IMAGES_TEXT, names=True)
+        self._players([self._template_player(template_scenes.COLORS_AND_LABELS, template_scenes.folds_start())])
+        self._title(VALIDATE_TITLE, 5)
+        self._players([self._template_player(template_scenes.VALIDATING, template_scenes.validate_start(), panel=True)])
+        self._title(ADVANCED_TITLE, 6)
+        self._paragraph(TEMPLATE_ADVANCED_TEXT, networks_link(ADVANCED_SECTION))
+        self._title(CHECKS_TITLE)
+        self._paragraph(CHECKS_TEXT, lambda: {"validate": _bold(tr(VALIDATE_WORD))})
+        self._paragraph(CHECK_COLORS, bullet=True)
+        self._paragraph(CHECK_LABELS, bullet=True)
+        self._paragraph(CHECK_SELF_EDGES, bullet=True, names=True)
+        self._paragraph(CHECK_COUNTERPARTS, bullet=True)
+        self._paragraph(CHECK_PARALLEL, bullet=True)
+        self._paragraph(CHECK_LENGTHS, bullet=True)
+        self._paragraph(CHECK_DIRECTIONS, bullet=True)
+        self._paragraph(CHECK_CUT_AND_FOLD, bullet=True)
+        self._paragraph(CHECK_SAME_FOLDS, bullet=True)
+        self._paragraph(CHECK_GLUED_NAMES, bullet=True)
+        self._paragraph(CHECK_FOLD_COLORS, bullet=True)
+        self._paragraph(CHECK_PIECES, bullet=True)
+        self._paragraph(CHECK_FOUR_FACES, bullet=True)
+        self._paragraph(CHECK_TOUCHES_ITSELF, bullet=True)
+        self._paragraph(CHECK_FLAT, bullet=True)
+        self._paragraph(CHECK_INDICES, bullet=True)
+        self._paragraph(REINDEX_TEXT, names=True)
+
+    def _template_player(self, steps: Sequence[Step], start: TemplateDocument, panel: bool = False) -> DemoPlayer:
+        """An animation of making the torus template (`template_scenes`), from `start`; with the instrument panel if
+        `panel` (for one that clicks its buttons)."""
+        shown = template_scenes.PANEL_SHOWN if panel else template_scenes.SHOWN
+        player = DemoPlayer(steps, [], template_scenes.SIZE, shown, template=start, panel=panel)
+        self.players.append(player)
+        self.template_players.append(player)
+        return player
+
+    def _follow_link(self, url: QUrl) -> None:
+        """A link to a section (`SECTION_SCHEME`): its tab shown, scrolled so that its title is at the top."""
+        if url.scheme() != SECTION_SCHEME:
+            return
+        found = self._section_titles.get(url.path())
+        if found is None:
+            return
+        block, text = found
+        tab = next(tab for tab, page in self.pages.items() if page.isAncestorOf(block))
+        self.show_tab(tab)
+        page = self.pages[tab]
+        document = block.document()
+        layout = document.documentLayout() if document is not None else None
+        cursor = document.find(tr(text)) if document is not None else None
+        viewport, content = block.viewport(), page.widget()
+        if layout is None or cursor is None or cursor.isNull() or viewport is None or content is None:
+            return
+        top = layout.blockBoundingRect(cursor.block()).top()
+        bar = page.verticalScrollBar()
+        if bar is not None:
+            bar.setValue(viewport.mapTo(content, QPoint(0, round(top))).y() - SECTION_ROOM_PX)
+
     # --- the tabs ----------------------------------------------------------------------------------------------------
 
     def _start_page(self, blocks: list[TextBlock]) -> None:
@@ -322,6 +506,7 @@ class HelpWindow(QWidget):
         """The block of text being written: a new one after an animation."""
         if self._block is None:
             self._block = TextBlock(COLUMN_PX)
+            self._block.anchorClicked.connect(self._follow_link)
             self._blocks.append(self._block)
             self._column.addWidget(self._block)
         return self._block
@@ -351,20 +536,35 @@ class HelpWindow(QWidget):
             _place_language(language, block)
         self.align_tabs()  # the texts above the first paragraph may be of another height now
 
-    def _paragraph(self, text: str, values: Callable[[], dict[str, str]] | None = None, bullet: bool = False) -> None:
+    def _paragraph(
+        self,
+        text: str,
+        values: Callable[[], dict[str, str]] | None = None,
+        bullet: bool = False,
+        names: bool = False,
+    ) -> None:
         """A paragraph (an item of a list, if `bullet`); `values` gives what goes into its {placeholders}, in the
-        current language."""
+        current language; `names`: the vertices' names in it ("S1") with their indices as subscripts."""
 
         def html() -> str:
             translated = tr(text)
+            if names:
+                translated = subscripted(translated)
             if values is not None:
                 translated = translated.format(**values())
             return _paragraph_html(translated, bullet)
 
         self._text().add(html)
 
-    def _title(self, text: str, number: int | None = None) -> None:
-        """The title of a part of the page, with its step number if it's one of the steps."""
+    def _lines(self, first: str, second: str) -> None:
+        """A paragraph of two texts, the second on a line of its own."""
+        self._text().add(lambda: _paragraph_html(f"{tr(first)}<br>{tr(second)}", False))
+
+    def _title(self, text: str, number: int | None = None, section: str | None = None) -> None:
+        """The title of a part of the page, with its step number if it's one of the steps; `section`: the name a link
+        to it goes by (`SECTION_SCHEME`)."""
+        if section is not None:
+            self._section_titles[section] = (self._text(), text)
 
         def html() -> str:
             title = _span(tr(text), TITLE_SIZE, bold=True)
@@ -420,6 +620,7 @@ class HelpWindow(QWidget):
     ) -> DemoPlayer:
         """An animation (`DemoPlayer`): of the default net, or of `project`'s, with the coordinates hint if wanted."""
         player = DemoPlayer(steps, before, size, shown, project=project, coordinates=coordinates)
+        self.network_players.append(player)
         self.players.append(player)
         return player
 
@@ -457,11 +658,16 @@ def _span(text: str, size: float, bold: bool = False, colour: str = TEXT) -> str
 
 
 def _paragraph_html(text: str, bullet: bool) -> str:
-    """A paragraph with roomy lines; an item of a list has a bullet before it, and its lines start after the bullet."""
-    style = f"line-height: 145%; margin: 0 0 12px 0; color: {TEXT};"
+    """A paragraph with roomy lines, all of the same height (a character another font draws, like "→", or a
+    subscript, doesn't push its line apart); an item of a list has a bullet before it, and its lines start after the
+    bullet."""
+    font = QFont(QApplication.font())
+    font.setPointSizeF(font.pointSizeF() * PARAGRAPH_SIZE)
+    line = f"line-height: {round(QFontMetricsF(font).height() * LINE_HEIGHT)}px; -qt-line-height-type: fixed;"
+    style = f"{line} margin: 0 0 12px 0; color: {TEXT};"
     size = _points(PARAGRAPH_SIZE)
     if bullet:
-        style = f"line-height: 145%; margin: 0 0 6px 22px; text-indent: -22px; color: {TEXT};"
+        style = f"{line} margin: 0 0 6px 22px; text-indent: -22px; color: {TEXT};"
         text = f"&#8226;&nbsp;&nbsp;&nbsp;{text}"
     return f'<p style="{style} {size}">{text}</p>'
 
@@ -481,3 +687,12 @@ def _place_language(language: LanguageBox, block: TextBlock) -> None:
     language.resize(size)
     x = line.x() + line.naturalTextWidth() + LANGUAGE_GAP_PX
     language.move(round(x), round(top + line.height() / 2 - size.height() / 2))
+
+
+def _bold(text: str) -> str:
+    """`text` in bold, kept on one line."""
+    return f"<b>{escape(text).replace(' ', '&nbsp;')}</b>"
+
+
+def _link(section: str, text: str) -> str:
+    return f'<a href="{SECTION_SCHEME}:{section}" style="color: {ACCENT};">{text}</a>'

@@ -1,6 +1,8 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from itertools import pairwise
+
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QLabel
 from pytestqt.qtbot import QtBot
@@ -26,7 +28,8 @@ def texts(window: HelpWindow) -> str:
 def test_five_animations_and_the_text(qtbot: QtBot) -> None:
     window = make(qtbot)
     assert window.windowTitle() == "Cube Net Help"
-    assert len(window.players) == 5
+    assert len(window.network_players) == 5 and len(window.template_players) == 4
+    assert window.players == [*window.network_players, *window.template_players]
     all_text = texts(window)
     assert "surface area of the body" in all_text
     assert "Bounds" in window.blocks[-1].toPlainText()  # the button's own name
@@ -55,7 +58,7 @@ def test_the_steps_animations_have_the_built_in_cubes_look(qtbot: QtBot) -> None
     from cube_net.ui.style import DEFAULT_CUBE_LOOK
 
     window = make(qtbot)
-    steps = window.players[:-1]
+    steps = window.network_players[:-1]
     assert all(player.sheet.view.look() == DEFAULT_CUBE_LOOK for player in steps)
     assert all(player.sheet.coordinates_hint is None for player in steps)
 
@@ -64,7 +67,7 @@ def test_advanced_features_on_the_torus_with_the_coordinates_hint(qtbot: QtBot) 
     from cube_net.ui.help.demo.torus import torus_project
 
     window = make(qtbot)
-    sheet = window.players[-1].sheet
+    sheet = window.network_players[-1].sheet
     project = torus_project()
     look = sheet.view.look()
     assert look is not None and (look.style, look.face_colors) == (project.settings.style, project.settings.face_colors)
@@ -109,9 +112,9 @@ def test_the_wheel_is_left_to_the_page_over_text_and_animations(qtbot: QtBot) ->
     assert player.sheet.view.scale_factor() == scale  # no zooming there
 
 
-def test_no_vertex_labels_in_the_animations(qtbot: QtBot) -> None:
+def test_no_vertex_labels_in_the_network_animations(qtbot: QtBot) -> None:
     window = make(qtbot)
-    items = [player.sheet.view.net_item() for player in window.players]
+    items = [player.sheet.view.net_item() for player in window.network_players]
     assert items and all(item is not None and item.labels() is None for item in items)
 
 
@@ -226,13 +229,71 @@ def test_every_tab_has_the_language_list(qtbot: QtBot) -> None:
     assert chosen == [Language.RUSSIAN]
 
 
-def test_the_template_tab_is_empty_for_now(qtbot: QtBot) -> None:
+def template_text(window: HelpWindow) -> str:
+    return "\n".join(block.toPlainText() for block in window.template_blocks)
+
+
+def test_the_template_tab_tells_how_a_template_is_made_in_six_steps(qtbot: QtBot) -> None:
+    from cube_net.core.geometry import MAX_NUMBER_DIGITS
     from cube_net.ui.help.help_tab import HelpTab
-    from cube_net.ui.help.text_block import TextBlock
+    from cube_net.ui.help.help_window import CHECK_FLAT, CHECKS_TITLE, REINDEX_TEXT, TEMPLATES_INTRO
 
     window = make(qtbot)
-    blocks = window.pages[HelpTab.TEMPLATE].findChildren(TextBlock)
-    assert len(blocks) == 1 and blocks[0].toPlainText().split() == ["Cube", "Net", "How", "it", "works"]
+    page = window.pages[HelpTab.TEMPLATE]
+    assert all(page.isAncestorOf(block) for block in window.template_blocks)
+    assert all(page.isAncestorOf(player) for player in window.template_players)
+    text = template_text(window)
+    assert TEMPLATES_INTRO in text and f"up to {MAX_NUMBER_DIGITS} decimal digits" in text
+    titles = [
+        "Draw outer boundary loop",
+        "Add fold-lines and inner loops",
+        "Adjust it",
+        "Define vertices and faces",
+        "Validate it",
+        "Advanced features",
+        CHECKS_TITLE,
+    ]
+    assert [text.index(title) for title in titles] == sorted(text.index(title) for title in titles)
+    assert text.index(CHECKS_TITLE) < text.index(CHECK_FLAT) < text.index(REINDEX_TEXT.split(":")[0])
+    html = "".join(block.toHtml() for block in window.template_blocks)
+    assert (
+        "A1" in text and "vertical-align:sub" in html
+    )  # the names' indices subscripts, as the application writes them
+
+
+def test_the_template_tab_in_russian(qtbot: QtBot) -> None:
+    window = make(qtbot)
+    TRANSLATIONS.set_language(Language.RUSSIAN)
+    text = template_text(window)
+    assert "Нарисуйте внешний контур границы" in text and "Точные шаги проверки" in text
+
+
+def test_the_networks_links_go_to_their_sections_on_the_network_tab(qtbot: QtBot) -> None:
+    from PyQt6.QtCore import QUrl
+
+    from cube_net.ui.help.help_tab import HelpTab
+    from cube_net.ui.help.help_window import ADJUST_SECTION, ADVANCED_SECTION, SECTION_SCHEME
+
+    window = make(qtbot)
+    links = [block for block in window.template_blocks if f'href="{SECTION_SCHEME}:' in block.toHtml()]
+    assert len(links) == 2
+    bar = window.pages[HelpTab.NETWORK].verticalScrollBar()
+    assert bar is not None
+    scrolled = []
+    for section in (ADJUST_SECTION, ADVANCED_SECTION):
+        window.show_tab(HelpTab.TEMPLATE)
+        bar.setValue(0)
+        window._follow_link(QUrl(f"{SECTION_SCHEME}:{section}"))
+        assert window.tabs.currentWidget() is window.pages[HelpTab.NETWORK]
+        scrolled.append(bar.value())
+    assert 0 < scrolled[0] < scrolled[1]
+
+
+def test_the_template_animations_show_the_template_with_its_labels(qtbot: QtBot) -> None:
+    from cube_net.ui.template.template_tool import TemplateTool
+
+    window = make(qtbot)
+    assert all(isinstance(player.sheet.tool, TemplateTool) for player in window.template_players)
 
 
 def test_opens_with_the_tab_asked_and_tells_when_another_is_chosen(qtbot: QtBot) -> None:
@@ -301,3 +362,52 @@ def test_the_column_is_at_the_same_place_on_every_tab_scrolling_or_not(qtbot: Qt
     assert window.pages[HelpTab.NETWORK].verticalScrollBar().isVisible()  # type: ignore[union-attr]
     assert not window.pages[HelpTab.TEMPLATE].verticalScrollBar().isVisible()  # type: ignore[union-attr]
     assert len(lefts()) == 1
+
+
+def test_what_templates_are_for_is_one_paragraph_of_two_lines(qtbot: QtBot) -> None:
+    from cube_net.ui.help.help_window import TEMPLATES_INTRO, TEMPLATES_USE
+
+    document = make(qtbot).template_blocks[0].document()
+    assert document is not None
+    paragraph = document.find(TEMPLATES_INTRO).block()
+    assert paragraph.text() == f"{TEMPLATES_INTRO} {TEMPLATES_USE}"  # (a line break inside one paragraph)
+
+
+def test_every_line_of_a_paragraph_as_high_as_the_others_whatever_font_draws_its_characters(qtbot: QtBot) -> None:
+    """An arrow ("→") comes from another font with taller lines, and would push its line apart from the others."""
+    from cube_net.ui.help.help_window import TEMPLATES_INTRO, VERTICES_TEXT
+
+    window = make(qtbot)
+    pitches = set()
+    for block in window.template_blocks:
+        document = block.document()
+        assert document is not None
+        for text in (TEMPLATES_INTRO, VERTICES_TEXT.split("(")[0]):
+            found = document.find(text)
+            if found.isNull():
+                continue
+            lines = found.block().layout()
+            assert lines is not None and lines.lineCount() >= 2
+            ys = [lines.lineAt(i).y() for i in range(lines.lineCount())]
+            pitches |= {round(b - a, 3) for a, b in pairwise(ys)}
+    assert len(pitches) == 1
+
+
+def test_bold_names_of_buttons_are_kept_on_one_line(qtbot: QtBot) -> None:
+    window = make(qtbot)
+    text = "".join(block.toHtml() for block in window.template_blocks)  # (plain text has plain spaces)
+    assert "Assign\u00a0label" in text and "Assign label" not in text
+
+
+def test_only_the_animations_that_click_its_buttons_have_the_instrument_panel(qtbot: QtBot) -> None:
+    from cube_net.ui.help.demo.steps import DRAW_HOLE, VALIDATE
+
+    window = make(qtbot)
+    panels = [player.sheet.panel for player in window.template_players]
+    assert [None if panel is None else list(panel.buttons) for panel in panels] == [
+        None,
+        [DRAW_HOLE, VALIDATE],
+        None,
+        [DRAW_HOLE, VALIDATE],
+    ]
+    assert all(player.sheet.panel is None for player in window.network_players)

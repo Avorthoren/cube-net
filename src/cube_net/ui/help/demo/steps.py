@@ -60,13 +60,35 @@ class Type:
 
 
 @dataclass(frozen=True)
+class DoubleClick:
+    """A double click where the mouse is (a template's face: its colour)."""
+
+
+@dataclass(frozen=True)
+class Paste:
+    """`text` pasted into the open window at once (Ctrl+V): into the field with the focus, in place of its selected
+    text (a colour window without one: its colour)."""
+
+    text: str
+
+
+@dataclass(frozen=True)
+class ToWidget:
+    """The mouse goes to the middle of a widget by its name (`DRAW_HOLE`, `VALIDATE`, `COLOR_CODE`), in `ms`
+    milliseconds."""
+
+    name: str
+    ms: int = 700
+
+
+@dataclass(frozen=True)
 class Wait:
     """Nothing happens for `ms` milliseconds."""
 
     ms: int
 
 
-type Step = Move | Press | Release | Keys | RightClick | ToItem | Type | Wait
+type Step = Move | Press | Release | Keys | RightClick | ToItem | Type | DoubleClick | Paste | ToWidget | Wait
 
 # How long the mouse button stays down in a click.
 CLICK_MS = 110
@@ -75,3 +97,10 @@ CLICK_MS = 110
 def click() -> list[Step]:
     """A click where the mouse is."""
     return [Press(), Wait(CLICK_MS), Release()]
+
+
+# The widgets the mouse goes to by name (`ToWidget`): the buttons of a template's instrument panel (Validate, Draw
+# hole), and the colour's code ("#RRGGBB") in the colour window.
+VALIDATE = "validate"
+DRAW_HOLE = "draw hole"
+COLOR_CODE = "color code"

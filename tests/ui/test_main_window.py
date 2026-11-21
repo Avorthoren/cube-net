@@ -3541,8 +3541,8 @@ class TestHelpMenu:
         window._on_style_changed(other)
         window.help_action.trigger()
         help_window = window.help_window
-        assert help_window is not None and help_window.players
-        assert all(player.sheet.view.look() == DEFAULT_CUBE_LOOK for player in help_window.players[:-1])
+        assert help_window is not None and help_window.network_players
+        assert all(player.sheet.view.look() == DEFAULT_CUBE_LOOK for player in help_window.network_players[:-1])
         assert style_in_place() == other  # the project's, for everything else
 
     def test_its_animations_have_no_vertex_labels_even_when_they_are_on(self, qtbot: QtBot, tmp_path: Path) -> None:
@@ -3553,7 +3553,7 @@ class TestHelpMenu:
         assert help_window is not None
         window.show_labels_action.setChecked(False)
         window.show_labels_action.setChecked(True)  # switched on again while Help is open
-        for player in help_window.players:
+        for player in help_window.network_players:
             item = player.sheet.view.net_item()
             assert item is not None and item.labels() is None
 
