@@ -184,3 +184,66 @@ def test_the_wheel_over_the_language_list_scrolls_the_page(qtbot: QtBot) -> None
     )
     QApplication.sendEvent(box, down)
     assert box.currentIndex() == before and bar.value() > 0
+
+
+def test_three_tabs_down_the_left_side(qtbot: QtBot) -> None:
+    from PyQt6.QtWidgets import QTabWidget
+
+    from cube_net.ui.help.help_tab import HelpTab
+
+    window = make(qtbot)
+    assert window.tabs.tabPosition() is QTabWidget.TabPosition.West
+    assert [window.tabs.tabText(i) for i in range(window.tabs.count())] == ["Network", "Template", "Hotkeys"]
+    assert list(window.pages) == list(HelpTab)
+    assert window.tab() is HelpTab.NETWORK and window.pages[HelpTab.NETWORK] is window.scroll
+    assert all(window.pages[tab].parentWidget() is not None for tab in HelpTab)
+
+
+def test_the_tabs_stay_where_they_are_while_a_page_scrolls(qtbot: QtBot) -> None:
+    window = make(qtbot)
+    bar = window.tabs.tabBar()
+    assert bar is not None
+    before = bar.mapTo(window, bar.rect().topLeft())
+    window.scroll.verticalScrollBar().setValue(window.scroll.verticalScrollBar().maximum())
+    assert bar.mapTo(window, bar.rect().topLeft()) == before
+    assert not window.scroll.isAncestorOf(bar)
+
+
+def test_every_tab_has_the_language_list(qtbot: QtBot) -> None:
+    from cube_net.ui.help.help_tab import HelpTab
+
+    window = make(qtbot)
+    assert len(window.languages) == len(HelpTab) and window.language is window.languages[0]
+    assert all(window.pages[tab].isAncestorOf(box) for tab, box in zip(HelpTab, window.languages, strict=True))
+    chosen: list[object] = []
+    window.language_changed.connect(chosen.append)
+    window.languages[2].setCurrentIndex(list(Language).index(Language.RUSSIAN))
+    assert chosen == [Language.RUSSIAN]
+
+
+def test_the_template_and_hotkeys_tabs_are_empty_for_now(qtbot: QtBot) -> None:
+    from cube_net.ui.help.help_tab import HelpTab
+    from cube_net.ui.help.text_block import TextBlock
+
+    window = make(qtbot)
+    for tab in (HelpTab.TEMPLATE, HelpTab.HOTKEYS):
+        blocks = window.pages[tab].findChildren(TextBlock)
+        assert len(blocks) == 1 and "How it works" in blocks[0].toPlainText()  # the name, and nothing else yet
+
+
+def test_opens_with_the_tab_asked_and_tells_when_another_is_chosen(qtbot: QtBot) -> None:
+    from cube_net.ui.help.help_tab import HelpTab
+
+    window = HelpWindow(tab=HelpTab.HOTKEYS)
+    qtbot.addWidget(window)
+    assert window.tab() is HelpTab.HOTKEYS
+    shown: list[object] = []
+    window.tab_changed.connect(shown.append)
+    window.show_tab(HelpTab.TEMPLATE)
+    assert shown == [HelpTab.TEMPLATE] and window.tab() is HelpTab.TEMPLATE
+
+
+def test_the_tabs_in_russian(qtbot: QtBot) -> None:
+    window = make(qtbot)
+    TRANSLATIONS.set_language(Language.RUSSIAN)
+    assert [window.tabs.tabText(i) for i in range(window.tabs.count())] == ["Развёртка", "Шаблон", "Горячие клавиши"]

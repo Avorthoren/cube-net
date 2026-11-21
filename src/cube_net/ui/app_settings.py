@@ -48,6 +48,7 @@ _CHECK_UPDATES = "updates/check"
 _LAST_UPDATE_CHECK = "updates/last_check"
 _SKIPPED_UPDATE = "updates/skipped"
 _HELP_SHOWN = "help/shown_at_start"
+_HELP_TAB = "help/tab"
 
 
 class AppSettings:
@@ -137,6 +138,15 @@ class AppSettings:
     @help_shown.setter
     def help_shown(self, value: bool) -> None:
         self._settings.setValue(_HELP_SHOWN, value)
+
+    @property
+    def help_tab(self) -> str:
+        """The name of Help -> Help's tab the user looked at last ("": none yet: the first one)."""
+        return str(self._settings.value(_HELP_TAB, "", type=str))
+
+    @help_tab.setter
+    def help_tab(self, name: str) -> None:
+        self._settings.setValue(_HELP_TAB, name)
 
     @property
     def language(self) -> Language:

@@ -3491,6 +3491,20 @@ class TestHelpMenu:
         window.help_action.trigger()
         assert window.help_window is first and first.isVisible()  # the same one again
 
+    def test_help_opens_the_tab_looked_at_last_even_last_time(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from cube_net.ui.help.help_tab import HelpTab
+
+        window = self.make(qtbot, tmp_path)
+        assert window.settings.help_tab == ""
+        window.help_action.trigger()
+        assert window.help_window is not None and window.help_window.tab() is HelpTab.NETWORK  # the first time
+        window.help_window.show_tab(HelpTab.TEMPLATE)
+        assert window.settings.help_tab == "template"
+        again = MainWindow(settings=window.settings, session_dir=tmp_path)  # the next start
+        qtbot.addWidget(again)
+        again.help_action.trigger()
+        assert again.help_window is not None and again.help_window.tab() is HelpTab.TEMPLATE
+
     def test_help_opens_with_its_default_size_every_time(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
         window.help_action.trigger()

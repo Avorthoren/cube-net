@@ -23,6 +23,7 @@ TEXT_ARGUMENTS = {
     "_paragraph": (0,),
     "_title": (0,),
     "_caption": (0,),
+    "_finish_page": (0,),  # a tab's title (Help)
     "Hotkey": (1, 2),  # what the mouse does, what it does (Help's hotkeys)
     "HotkeyGroup": (0,),
 }

@@ -3,6 +3,9 @@
 
 """Help -> Help: a big window that explains how the application works, with animations of the real tools.
 
+Its tabs (`HelpTab`: Network, Template, Hotkeys) are down the left side, their titles turned; each tab's page scrolls on
+its own, and the tabs stay where they are. Every page starts with the application's name and the language list.
+
 The text is in a column of easy-to-read width, in blocks between the animations (`TextBlock`: selectable across
 paragraphs). The animations (`demo`) are drawn in the built-in Cube's look (`DEFAULT_CUBE_LOOK`), whatever the open
 document's style and colours are, and never with the vertex labels. Escape closes the window.
@@ -14,7 +17,17 @@ from html import escape
 
 from PyQt6.QtCore import QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QKeyEvent
-from PyQt6.QtWidgets import QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from cube_net.core.geometry import Box, Vec
 from cube_net.core.project import Project
@@ -24,6 +37,7 @@ from cube_net.ui.help.demo.demo_sheet import AROUND_THE_NET
 from cube_net.ui.help.demo.player import DemoPlayer
 from cube_net.ui.help.demo.steps import Step
 from cube_net.ui.help.demo.torus import torus_project
+from cube_net.ui.help.help_tab import HelpTab
 from cube_net.ui.help.hotkeys import HOTKEYS, HotkeyGroup
 from cube_net.ui.help.text_block import ACCENT, BADGE_PX, BADGE_SCHEME, TextBlock
 from cube_net.ui.i18n import TRANSLATIONS, bind, tr
@@ -102,6 +116,10 @@ BOUNDS_TEXT = (
 VIEW_TEXT = "Zoom with the mouse wheel; drag the sheet to move it."
 HOTKEYS_TITLE = "Hotkeys"
 
+# The tabs' titles (the Hotkeys tab's is `HOTKEYS_TITLE`).
+NETWORK_TAB = "Network"
+TEMPLATE_TAB = "Template"
+
 # Room between the application's name at the top and the language list after it (px).
 LANGUAGE_GAP_PX = 20
 
@@ -116,21 +134,31 @@ class HelpWindow(QWidget):
     # The user chose another language in the list at the top (a `Language`): it's the application's setting.
     language_changed = pyqtSignal(object)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    # The user went to another tab (a `HelpTab`).
+    tab_changed = pyqtSignal(object)
+
+    def __init__(self, parent: QWidget | None = None, tab: HelpTab = HelpTab.NETWORK) -> None:
+        """`tab`: the one shown at first (the one the user looked at last)."""
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.Window)
         bind(self, self.setWindowTitle, "{name} Help", name=APP_NAME)
         self.players: list[DemoPlayer] = []
+        # The Network tab's blocks of text (`TextBlock`), in order.
         self.blocks: list[TextBlock] = []
+        # Every tab's language list, and the block of the name it's placed after.
+        self.languages: list[LanguageBox] = []
+        self._language_places: list[tuple[LanguageBox, TextBlock]] = []
+        self._blocks = self.blocks
         self._block: TextBlock | None = None
+        self._column_widget = QWidget()
+        self._column = QVBoxLayout(self._column_widget)
+        self.tabs = QTabWidget(self)
+        self.tabs.setTabPosition(QTabWidget.TabPosition.West)  # down the left side, its texts turned
+        self.tabs.setDocumentMode(True)
+        # Each tab's page scrolls under the tabs, which stay where they are.
+        self.pages: dict[HelpTab, QScrollArea] = {}
 
-        column = QWidget()
-        column.setFixedWidth(COLUMN_PX)
-        self._column = QVBoxLayout(column)
-        self._column.setContentsMargins(0, 28, 0, 40)
-        self._column.setSpacing(14)
-        self._heading()
-        self._language_box()
+        self._start_page(self.blocks)
         self._paragraph(INTRO)
         self._paragraph(IDEA)
         self._title(CUT_TITLE, 1)
@@ -157,22 +185,27 @@ class HelpWindow(QWidget):
         self._title(HOTKEYS_TITLE)
         for group in HOTKEYS:
             self._hotkeys(group)
+        self.scroll = self._finish_page(NETWORK_TAB, HelpTab.NETWORK)
+        self.language = self.languages[0]
+        self._start_page([])  # its content is to come
+        self._finish_page(TEMPLATE_TAB, HelpTab.TEMPLATE)
+        self._start_page([])  # its content is to come
+        self._finish_page(HOTKEYS_TITLE, HelpTab.HOTKEYS)
+        TRANSLATIONS.changed.connect(self._place_languages)  # after the texts' own refresh: it's connected before
 
-        page = QWidget()
-        page.setObjectName("page")
-        page.setStyleSheet(f"#page {{ background: {PAGE}; }} QLabel {{ color: {TEXT}; }}")
-        centred = QHBoxLayout(page)
-        centred.addStretch(1)
-        centred.addWidget(column)
-        centred.addStretch(1)
-        self.scroll = QScrollArea(self)
-        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setWidget(page)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.scroll)
+        layout.addWidget(self.tabs)
+        self.show_tab(tab)
+        self.tabs.currentChanged.connect(lambda _index: self.tab_changed.emit(self.tab()))
         self.restore_default_size()
+
+    def tab(self) -> HelpTab:
+        """The tab shown."""
+        return list(self.pages)[self.tabs.currentIndex()]
+
+    def show_tab(self, tab: HelpTab) -> None:
+        self.tabs.setCurrentIndex(list(self.pages).index(tab))
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
         if event is not None and event.key() == Qt.Key.Key_Escape:
@@ -180,13 +213,48 @@ class HelpWindow(QWidget):
             return
         super().keyPressEvent(event)
 
+    # --- the tabs ----------------------------------------------------------------------------------------------------
+
+    def _start_page(self, blocks: list[TextBlock]) -> None:
+        """A new tab's page is written from now on, its blocks of text into `blocks`: it starts with the application's
+        name and the language list."""
+        self._blocks = blocks
+        self._block = None
+        self._column_widget = column = QWidget()  # kept: nothing else holds it until its page does
+        column.setFixedWidth(COLUMN_PX)
+        self._column = QVBoxLayout(column)
+        self._column.setContentsMargins(0, 28, 0, 40)
+        self._column.setSpacing(14)
+        self._heading()
+        self._language_box()
+
+    def _finish_page(self, title: str, tab: HelpTab) -> QScrollArea:
+        """The page written since `_start_page`: centred, scrolled, in its tab (`title`: the tab's)."""
+        column = self._column_widget
+        self._column.addStretch(1)  # a short page stays at the top
+        page = QWidget()
+        page.setObjectName("page")
+        page.setStyleSheet(f"#page {{ background: {PAGE}; }} QLabel {{ color: {TEXT}; }}")
+        centred = QHBoxLayout(page)
+        centred.addStretch(1)
+        centred.addWidget(column)
+        centred.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(page)
+        index = self.tabs.addTab(scroll, "")
+        bind(self.tabs, lambda text, i=index: self.tabs.setTabText(i, text), title)
+        self.pages[tab] = scroll
+        return scroll
+
     # --- the parts of the page ---------------------------------------------------------------------------------------
 
     def _text(self) -> TextBlock:
         """The block of text being written: a new one after an animation."""
         if self._block is None:
             self._block = TextBlock(COLUMN_PX)
-            self.blocks.append(self._block)
+            self._blocks.append(self._block)
             self._column.addWidget(self._block)
         return self._block
 
@@ -200,30 +268,19 @@ class HelpWindow(QWidget):
 
     def _language_box(self) -> None:
         """The language list, right after the application's name, where it's seen at once (over the text, which stays
-        one document to select in): the same setting as Settings -> Preferences."""
+        one document to select in): the same setting as Settings -> Preferences. Every tab has its own."""
         block = self._text()
-        self.language = LanguageBox(TRANSLATIONS.language, block)
-        bind(self.language, self.language.setToolTip, "Language")
-        self.language.chosen.connect(self.language_changed)
-        ignore_wheel([self.language], self)  # the wheel scrolls the page wherever the mouse is
-        self._place_language()
-        TRANSLATIONS.changed.connect(self._place_language)  # after the text's own refresh: it's connected before
+        language = LanguageBox(TRANSLATIONS.language, block)
+        bind(language, language.setToolTip, "Language")
+        language.chosen.connect(self.language_changed)
+        ignore_wheel([language], self)  # the wheel scrolls the page wherever the mouse is
+        self.languages.append(language)
+        self._language_places.append((language, block))
+        _place_language(language, block)
 
-    def _place_language(self) -> None:
-        """`LANGUAGE_GAP_PX` after the name's end, its middle on the middle of the name's line."""
-        block = self.blocks[0]
-        document = block.document()
-        assert document is not None
-        layout = document.documentLayout()
-        first = document.firstBlock()
-        lines = first.layout()
-        assert layout is not None and lines is not None
-        line = lines.lineAt(0)
-        top = layout.blockBoundingRect(first).top() + line.y()
-        size = self.language.sizeHint()
-        self.language.resize(size)
-        x = line.x() + line.naturalTextWidth() + LANGUAGE_GAP_PX
-        self.language.move(round(x), round(top + line.height() / 2 - size.height() / 2))
+    def _place_languages(self) -> None:
+        for language, block in self._language_places:
+            _place_language(language, block)
 
     def _paragraph(self, text: str, values: Callable[[], dict[str, str]] | None = None, bullet: bool = False) -> None:
         """A paragraph (an item of a list, if `bullet`); `values` gives what goes into its {placeholders}, in the
@@ -315,7 +372,8 @@ class HelpWindow(QWidget):
         it every time (`MainWindow.show_help`), whatever the user resized it to before."""
         screen = self.screen()
         height = 900 if screen is None else int(screen.availableGeometry().height() * 0.85)
-        self.resize(WINDOW_PX, height)
+        bar = self.tabs.tabBar()
+        self.resize(WINDOW_PX + (bar.sizeHint().width() if bar is not None else 0), height)  # the page, and the tabs
 
 
 def _points(size: float) -> str:
@@ -337,3 +395,20 @@ def _paragraph_html(text: str, bullet: bool) -> str:
         style = f"line-height: 145%; margin: 0 0 6px 22px; text-indent: -22px; color: {TEXT};"
         text = f"&#8226;&nbsp;&nbsp;&nbsp;{text}"
     return f'<p style="{style} {size}">{text}</p>'
+
+
+def _place_language(language: LanguageBox, block: TextBlock) -> None:
+    """`LANGUAGE_GAP_PX` after the name's end (the first line of `block`), its middle on the middle of the name's
+    line."""
+    document = block.document()
+    assert document is not None
+    layout = document.documentLayout()
+    first = document.firstBlock()
+    lines = first.layout()
+    assert layout is not None and lines is not None
+    line = lines.lineAt(0)
+    top = layout.blockBoundingRect(first).top() + line.y()
+    size = language.sizeHint()
+    language.resize(size)
+    x = line.x() + line.naturalTextWidth() + LANGUAGE_GAP_PX
+    language.move(round(x), round(top + line.height() / 2 - size.height() / 2))

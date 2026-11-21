@@ -238,6 +238,8 @@ RUSSIAN: dict[str, str] = {
     # Help -> Help.
     "{name} Help": "{name} — справка",
     "How it works": "Как это работает",
+    "Network": "Развёртка",
+    "Template": "Шаблон",
     (
         "This application lets you build networks of solid bodies: polygons without self-intersections that, when "
         "folded, can cover the whole surface of that body without overlaps. So the area of such a polygon is always "

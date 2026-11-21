@@ -59,6 +59,7 @@ from cube_net.ui.dialogs.message_window import MessageIcon, ask_yes_no, tell
 from cube_net.ui.dialogs.new_project_window import NewProjectChoice, Start, builtin_project, choose_new_project
 from cube_net.ui.empty_area import EmptyArea
 from cube_net.ui.help.about_dialog import AboutDialog
+from cube_net.ui.help.help_tab import HelpTab
 from cube_net.ui.help.help_window import HelpWindow
 from cube_net.ui.i18n import TRANSLATIONS, Language, bind, tr
 from cube_net.ui.i18n.errors import error_text
@@ -1261,13 +1262,17 @@ class MainWindow(QMainWindow):
         """Help -> Help: one window, brought to the front if it's open already; opened again, it has its default size
         (the user may have resized it before, and has no other way back to that size)."""
         if self.help_window is None:
-            self.help_window = HelpWindow(self)
+            self.help_window = HelpWindow(self, HelpTab.named(self.settings.help_tab))  # the one looked at last
             self.help_window.language_changed.connect(self._on_language_changed)
+            self.help_window.tab_changed.connect(self._on_help_tab_changed)
         elif not self.help_window.isVisible():
             self.help_window.restore_default_size()
         self.help_window.show()
         self.help_window.raise_()
         self.help_window.activateWindow()
+
+    def _on_help_tab_changed(self, tab: HelpTab) -> None:
+        self.settings.help_tab = tab.value
 
     def _filled_in(self, settings: ProjectSettings, body: Body) -> ProjectSettings:
         """`settings` with face colours and a style, where it has none (saved by an older version): the face colours
