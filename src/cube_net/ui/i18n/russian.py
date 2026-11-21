@@ -469,17 +469,30 @@ RUSSIAN: dict[str, str] = {
     "Counterparts have the same length.": "Пары одинаковой длины.",
     (
         "Counterparts run in opposite directions along their loops (otherwise one of them would have to be turned "
-        "over to glue them)."
+        "over to glue them). To check imagine outer loop running counter-clockwise and every inner loop running "
+        "clockwise."
     ): (
         "Пары идут вдоль своих контуров в противоположных направлениях (иначе одну из них пришлось бы перевернуть, "
-        "чтобы их склеить)."
+        "чтобы их склеить). Для проверки представьте, что внешний контур идёт против часовой стрелки, а каждый "
+        "внутренний контур — по часовой стрелке."
     ),
-    "No fold-line segment joins the same two names as a pair of counterparts: an edge is a cut or a fold.": (
-        "Ни один отрезок линии сгиба не соединяет те же два имени, что и пара отрезков границы: ребро — либо разрез, "
-        "либо сгиб."
+    (
+        "No edge of the body is both a cut and a fold. If two boundary segments are counterparts, they are the two "
+        "sides of a cut along the body's edge between their two names, so no fold-line segment may join the same two "
+        "names. For example, if boundary segments A3-B1 and A2-B4 exist (the cut along the edge A-B), a "
+        "fold-line segment A1-B2 is forbidden: it would make the same edge A-B a fold too."
+    ): (
+        "Ни одно ребро тела не является одновременно разрезом и сгибом. Если два отрезка границы — пара, то они — две "
+        "стороны разреза вдоль ребра тела между их двумя именами, поэтому ни один отрезок линии сгиба не может "
+        "соединять те же два имени. Например, если существуют отрезки границы A3-B1 и A2-B4 (разрез вдоль ребра A-B), "
+        "отрезок линии сгиба A1-B2 запрещён: он сделал бы то же ребро A-B ещё и сгибом."
     ),
-    "No two fold-line segments join the same two names.": (
-        "Никакие два отрезка линий сгиба не соединяют одни и те же два имени."
+    (
+        "No two fold-line segments join the same two names (i.e. having fold-line segments A1-B3 and A2-B1 at the same "
+        "time is forbidden)."
+    ): (
+        "Никакие два отрезка линий сгиба не соединяют одни и те же два имени (т. е. одновременное наличие отрезков "
+        "линий сгиба A1-B3 и A2-B1 запрещено)."
     ),
     "All images of each vertex of the body are glued together into one point.": (
         "Все образы каждой вершины тела склеиваются в одну точку."
@@ -494,7 +507,9 @@ RUSSIAN: dict[str, str] = {
     "Every face, glued from its pieces, is one flat piece of paper: it doesn't overlap itself.": (
         "Каждая грань, склеенная из своих кусков, — один плоский лист бумаги: она не накладывается сама на себя."
     ),
-    "The indices of every name go 1, 2, 3, ... without gaps.": "Индексы каждого имени идут 1, 2, 3, ... без пропусков.",
+    "The indices of every name go starting from 1 without gaps.": (
+        "Индексы каждого имени идут начиная с 1 без пропусков."
+    ),
     (
         "If the indices of some names have gaps (and nothing else is wrong), the application offers to renumber them: "
         "the images of each name keep their order, and get the indices 1, 2, 3, ... (A2 and A5 become A1 and A2). The "

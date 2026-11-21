@@ -199,12 +199,18 @@ CHECK_PARALLEL = "Counterparts are parallel or perpendicular (so that coordinate
 CHECK_LENGTHS = "Counterparts have the same length."
 CHECK_DIRECTIONS = (
     "Counterparts run in opposite directions along their loops (otherwise one of them would have to be turned over "
-    "to glue them)."
+    "to glue them). To check imagine outer loop running counter-clockwise and every inner loop running clockwise."
 )
 CHECK_CUT_AND_FOLD = (
-    "No fold-line segment joins the same two names as a pair of counterparts: an edge is a cut or a fold."
+    "No edge of the body is both a cut and a fold. If two boundary segments are counterparts, they are the two sides "
+    "of a cut along the body's edge between their two names, so no fold-line segment may join the same two names. For "
+    "example, if boundary segments A3-B1 and A2-B4 exist (the cut along the edge A-B), a fold-line segment "
+    "A1-B2 is forbidden: it would make the same edge A-B a fold too."
 )
-CHECK_SAME_FOLDS = "No two fold-line segments join the same two names."
+CHECK_SAME_FOLDS = (
+    "No two fold-line segments join the same two names (i.e. having fold-line segments A1-B3 and A2-B1 at the same "
+    "time is forbidden)."
+)
 CHECK_GLUED_NAMES = "All images of each vertex of the body are glued together into one point."
 CHECK_FOLD_COLORS = "Every fold-line separates two faces of different colors."
 CHECK_PIECES = "The pieces of each color are glued together into one face."
@@ -213,7 +219,7 @@ CHECK_TOUCHES_ITSELF = (
     "No face touches itself: a slit, or a point where a boundary touches itself, must lie between two faces."
 )
 CHECK_FLAT = "Every face, glued from its pieces, is one flat piece of paper: it doesn't overlap itself."
-CHECK_INDICES = "The indices of every name go 1, 2, 3, ... without gaps."
+CHECK_INDICES = "The indices of every name go starting from 1 without gaps."
 REINDEX_TEXT = (
     "If the indices of some names have gaps (and nothing else is wrong), the application offers to renumber them: the "
     "images of each name keep their order, and get the indices 1, 2, 3, ... (A2 and A5 become A1 and A2). The "
@@ -419,8 +425,8 @@ class HelpWindow(QWidget):
         self._paragraph(CHECK_PARALLEL, bullet=True)
         self._paragraph(CHECK_LENGTHS, bullet=True)
         self._paragraph(CHECK_DIRECTIONS, bullet=True)
-        self._paragraph(CHECK_CUT_AND_FOLD, bullet=True)
-        self._paragraph(CHECK_SAME_FOLDS, bullet=True)
+        self._paragraph(CHECK_CUT_AND_FOLD, bullet=True, names=True)
+        self._paragraph(CHECK_SAME_FOLDS, bullet=True, names=True)
         self._paragraph(CHECK_GLUED_NAMES, bullet=True)
         self._paragraph(CHECK_FOLD_COLORS, bullet=True)
         self._paragraph(CHECK_PIECES, bullet=True)
