@@ -13,7 +13,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 
 from cube_net.core.body import Body, BodyEdge, Face, SurfacePoint
-from cube_net.core.geometry import Box, Vec, polygon_contains
+from cube_net.core.geometry import Box, Vec, area_centroid, polygon_contains
 from cube_net.core.net.elements import EdgeKind, HalfEdge, NetVertex, Region
 
 # A segment of the body, one way: a face number (or -1 - edge id, for a segment on an edge) and its two ends in that
@@ -184,6 +184,11 @@ class Net:
     def bounding_box(self) -> Box:
         """Axis-aligned bounding box of all vertices."""
         return Box.around(v.position for v in self.vertices)
+
+    def centroid(self) -> Vec | None:
+        """The centre of mass of the net's paper, of uniform density: its regions together (its holes are no region;
+        where rearranged halves overlap, both count). None if it has no area."""
+        return area_centroid(self.region_polygon(r) for r in self.regions)
 
 
 def _cycle(start: HalfEdge) -> list[HalfEdge]:

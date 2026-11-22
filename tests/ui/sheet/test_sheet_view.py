@@ -602,3 +602,22 @@ def test_the_place_stays_when_the_view_moves_in_its_window_afterwards(qtbot: QtB
         lambda: again.viewport().mapTo(second, QPoint(0, 0)).x() == view.viewport().mapTo(first, QPoint(0, 0)).x()
     )
     assert again.viewport().mapTo(second, again.from_sheet(QPointF(11, 12)).toPoint()) == in_window
+
+
+def test_center_on_puts_the_point_in_the_middle_zoomed_out_by_the_rules(view: SheetView) -> None:
+    view.pan_by(200, -100)
+    view.zoom_by(4.0, center_of_viewport(view))
+    view.center_on(QPointF(11.5, 12.25), NET)
+    middle = view.from_sheet(QPointF(11.5, 12.25))
+    assert abs(middle.x() - center_of_viewport(view).x()) <= 1 and abs(middle.y() - center_of_viewport(view).y()) <= 1
+    width, height = view._screen_size()
+    assert view.scale_factor() == zoom.zoom_limits(width, height, 3.0, 4.0, view.zoom_limits()[1])[0]  # NET's size
+
+
+def test_center_on_a_smaller_net_than_the_views_zooms_out_less(view: SheetView) -> None:
+    """A template's view has the whole template sheet for its limit; Center takes the template's own size."""
+    small = Box(Vec(11, 12), Vec(12, 13))
+    view.center_on(QPointF(11.5, 12.5), small)
+    assert view.scale_factor() > view.zoom_limits()[0]
+    width, height = view._screen_size()
+    assert view.scale_factor() == zoom.zoom_limits(width, height, 1.0, 1.0, view.zoom_limits()[1])[0]

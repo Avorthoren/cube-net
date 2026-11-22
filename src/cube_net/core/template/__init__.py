@@ -10,7 +10,15 @@ from cube_net.core.template.rules import (
     TemplateRejection,
     on_the_sheet,
 )
-from cube_net.core.template.template import Fold, Label, LoopVertex, Template, TemplateFace, template_area
+from cube_net.core.template.template import (
+    Fold,
+    Label,
+    LoopVertex,
+    Template,
+    TemplateFace,
+    template_area,
+    template_centroid,
+)
 from cube_net.core.template.template_body import body_from_template
 from cube_net.core.template.template_editor import TemplateEditor, TemplateSnapshot, TemplateState
 from cube_net.core.template.validation import MIN_FACES, ValidationFailure, ValidationProblem, reindexed, validate
@@ -37,5 +45,6 @@ __all__ = [
     "on_the_sheet",
     "reindexed",
     "template_area",
+    "template_centroid",
     "validate",
 ]

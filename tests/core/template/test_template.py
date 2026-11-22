@@ -1,12 +1,13 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+from dataclasses import replace
 from fractions import Fraction as F
 
 import pytest
 
 from cube_net.core.geometry import Rigid90, Vec
-from cube_net.core.template import Fold, Label, Template, TemplateFace, template_area
+from cube_net.core.template import Fold, Label, Template, TemplateFace, template_area, template_centroid
 
 # The pillow's template (docs/template_plan.md, §2.1), counter-clockwise: ids 0..5.
 PILLOW = [Vec(0, 0), Vec(1, 0), Vec(2, 0), Vec(2, 1), Vec(1, 1), Vec(0, 1)]
@@ -48,6 +49,26 @@ class TestLoop:
 
     def test_no_area_while_open(self) -> None:
         assert template_area(Template().with_vertex_appended(Vec(1, 1))) is None
+        assert template_centroid(Template().with_vertex_appended(Vec(1, 1))) is None
+
+    def test_centroid(self) -> None:
+        assert template_centroid(loop(PILLOW)) == Vec(1, F(1, 2))
+
+    def test_centroid_without_the_holes(self) -> None:
+        """Cube with a hole: its closed hole taken away, as it is from the network made from it."""
+        from cube_net.core.project.builtin_templates import cube_with_a_hole
+        from cube_net.core.project.from_template import project_from_template
+
+        document = cube_with_a_hole()
+        template = document.state.template
+        assert template_centroid(template) == Vec(F(1417, 30), F(844, 15))
+        assert project_from_template(document).state.net.centroid() == Vec(F(1417, 30), F(844, 15))
+        # However its loops were kept: the holes the other way round, or the outline, the same paper.
+        holes_turned = replace(
+            template, holes=tuple(replace(h, vertices=tuple(reversed(h.vertices))) for h in template.holes)
+        )
+        outline_turned = replace(template, vertices=tuple(reversed(template.vertices)))
+        assert template_centroid(holes_turned) == template_centroid(outline_turned) == Vec(F(1417, 30), F(844, 15))
 
     def test_inserting_and_removing_a_vertex(self) -> None:
         template = loop(PILLOW).with_vertex_inserted(3, 4, Vec(F(3, 2), 1))

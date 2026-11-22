@@ -6,7 +6,7 @@
 from cube_net.core.geometry.box import Box
 from cube_net.core.geometry.convex_hull import convex_hull
 from cube_net.core.geometry.long_numbers import MAX_NUMBER_DIGITS, Axis, LongNumber, Part, digits, long_number
-from cube_net.core.geometry.polygon import loops_contain, polygon_contains, signed_area
+from cube_net.core.geometry.polygon import area_centroid, loops_contain, polygon_contains, signed_area
 from cube_net.core.geometry.predicates import (
     IntersectionKind,
     SegmentIntersection,
@@ -31,6 +31,7 @@ __all__ = [
     "Scalar",
     "SegmentIntersection",
     "Vec",
+    "area_centroid",
     "classify_segments",
     "convex_hull",
     "digits",

@@ -7,6 +7,7 @@ What's new in every version of Cube Net. While working, write the changes under 
  - **The ability to work with a limited set of other bodies added**
  - Cut lines can go outside the net now
  - Coordinates numerators and denominators limited to 2100 decimal digits
+ - "Center" button added
  - Emergency project restoration implemented (for cases when application bug damaged the project)
  - Crash|error reports added
  - Performance of dragging significantly improved (relevant for smaller color tilings)

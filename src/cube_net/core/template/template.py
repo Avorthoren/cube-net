@@ -20,7 +20,7 @@ from dataclasses import dataclass, replace
 from fractions import Fraction
 from itertools import pairwise
 
-from cube_net.core.geometry import Rigid90, Vec, on_segment, polygon_contains, signed_area
+from cube_net.core.geometry import Rigid90, Vec, area_centroid, on_segment, polygon_contains, signed_area
 
 # A label's name: 1 or 2 capital Latin letters.
 NAME_PATTERN = re.compile(r"[A-Z]{1,2}")
@@ -462,6 +462,15 @@ def template_area(template: Template) -> Fraction | None:
         (signed_area([v.position for v in h.vertices]) for h in template.holes if h.closed), Fraction(0)
     )  # holes run clockwise: negative
     return signed_area(template.polygon()) + holes
+
+
+def template_centroid(template: Template) -> Vec | None:
+    """The centre of mass of the net the template draws, of uniform density (None while the loop is open): its closed
+    holes taken away, a hole being drawn not (whichever way the loops run)."""
+    if not template.closed:
+        return None
+    holes = [[v.position for v in h.vertices] for h in template.holes if h.closed]
+    return area_centroid([template.polygon()], holes)
 
 
 def _insert_corner(face: TemplateFace, a: int, b: int, new: int) -> TemplateFace:

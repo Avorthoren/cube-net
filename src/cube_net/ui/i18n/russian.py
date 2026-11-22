@@ -37,6 +37,10 @@ RUSSIAN: dict[str, str] = {
     "The project's goal: an area below this is a success": "Цель проекта: площадь меньше этой — успех",
     "Bounds": "Рамка",
     "Show the smallest bounding rectangle (B)": "Показать наименьший описанный прямоугольник (B)",
+    "Center": "Центрировать",
+    "Put the net's center of mass in the middle of the view, zoomed out as far as allowed": (
+        "Поместить центр масс развёртки в середину вида, уменьшив масштаб настолько, насколько разрешено"
+    ),
     "Start logging": "Начать логирование",
     "Stop logging": "Остановить логирование",
     "Logs": "Журналы",

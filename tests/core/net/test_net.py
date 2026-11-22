@@ -60,3 +60,8 @@ def test_a_seam_across_a_face_between_points_of_two_edges(pillow: Body) -> None:
     assert net.segment_faces(seam) == {1}
     (fold,) = net.fold_edges()
     assert net.segment_faces(fold) == {1, 2}
+
+
+def test_centroid_of_the_cube_net() -> None:
+    """Six unit squares: four in a column x 11..12, y 10..14, and two either side of the one at y 12..13."""
+    assert default_net().centroid() == Vec(F(23, 2), F(73, 6))

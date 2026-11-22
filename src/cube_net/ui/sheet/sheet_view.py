@@ -10,7 +10,7 @@ from the core are used as-is.
 import math
 from collections.abc import Callable
 
-from PyQt6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QPoint, QPointF, QRect, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QCursor,
     QGuiApplication,
@@ -230,6 +230,24 @@ class SheetView(QGraphicsView):
         at = self.from_sheet(QPointF(place.x, place.y))  # in the middle now: on to the window's corner
         self.pan_by(at.x() + origin.x(), at.y() + origin.y())
         self._viewport_origin = origin
+
+    def center_on(self, point: QPointF, box: Box, seen: QRect | None = None) -> None:
+        """Center: `point` (sheet coordinates) in the middle of the part of the view the user sees (`seen`, in the
+        viewport's pixels: the settings panel may lie over the rest; None: all of it), zoomed out as far as the zoom
+        rules let a net as large as `box` be (within the view's own limits)."""
+        width, height = self._screen_size()
+        if box.width > 0 and box.height > 0:
+            low = zoom.zoom_limits(width, height, float(box.width), float(box.height), self._max_scale)[0]
+        else:
+            low = self.zoom_limits()[0]
+        self._scale = zoom.clamp_scale(low, self.zoom_limits())
+        self._apply_transform()
+        self.centerOn(point)
+        viewport = self.viewport()
+        if seen is None or viewport is None or seen.isEmpty():
+            return
+        at, wanted = self.from_sheet(point), QRectF(seen).center()
+        self.pan_by(at.x() - wanted.x(), at.y() - wanted.y())
 
     def show_fixed(self, box: Box, fill: float) -> None:
         """Always show `box` in the middle, as large as `fill` (0 to 1) of the view allows, whatever the zoom limits;

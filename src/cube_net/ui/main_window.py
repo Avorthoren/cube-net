@@ -12,7 +12,7 @@ from enum import Enum
 from fractions import Fraction
 from pathlib import Path
 
-from PyQt6.QtCore import QEvent, QObject, Qt, QTimer, QUrl
+from PyQt6.QtCore import QEvent, QObject, QPointF, QRect, Qt, QTimer, QUrl
 from PyQt6.QtGui import QAction, QCloseEvent, QDesktopServices, QKeySequence, QShowEvent
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
@@ -32,7 +32,7 @@ from cube_net.core.body import CUBE, Body
 from cube_net.core.bounding import min_area_rectangle
 from cube_net.core.cutting import TooLong, slope_of
 from cube_net.core.editor import EditorSnapshot
-from cube_net.core.geometry import Vec
+from cube_net.core.geometry import Box, Vec
 from cube_net.core.history import ActionKind, HistoryEntry
 from cube_net.core.labels import PointLabels
 from cube_net.core.net import Net, default_net
@@ -58,6 +58,7 @@ from cube_net.core.project.template_repair import (
 )
 from cube_net.core.project_settings import ProjectSettings, format_threshold
 from cube_net.core.sheet import sheet_box
+from cube_net.core.template import template_centroid
 from cube_net.core.update_policy import due_today, offer_automatically
 from cube_net.core.version import newer
 from cube_net.ui import palette
@@ -574,6 +575,16 @@ class MainWindow(QMainWindow):
         self.create_network_button = CreateNetworkButton(toolbar)  # below that
         self.create_network_button.set_visible(False)
         self.create_network_button.clicked.connect(self._on_create_network)
+        self.center_separator = toolbar.addSeparator()  # Center: below Bounds in a project, below Create network here
+        self.center_action = QAction(self)
+        bind(self.center_action, self.center_action.setText, "Center")
+        bind(
+            self.center_action,
+            self.center_action.setToolTip,
+            "Put the net's center of mass in the middle of the view, zoomed out as far as allowed",
+        )
+        self.center_action.triggered.connect(self._on_center)
+        toolbar.addAction(self.center_action)
 
         spacer = QWidget(toolbar)  # pushes what follows to the bottom of the panel
         spacer.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
@@ -619,6 +630,8 @@ class MainWindow(QMainWindow):
         self.validate_button.set_visible(False)
         self.draw_hole_button.set_visible(False)
         self.create_network_button.set_visible(False)
+        self.center_separator.setVisible(False)
+        self.center_action.setVisible(False)
         self.bounding.set_shown(False)
         self.approve_action.setVisible(True)
         self.settings_panel.style_tab.setEnabled(False)
@@ -650,6 +663,8 @@ class MainWindow(QMainWindow):
         self.draw_hole_action.setVisible(template)
         self.draw_hole_button.set_visible(template)
         self.create_network_button.set_visible(template)
+        self.center_separator.setVisible(True)
+        self.center_action.setVisible(True)
         self.approve_action.setVisible(not template)
         self.settings_panel.set_template_mode(template)
         self._mouse = None
@@ -702,6 +717,34 @@ class MainWindow(QMainWindow):
             return
         start = Start.CUSTOM.value if path is None else f"{Start.CUSTOM.value} {path}"
         self.start_new_project(project_from_template(document), start)
+
+    def _on_center(self) -> None:
+        """Center: the centre of mass of what's shown (the net, or the template's net once its loop is closed: its
+        closed holes taken away) in the middle of the view, zoomed out as far as the zoom rules let that net be."""
+        if self.in_template_mode:
+            template = self.template_mode.editor.template
+            center = template_centroid(template)
+            box = Box.around(v.position for v in template.vertices) if template.vertices else None
+            view = self.template_mode.view
+        else:
+            net = self.editor.display_net  # the rearranged one, while it's being approved
+            center, box, view = net.centroid(), net.bounding_box(), self.sheet_view
+        if center is None or box is None:
+            return
+        view.center_on(QPointF(float(center.x), float(center.y)), box, self._seen_part(view))
+        self._note("view", "center", format_point(center))
+
+    def _seen_part(self, view: SheetView) -> QRect:
+        """The part of the view's viewport the user sees (its pixels): what the settings panel, lying over its right
+        side while it's open, leaves of it."""
+        viewport = view.viewport()
+        assert viewport is not None
+        seen = viewport.rect()
+        if self.settings_panel.isVisible():
+            panel = QRect(viewport.mapFrom(self, self.settings_panel.geometry().topLeft()), self.settings_panel.size())
+            if panel.intersects(seen):
+                seen.setRight(min(seen.right(), panel.left() - 1))
+        return seen
 
     def _on_undo(self) -> None:
         if self.in_template_mode:
@@ -773,6 +816,7 @@ class MainWindow(QMainWindow):
                 self.redo_action,
                 self.save_action,
                 self.save_as_action,
+                self.center_action,
             ):
                 action.setEnabled(False)
             for action in (self.new_action, self.new_template_action, self.open_action, self.quit_action):
@@ -790,6 +834,7 @@ class MainWindow(QMainWindow):
             self.validate_button.set_enabled(self.template_mode.can_validate())
             self.create_network_button.set_enabled(self.template_mode.can_create_network())
             self.unlock_slope_action.setEnabled(True)  # Escape always means something while making a template
+            self.center_action.setEnabled(template_centroid(self.template_mode.editor.template) is not None)
         else:
             dragging = self.cut_tool.busy  # a point is being dragged, or a button of the line is pressed
             history = self.editor.history
@@ -798,6 +843,7 @@ class MainWindow(QMainWindow):
             self.validate_action.setEnabled(False)
             self.draw_hole_action.setEnabled(False)
             self.unlock_slope_action.setEnabled(self.cut_tool.slope is not None)
+            self.center_action.setEnabled(True)
         self.undo_action.setEnabled(history.can_undo and not dragging)
         self.redo_action.setEnabled(history.can_redo and not dragging)
         for action in (

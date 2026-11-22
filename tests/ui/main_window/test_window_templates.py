@@ -228,3 +228,95 @@ class TestTemplates:
         assert "template add 10.000,10.000" in lines and "template close 10.000,10.000" in lines
         assert any(line.startswith("state template untitled") for line in lines)
         window.stop_recording("test over")
+
+
+class TestCenter:
+    """Center while a template is made: below Create network, after a separator; the template's net's centre of mass
+    (its closed holes taken away) in the middle of the view, zoomed out as far as the zoom rules allow a net that
+    large."""
+
+    make = TestTemplates.make
+    draw = TestTemplates.draw
+    torus_template_in = TestTemplates.torus_template_in
+
+    def test_on_the_panel_below_create_network(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from PyQt6.QtWidgets import QToolBar
+
+        window = self.make(qtbot, tmp_path)
+        self.torus_template_in(window, tmp_path)
+        toolbar = window.findChild(QToolBar, "instruments")
+        assert toolbar is not None
+        shown = [a for a in toolbar.actions() if a.isVisible()]
+        at = shown.index(window.center_action)
+        assert shown[at - 1].isSeparator() and shown[at - 2] is window.create_network_button.action
+
+    def test_only_once_the_loop_is_closed(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.new_template_action.trigger()
+        assert window.center_action.isVisible() and not window.center_action.isEnabled()
+        view = window.template_mode.view
+        for x, y in TestTemplates.PILLOW[:3]:
+            view.left_pressed.emit(float(x), float(y))
+        assert not window.center_action.isEnabled()
+        view.left_pressed.emit(*map(float, TestTemplates.PILLOW[3]))
+        view.left_pressed.emit(*map(float, TestTemplates.PILLOW[4]))
+        view.left_pressed.emit(*map(float, TestTemplates.PILLOW[5]))
+        view.left_pressed.emit(*map(float, TestTemplates.PILLOW[0]))  # closed
+        assert window.center_action.isEnabled()
+
+    def test_cube_with_a_hole_and_a_hole_more(self, qtbot: QtBot, tmp_path: Path) -> None:
+        from fractions import Fraction as F
+
+        from test_window_cutting import centered_on
+
+        from cube_net.core.geometry import Box, Vec
+        from cube_net.core.template import template_centroid
+        from cube_net.ui.sheet import zoom
+
+        window = self.make(qtbot, tmp_path)
+        self.torus_template_in(window, tmp_path)
+        view = window.template_mode.view
+        view.pan_by(400, 300)
+        window.center_action.trigger()
+        assert centered_on(window, Vec(F(1417, 30), F(844, 15)))
+        template = window.template_mode.editor.template
+        box = Box.around(v.position for v in template.vertices)
+        width, height = view._screen_size()
+        low = zoom.zoom_limits(width, height, float(box.width), float(box.height), view.zoom_limits()[1])[0]
+        assert view.scale_factor() == pytest.approx(low)
+        # A square hole in the top face (x 44..45, y 64..65 on the sheet): the centre of mass moves away from it.
+        window.draw_hole_action.trigger()
+        for x, y in [(44.25, 64.25), (44.25, 64.75), (44.75, 64.75), (44.75, 64.25), (44.25, 64.25)]:
+            view.left_pressed.emit(x, y)
+        template = window.template_mode.editor.template
+        assert len(template.holes) == 2 and template.holes[-1].closed
+        moved = template_centroid(template)
+        assert moved is not None and moved.y < F(844, 15)
+        view.pan_by(-300, 0)
+        window.center_action.trigger()
+        assert centered_on(window, moved)
+
+    def test_in_the_middle_of_what_the_settings_panel_leaves(self, qtbot: QtBot, tmp_path: Path) -> None:
+        """The panel lies over the view's right side: the centre of mass goes in the middle of the rest."""
+        from fractions import Fraction as F
+
+        from PyQt6.QtCore import QPointF
+
+        window = self.make(qtbot, tmp_path)
+        window.resize(1100, 760)
+        self.torus_template_in(window, tmp_path)
+        window.settings_action.setChecked(True)
+        assert window.settings_panel.isVisible()
+        view = window.template_mode.view
+        viewport = view.viewport()
+        assert viewport is not None
+        panel_left = viewport.mapFrom(window, window.settings_panel.geometry().topLeft()).x()
+        assert 0 < panel_left < viewport.width()  # it does lie over the view
+        window.center_action.trigger()
+        at = view.from_sheet(QPointF(float(F(1417, 30)), float(F(844, 15))))
+        assert abs(at.x() - (panel_left - 1) / 2) <= 2
+        assert abs(at.y() - viewport.rect().center().y()) <= 2
+        window.settings_action.setChecked(False)  # closed: the middle of the whole view again
+        window.center_action.trigger()
+        at = view.from_sheet(QPointF(float(F(1417, 30)), float(F(844, 15))))
+        assert abs(at.x() - viewport.rect().center().x()) <= 2

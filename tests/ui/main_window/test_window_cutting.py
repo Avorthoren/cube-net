@@ -852,3 +852,56 @@ class TestCounterpartBlinks:
         view.mouse_moved.emit(7.0, 7.0)
         view.mouse_moved.emit(11.75, 10 + self.hitbox(window))
         assert self.blinking(window) == {Vec(F(45, 4), 14), Vec(12, 14)}
+
+
+def centered_on(window: MainWindow, point: Vec) -> bool:
+    """Is `point` (sheet coordinates) in the middle of the shown view, within a pixel or two (scrolling is in whole
+    pixels)?"""
+    view = window.template_mode.view if window.in_template_mode else window.sheet_view
+    middle = view.from_sheet(QPointF(float(point.x), float(point.y)))
+    center = QPointF(view.viewport().rect().center())
+    return abs(middle.x() - center.x()) <= 2 and abs(middle.y() - center.y()) <= 2
+
+
+class TestCenter:
+    """Center: below Bounds, after a separator; the net's centre of mass in the middle of the view, zoomed out as far as
+    the zoom rules allow."""
+
+    make = TestRearrangement.make
+    closed_corner_cut = TestRearrangement.closed_corner_cut
+    bottom_of_face_5 = TestRearrangement.bottom_of_face_5
+
+    def test_on_the_panel_below_bounds(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        toolbar = window.findChild(QToolBar, "instruments")
+        assert toolbar is not None
+        shown = [a for a in toolbar.actions() if a.isVisible()]
+        at = shown.index(window.center_action)
+        assert shown[at - 1].isSeparator() and shown[at - 2] is window.bounding.action
+        assert window.center_action.text() == "Center" and window.center_action.isEnabled()
+
+    def test_the_cube(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        view = window.sheet_view
+        view.pan_by(300, -200)
+        view.zoom_by(3.0, view.from_sheet(QPointF(11, 12)))  # in, away from it
+        window.center_action.trigger()
+        assert centered_on(window, Vec(F(23, 2), F(73, 6)))
+        assert view.scale_factor() == view.zoom_limits()[0]
+
+    def test_a_rearranged_net_while_approving_and_after(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        self.closed_corner_cut(window)
+        window.sheet_view.left_pressed.emit(*self.bottom_of_face_5(window))
+        rearranged = window.editor.display_net
+        assert rearranged is not window.editor.net
+        centroid = rearranged.centroid()
+        assert centroid is not None and centroid != Vec(F(23, 2), F(73, 6))  # the corner moved
+        window.center_action.trigger()
+        assert centered_on(window, centroid)
+        assert window.sheet_view.scale_factor() == window.sheet_view.zoom_limits()[0]
+        window.approve_action.trigger()
+        window.sheet_view.pan_by(-250, 150)
+        window.center_action.trigger()
+        assert window.editor.net.centroid() == centroid  # the same paper, now the net
+        assert centered_on(window, centroid)
