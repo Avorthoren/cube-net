@@ -1,19 +1,20 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""Make the README's animation: `python scripts/make_readme_animation.py` (about 20 s) writes `README_ANIMATION`.
+"""Make the README's animation: `python scripts/make_readme_animation.py` (about 30 s) writes `README_ANIMATION`.
 
-RUN IT AGAIN WHENEVER THE APPLICATION'S DEFAULT LOOK CHANGES: the default style (`cube_net.ui.style.DEFAULT_STYLE`,
-from `net_style` and `palette`), how the sheet, the net, the cut line and the approve button are drawn, and how the
-mouse pointer looks over them (`cursors.py`, and the arrow of `ui/help/demo/pointer.py`). A test fails when the
-animation's first picture no longer matches how the app draws it.
+RUN IT AGAIN WHENEVER THE APPLICATION'S LOOK CHANGES: how the sheet, the net, the cut line, the approve button, the
+right click's menu and Place a vertex's window are drawn, and how the mouse pointer looks over them (`cursors.py`, and
+the arrow of `ui/help/demo/pointer.py`). A test fails when the animation's first picture no longer matches how the app
+draws it.
 
-It's the app itself: the cut is played with the real net, editor and tools (Help -> Help's animation engine,
-`ui/help/demo`), in the default style, without the vertex labels but with the bounding rectangle (as the Bounds
-button shows it), and recorded as it plays. The file is an animated
-PNG (APNG): GitHub shows it like any picture and browsers play it, in full colour (a GIF has 256 colours); each frame
-keeps only the part of the picture that changed, so it stays small. Where animations aren't played, its first
-picture shows: the default net.
+It starts from the author's torus project (`torus_project`: a net of the Cube with a hole, in its own style), as
+Help's Advanced features animation does; its scene is written for that net. It's the app itself: the cut is played
+with the real net, editor and tools (Help -> Help's animation engine, `ui/help/demo`), in the project's style, with the
+bounding rectangle (as the Bounds button shows it), and recorded as it plays. The menu and the window are the real
+ones too, shown in the picture of the sheet. The file is an animated PNG (APNG): GitHub shows it like any picture and
+browsers play it, in full colour (a GIF has 256 colours); each frame keeps only the part of the picture that changed,
+so it stays small. Where animations aren't played, its first picture shows: the project's net.
 """
 
 import struct
@@ -30,15 +31,17 @@ from PyQt6.QtWidgets import QApplication
 
 from cube_net.core.geometry import Box, Vec
 from cube_net.ui.help.demo.demo_sheet import DemoSheet
-from cube_net.ui.help.demo.steps import Move, Step, Wait, click
+from cube_net.ui.help.demo.steps import Move, RightClick, Step, ToItem, Type, Wait, click
+from cube_net.ui.help.demo.torus import torus_project
+from cube_net.ui.sheet.sheet_context_menu import PLACE_VERTEX
 
 ROOT = Path(__file__).resolve().parent.parent
-README_ANIMATION = ROOT / "docs/media/cube-net.png"
+README_ANIMATION = ROOT / "docs/media/readme-animation-net.png"
 
-# The picture's size, and what it shows: the default net, the net the cut makes, and the bounding rectangles of both
-# (the new one reaches further left, right and down), with a little room around.
-SIZE = QSize(600, 600)
-SHOWN = Box(Vec(F(87, 10), F(77, 10)), Vec(F(153, 10), F(143, 10)))
+# The picture's size, and what it shows: the project's net, the net the cut makes, and the bounding rectangles of both
+# (the new one reaches further left), with a little room around.
+SIZE = QSize(600, 720)
+SHOWN = Box(Vec(F(354, 10), F(438, 10)), Vec(F(557, 10), F(681, 10)))
 
 # How often a frame is taken (ms), and how long the first and the last picture stay before the animation starts again.
 FRAME_MS = 40
@@ -46,44 +49,62 @@ FIRST_MS = 1200
 LAST_MS = 2500
 
 # A little inside a cut (units): within its hitbox at this size.
-INSIDE = 0.03
+INSIDE = 0.08
 
-# The cut: from A_1 through the right arm (face 3) and the left arm (face 4) to F_1; the half with the counterpart of
-# F_1-B_3 is glued onto it, and the rearrangement is approved (its button is in the middle of F_1-B_3).
-SCENE: list[Step] = [
-    Move((13.4, 10.6), 0),
+# The cut: from the top of the blue face, by clicks, to (45, 61) and (47, 57); its end is typed in Place a vertex's
+# window, at (37, 63) from the origin's (44, 50): off the net, so the line ends where it leaves the net.
+CUT: list[Step] = [
+    Move((53.0, 67.0), 0),
     Wait(400),
-    Move((11.0, 14.0), 1000),
+    Move((48.0, 66.0), 1000),
     Wait(250),
     *click(),
     Wait(300),
-    Move((12.2, 12.4), 900),
+    Move((45.0, 61.0), 900),
     Wait(250),
     *click(),
     Wait(300),
-    Move((10.8, 12.6), 1000),
+    Move((47.0, 57.0), 900),
     Wait(250),
     *click(),
     Wait(300),
-    Move((12.0, 11.0), 900),
-    Wait(250),
-    *click(),
+    Move((37.1, 62.9), 1100),
+    Wait(400),
+    RightClick(),
     Wait(600),
-    Move((12.0 - INSIDE, 10.5), 900),
+    ToItem(PLACE_VERTEX, 500),
+    Wait(250),
+    *click(),
+    Wait(700),
+    Type("13"),
+    Wait(300),
+    Type("\t\t", 300),
+    Type("-7"),
+    Wait(700),
+    Type("\n"),
+    Wait(900),
+]
+
+# The rearrangement: the half with the counterpart of the cut left of the origin, (44, 50.8)-(44, 50), is glued onto
+# it, and approved (the button is in its middle).
+GLUE: list[Step] = [
+    Move((44.0 + INSIDE, 50.5), 1000),
     Wait(800),  # its counterpart blinks
     *click(),
     Wait(1200),
-    Move((12.0, 10.5), 500),
+    Move((44.0, 50.4), 500),
     Wait(400),
     *click(),
     Wait(400),
-    Move((13.9, 9.4), 800),
+    Move((51.5, 64.0), 800),
 ]
+
+SCENE: list[Step] = [*CUT, *GLUE]
 
 
 def sheet() -> DemoSheet:
-    """The animation's sheet, with the mouse where the scene starts."""
-    demo = DemoSheet(SIZE, SHOWN, labels=False, bounds=True)
+    """The animation's sheet (in the torus project's look), with the mouse where the scene starts."""
+    demo = DemoSheet(SIZE, SHOWN, bounds=True, project=torus_project())
     first = SCENE[0]
     assert isinstance(first, Move)
     demo.place(first.to)

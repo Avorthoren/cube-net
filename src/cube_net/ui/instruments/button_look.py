@@ -5,6 +5,8 @@
 (the system's style draws them flat until then, so they didn't look like buttons). Pressed, or switched on (the
 Ruler, the Bounds), they look pushed in. Colours: `palette.TOOL_BUTTON_*`."""
 
+from PyQt6.QtGui import QColor
+
 from cube_net.ui import palette
 
 # The corners' radius and the room inside the outline (px).
@@ -14,6 +16,28 @@ PADDING = "3px 6px"
 
 def _gradient(top: str, bottom: str) -> str:
     return f"qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {top}, stop:1 {bottom})"
+
+
+def colored_button_style(top: QColor, bottom: QColor, hover_bottom: QColor, down_top: QColor) -> str:
+    """The style sheet of one button of the panel in other colours than the rest (its own style sheet: it wins over
+    the panel's, so it repeats the outline too)."""
+    return f"""
+        QToolButton {{
+            border: 1px solid {palette.TOOL_BUTTON_BORDER.name()};
+            border-radius: {RADIUS_PX}px;
+            padding: {PADDING};
+            margin: 2px;
+            background: {_gradient(top.name(), bottom.name())};
+        }}
+        QToolButton:hover {{
+            border-color: {palette.TOOL_BUTTON_HOVER_BORDER.name()};
+            background: {_gradient(top.name(), hover_bottom.name())};
+        }}
+        QToolButton:pressed {{
+            border-color: {palette.TOOL_BUTTON_DOWN_BORDER.name()};
+            background: {_gradient(down_top.name(), bottom.name())};
+        }}
+    """
 
 
 def tool_buttons_style() -> str:

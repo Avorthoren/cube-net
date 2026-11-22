@@ -13,13 +13,14 @@ from dataclasses import dataclass
 from PyQt6.QtCore import QLineF, QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPen, QTransform
 
-from cube_net.core.cube import Face, SurfacePoint, dash_layout
+from cube_net.core.body import Body, Face, SurfacePoint, dash_layout
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import VertexLabel
+from cube_net.core.net import Region
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
-from cube_net.ui.sheet.dashing import dash_pieces
+from cube_net.ui.sheet.dashing import dash_length, dash_pieces
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,18 +43,21 @@ class DashedSegment:
     colours: tuple[QColor, QColor]
 
 
-def prepare_dashed(a: Vec, b: Vec, a_point: SurfacePoint, b_point: SurfacePoint) -> DashedSegment | None:
-    """The dashed line a-b (sheet positions of cube points `a_point`, `b_point`). Colours and dash positions follow
-    `dash_layout`, so every image of a cube segment looks the same. None if a and b are the same point on the sheet."""
+def prepare_dashed(body: Body, region: Region, a: Vec, b: Vec) -> DashedSegment | None:
+    """The dashed line a-b (sheet positions) lying in `region` (or on its border). Colours and dash positions follow
+    `dash_layout`, so every image of a segment of the body looks the same. None if a and b are the same point on the
+    sheet."""
     qa, qb = to_qpointf(a), to_qpointf(b)
     d = qb - qa
     length = math.hypot(d.x(), d.y())
     if length == 0:
         return None
-    layout = dash_layout(a_point, b_point)
-    colours = [palette.FACE_COLORS[f] if f is not None else palette.WHITE for f in layout.faces]
-    start, end = (qa, qb) if layout.start == a_point else (qb, qa)
-    pieces = dash_pieces(length, float(layout.offset), 1 / (2 * net_style.DASHES_PER_EDGE))
+    to_local = region.placement.inverse()
+    local_a = to_local.apply(a)
+    layout = dash_layout(body, region.face, local_a, to_local.apply(b))
+    colours = [palette.face_color(body, f) if f is not None else palette.WHITE for f in layout.faces]
+    start, end = (qa, qb) if layout.start == SurfacePoint(body, region.face, local_a) else (qb, qa)
+    pieces = dash_pieces(length, layout.offset, dash_length())
     return DashedSegment(start, end, QPointF(-d.y(), d.x()) / length, length, pieces, (colours[0], colours[1]))
 
 
@@ -81,31 +85,31 @@ def paint_prepared(
 def paint_dashed(
     painter: QPainter,
     world: QTransform,
+    body: Body,
+    region: Region,
     a: Vec,
     b: Vec,
-    a_point: SurfacePoint,
-    b_point: SurfacePoint,
     inset: float = 0.0,
     width: float | None = None,
 ) -> None:
     """A dashed line painted just once: see `prepare_dashed` and `paint_prepared`."""
-    segment = prepare_dashed(a, b, a_point, b_point)
+    segment = prepare_dashed(body, region, a, b)
     if segment is not None:
         paint_prepared(painter, world, segment, inset, width)
 
 
-def paint_vertex(painter: QPainter, center: QPointF, faces: Iterable[Face], radius: float) -> None:
-    """A vertex circle at device position `center`: one equal sector per face, starting at the top."""
+def paint_vertex(painter: QPainter, body: Body, center: QPointF, faces: Iterable[Face], radius: float) -> None:
+    """A vertex circle at device position `center`: one equal sector per face of `body`, starting at the top."""
     rect = QRectF(center.x() - radius, center.y() - radius, 2 * radius, 2 * radius)
     ordered = sorted(faces)
     painter.setPen(QPen(palette.VERTEX_OUTLINE, 1))
     if len(ordered) == 1:  # a whole circle: a 360-degree pie would draw a radius line from the center
-        painter.setBrush(palette.FACE_COLORS[ordered[0]])
+        painter.setBrush(palette.face_color(body, ordered[0]))
         painter.drawEllipse(rect)
         return
     span = 360 / len(ordered)
     for i, face in enumerate(ordered):
-        painter.setBrush(palette.FACE_COLORS[face])
+        painter.setBrush(palette.face_color(body, face))
         painter.drawPie(rect, round((90 + i * span) * 16), round(span * 16))
 
 

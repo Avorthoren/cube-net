@@ -117,3 +117,9 @@ def test_the_notices_of_the_gpl(qtbot: QtBot) -> None:
         assert label.openExternalLinks()
         assert label.textInteractionFlags() & Qt.TextInteractionFlag.LinksAccessibleByMouse
     assert dialog.copy_button.geometry().top() > dialog.source.geometry().bottom()
+
+
+def test_the_authors_e_mail_is_the_copyrights() -> None:
+    from cube_net.ui.help.about_dialog import AUTHOR_EMAIL, COPYRIGHT
+
+    assert COPYRIGHT.endswith(f"<{AUTHOR_EMAIL}>")

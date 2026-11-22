@@ -4,17 +4,22 @@
 """`AppSettings`: settings of the application as a whole (not of a project), stored with `QSettings`."""
 
 import datetime
+import math
 from dataclasses import fields, replace
 from pathlib import Path
 
-from PyQt6.QtCore import QSettings
+from PyQt6.QtCore import QByteArray, QSettings
 
+from cube_net.core.body import CUBE
+from cube_net.core.body.body import COLOR_PATTERN
+from cube_net.core.style import stored_name
 from cube_net.ui.i18n.language import Language
+from cube_net.ui.sheet.view_place import LastView, ViewPlace
 from cube_net.ui.sheet.zoom import DEFAULT_MAX_ZOOM, MAX_ZOOM_RANGE
-from cube_net.ui.style import DEFAULT_STYLE, Style, StyleError
+from cube_net.ui.style import DEFAULT_STYLE, Style, StyleError, fitted
 
-# Labels (A_1, x_2, ...) next to all vertices: they stay in the app (they tell apart vertices on the same face).
-# ON while the app is being developed; False for releases.
+# Labels (A_1, x_2, ...) next to all vertices: they stay in the app (they tell apart vertices on the same face), on
+# by default (in releases too).
 DEFAULT_SHOW_VERTEX_LABELS = True
 
 # The exact coordinates of the point under the mouse, next to it (the coordinates hint).
@@ -35,6 +40,9 @@ _SHOW_VERTEX_COORDINATES = "view/show_vertex_coordinates"
 _RECORD_SESSION = "debug/record_session"
 _BLINK_ON_SUCCESS = "view/blink_on_success"
 _LAST_PROJECT = "project/last"
+_LAST_VIEW_FILE = "project/last_view_file"
+_LAST_VIEW = "project/last_view"
+_WINDOW_GEOMETRY = "view/window_geometry"
 _MAX_ZOOM = "view/max_zoom"
 _SETTINGS_TAB = "view/settings_tab"
 _SETTINGS_OPEN = "view/settings_open"
@@ -45,6 +53,7 @@ _CHECK_UPDATES = "updates/check"
 _LAST_UPDATE_CHECK = "updates/last_check"
 _SKIPPED_UPDATE = "updates/skipped"
 _HELP_SHOWN = "help/shown_at_start"
+_HELP_TAB = "help/tab"
 
 
 class AppSettings:
@@ -136,6 +145,15 @@ class AppSettings:
         self._settings.setValue(_HELP_SHOWN, value)
 
     @property
+    def help_tab(self) -> str:
+        """The name of Help -> Help's tab the user looked at last ("": none yet: the first one)."""
+        return str(self._settings.value(_HELP_TAB, "", type=str))
+
+    @help_tab.setter
+    def help_tab(self, name: str) -> None:
+        self._settings.setValue(_HELP_TAB, name)
+
+    @property
     def language(self) -> Language:
         """The application's language (English if it's not one it knows)."""
         value = str(self._settings.value(_LANGUAGE, Language.ENGLISH.value, type=str))
@@ -179,6 +197,41 @@ class AppSettings:
         self._settings.sync()  # it matters most when the app doesn't get to end normally
 
     @property
+    def last_view(self) -> LastView | None:
+        """Where the view was when the app was closed last, and the file it showed. Anything wrong with what's stored
+        gives None."""
+        path = self._settings.value(_LAST_VIEW_FILE, "", type=str)
+        try:
+            x, y, scale = (float(part) for part in str(self._settings.value(_LAST_VIEW, "", type=str)).split())
+        except ValueError:
+            return None
+        if not path or not all(math.isfinite(v) for v in (x, y, scale)) or scale <= 0:
+            return None
+        return LastView(Path(path), ViewPlace(x, y, scale))
+
+    @last_view.setter
+    def last_view(self, view: LastView | None) -> None:
+        if view is None:
+            self._settings.remove(_LAST_VIEW_FILE)
+            self._settings.remove(_LAST_VIEW)
+        else:
+            place = view.place
+            self._settings.setValue(_LAST_VIEW_FILE, str(view.path))
+            self._settings.setValue(_LAST_VIEW, f"{place.x!r} {place.y!r} {place.scale!r}")
+        self._settings.sync()
+
+    @property
+    def window_geometry(self) -> QByteArray | None:
+        """The main window's size, place and state when the app was closed last (`QWidget.saveGeometry`)."""
+        value = self._settings.value(_WINDOW_GEOMETRY)
+        return value if isinstance(value, QByteArray) and not value.isEmpty() else None
+
+    @window_geometry.setter
+    def window_geometry(self, geometry: QByteArray) -> None:
+        self._settings.setValue(_WINDOW_GEOMETRY, geometry)
+        self._settings.sync()
+
+    @property
     def max_zoom(self) -> int:
         """How far in the sheet can be zoomed: pixels per unit. A stored value that's out of range or not a number gives
         the default."""
@@ -197,25 +250,35 @@ class AppSettings:
         self._settings.setValue(_MAX_ZOOM, value)
 
     @property
-    def style(self) -> Style:
-        """Settings -> Style. A stored value that's missing, out of range or not what it should be gives that value's
-        default (the others stay)."""
+    def legacy_style(self) -> Style | None:
+        """Settings -> Style from before it belonged to documents (projects and templates saved before then open with
+        it), if one was stored. Never written any more. A stored value that's missing, out of range or not what it
+        should be gives that value's default (the others stay)."""
+        if not any(self._settings.contains(_STYLE + stored_name(field.name)) for field in fields(Style)):
+            return None
         values = {
             field.name: _read_style_value(
-                field.name, self._settings.value(_STYLE + field.name), getattr(DEFAULT_STYLE, field.name)
+                field.name, self._settings.value(_STYLE + stored_name(field.name)), getattr(DEFAULT_STYLE, field.name)
             )
             for field in fields(Style)
         }
         try:
-            return Style(**values).fitted()  # type: ignore[arg-type]  # saved before vertices had their least size
+            return fitted(Style(**values))  # type: ignore[arg-type]  # saved before vertices had their least size
         except StyleError:
             return DEFAULT_STYLE
 
-    @style.setter
-    def style(self, style: Style) -> None:
-        for field in fields(Style):
-            value = getattr(style, field.name)
-            self._settings.setValue(_STYLE + field.name, ",".join(value) if isinstance(value, tuple) else value)
+    @property
+    def legacy_face_colors(self) -> tuple[str, ...] | None:
+        """The face colours of Settings -> Style from before they belonged to projects (version 1.2.0 and earlier), if
+        they were stored: projects saved then open with them, and new projects of the cube start with them. Never
+        written any more."""
+        stored = self._settings.value(_STYLE + "face_colors")
+        if stored is None:
+            return None
+        colors = tuple(str(stored).upper().split(","))
+        if len(colors) != len(CUBE.face_numbers) or not all(COLOR_PATTERN.fullmatch(c) for c in colors):
+            return None
+        return colors
 
     def _bool(self, key: str, default: bool) -> bool:
         return bool(self._settings.value(key, default, type=bool))

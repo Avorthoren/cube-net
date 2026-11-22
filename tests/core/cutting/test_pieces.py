@@ -65,7 +65,7 @@ column_x = st.fractions(F(1101, 100), F(1199, 100))
 @given(column_x, st.fractions(F(1301, 100), F(1399, 100)), column_x, st.fractions(F(1001, 100), F(1099, 100)))
 def test_every_piece_between_vertices_stays_in_one_face(x1: F, y1: F, x2: F, y2: F) -> None:
     """The user's rule: after splitting at crossings, no piece has points strictly inside two different faces."""
-    from cube_net.core.cube import SurfacePointKind
+    from cube_net.core.body import SurfacePointKind
     from cube_net.core.cutting import crossings
     from cube_net.core.net import default_net
 

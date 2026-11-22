@@ -257,6 +257,20 @@ class TestReleaseAndModifiers:
         with qtbot.assertNotEmitted(view.left_released):
             qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
 
+    def test_a_click_where_a_press_pans_is_a_pan_click(self, view: SheetView, qtbot: QtBot) -> None:
+        pos = view.from_sheet(QPointF(7, 7)).toPoint()
+        qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        with qtbot.waitSignal(view.pan_clicked) as blocker:
+            qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=pos)
+        assert blocker.args == pytest.approx([7, 7], abs=2 / view.scale_factor())
+
+    def test_a_drag_that_pans_is_no_click(self, view: SheetView, qtbot: QtBot) -> None:
+        start = view.from_sheet(QPointF(7, 7)).toPoint()
+        with qtbot.assertNotEmitted(view.pan_clicked):
+            qtbot.mousePress(view.viewport(), Qt.MouseButton.LeftButton, pos=start)
+            qtbot.mouseMove(view.viewport(), start + QPoint(40, -30))
+            qtbot.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, pos=start + QPoint(40, -30))
+
     def test_press_modifiers(self, view: SheetView, qtbot: QtBot) -> None:
         pos = view.from_sheet(QPointF(11.5, 12.5)).toPoint()
         qtbot.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.ShiftModifier, pos)
@@ -479,3 +493,131 @@ class TestFollowCursor:
         view.follow_cursor(None)
         QApplication.sendEvent(modal, QEvent(QEvent.Type.Enter))
         assert left == [True]  # not followed any more
+
+
+def test_a_view_with_its_own_look(view: SheetView, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Its painting and its mouse are handled in its look; everything else keeps the one in place."""
+    from dataclasses import replace
+
+    from cube_net.core.body import CUBE
+    from cube_net.ui.sheet import net_style
+    from cube_net.ui.style import DEFAULT_STYLE, Look
+
+    assert view.look() is None
+    seen: list[float] = []
+    monkeypatch.setattr(view, "mouseMoveEvent", lambda _event: seen.append(net_style.EDGE_WIDTH_PX))
+    look = Look(replace(DEFAULT_STYLE, edge_width=1.5), CUBE.colors, CUBE)
+    view.set_look(look)
+    assert view.look() == look
+    viewport = view.viewport()
+    assert viewport is not None
+    nothing = Qt.MouseButton.NoButton
+    move = QMouseEvent(
+        QEvent.Type.MouseMove, QPointF(5, 5), QPointF(5, 5), nothing, nothing, Qt.KeyboardModifier.NoModifier
+    )
+    QApplication.sendEvent(viewport, move)
+    assert seen == [1.5]
+    assert DEFAULT_STYLE.edge_width == net_style.EDGE_WIDTH_PX
+
+
+def test_the_place_shown_again_in_another_view(view: SheetView, qtbot: QtBot) -> None:
+    view.zoom_by(1.5, QPointF(100, 100))
+    view.pan_by(37, -21)
+    place = view.place()
+    other = SheetView()
+    qtbot.addWidget(other)
+    other.resize(640, 480)  # another size: the same point in the middle, the same zoom
+    other.set_sheet(SHEET)
+    other.show_initial_view(NET)
+    other.show_place(place)  # (before it's shown: it waits, instead of the initial view)
+    other.show()
+    qtbot.waitExposed(other)
+    again = other.place()
+    assert again.scale == place.scale
+    assert abs(again.x - place.x) < 1 / place.scale and abs(again.y - place.y) < 1 / place.scale
+
+
+def test_a_place_zoomed_beyond_the_limits_is_brought_within(view: SheetView) -> None:
+    from cube_net.ui.sheet.view_place import ViewPlace
+
+    high = view.zoom_limits()[1]
+    view.show_place(ViewPlace(11.5, 12.0, high * 10))
+    assert view.scale_factor() == high
+
+
+@pytest.mark.parametrize("x, y", [(3e7, 0.0), (-3e7, 3e7), (1e300, 1e300), (1e308, -1e308)])
+def test_a_place_far_off_the_sheet_shows_its_edge(view: SheetView, x: float, y: float) -> None:
+    """As a damaged setting's last view could have it: the view goes as far as its scroll bars do (it used to crash:
+    too many pixels for Qt)."""
+    from cube_net.ui.sheet.view_place import ViewPlace
+
+    view.show_place(ViewPlace(x, y, 1.0))
+    for bar, wanted in ((view.horizontalScrollBar(), x), (view.verticalScrollBar(), y)):
+        assert bar is not None
+        if wanted != 0:
+            assert bar.value() in (bar.minimum(), bar.maximum())
+
+
+def test_pan_by_ignores_what_isnt_a_number(view: SheetView) -> None:
+    h = view.horizontalScrollBar()
+    assert h is not None
+    before = h.value()
+    view.pan_by(float("nan"), float("inf"))
+    assert h.value() == before
+
+
+def test_the_place_stays_when_the_view_moves_in_its_window_afterwards(qtbot: QtBot) -> None:
+    """As at a start: the place is shown, then the instrument panel left of the view gets wider (its buttons come);
+    the sheet is where it was in the window when the place was taken."""
+    from PyQt6.QtWidgets import QHBoxLayout, QWidget
+
+    def window_with(panel_px: int) -> tuple[QWidget, QWidget, SheetView]:
+        window = QWidget()
+        qtbot.addWidget(window)
+        window.resize(900, 600)
+        layout = QHBoxLayout(window)
+        layout.setContentsMargins(0, 0, 0, 0)
+        panel = QWidget()
+        panel.setFixedWidth(panel_px)
+        view = SheetView()
+        view.set_sheet(SHEET)
+        view.show_initial_view(NET)
+        layout.addWidget(panel)
+        layout.addWidget(view)
+        return window, panel, view
+
+    first, _, view = window_with(90)
+    first.show()
+    qtbot.waitExposed(first)
+    view.zoom_by(1.4, QPointF(150, 120))
+    view.pan_by(-35, 18)
+    place = view.place()
+    in_window = view.viewport().mapTo(first, view.from_sheet(QPointF(11, 12)).toPoint())
+    second, panel, again = window_with(60)
+    second.show()
+    qtbot.waitExposed(second)
+    again.show_place(place)
+    panel.setFixedWidth(90)
+    qtbot.waitUntil(
+        lambda: again.viewport().mapTo(second, QPoint(0, 0)).x() == view.viewport().mapTo(first, QPoint(0, 0)).x()
+    )
+    assert again.viewport().mapTo(second, again.from_sheet(QPointF(11, 12)).toPoint()) == in_window
+
+
+def test_center_on_puts_the_point_in_the_middle_zoomed_out_by_the_rules(view: SheetView) -> None:
+    view.pan_by(200, -100)
+    view.zoom_by(4.0, center_of_viewport(view))
+    view.center_on(QPointF(11.5, 12.25), NET)
+    middle = view.from_sheet(QPointF(11.5, 12.25))
+    assert abs(middle.x() - center_of_viewport(view).x()) <= 1 and abs(middle.y() - center_of_viewport(view).y()) <= 1
+    width, height = view._screen_size()
+    assert view.scale_factor() == zoom.zoom_limits(width, height, 3.0, 4.0, view.zoom_limits()[1])[0]  # NET's size
+
+
+def test_center_on_a_smaller_net_than_the_views_zooms_out_less(view: SheetView) -> None:
+    """A template's view has the whole template sheet for its limit; Center takes the template's own size."""
+    small = Box(Vec(11, 12), Vec(12, 13))
+    view.center_on(QPointF(11.5, 12.5), small)
+    assert view.scale_factor() > view.zoom_limits()[0]
+    width, height = view._screen_size()
+    assert view.scale_factor() == zoom.zoom_limits(width, height, 1.0, 1.0, view.zoom_limits()[1])[0]

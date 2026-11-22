@@ -51,7 +51,7 @@ def test_every_key_in_the_help_is_a_shortcut(qtbot: QtBot, tmp_path: Path) -> No
 
 def test_a_key_can_do_two_things() -> None:
     escapes = [hotkey for group in HOTKEYS for hotkey in group.hotkeys if hotkey.keys == "Esc"]
-    assert len({hotkey.action for hotkey in escapes}) == 2  # unlock a slope; close the help
+    assert len({hotkey.action for hotkey in escapes}) == 3  # unlock a slope; give up a fold line; close the help
 
 
 def test_how_they_are_written() -> None:

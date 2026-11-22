@@ -10,7 +10,8 @@ Painted bottom to top:
    CUT_EDITING, while the user hovers the perimeter, the cuts are drawn as the line divides them, and the parts that
    can't be chosen for gluing are thin and black. The counterpart of a hovered cut that can be chosen blinks: one cut
    can be left out.
-4. Vertex circles on the perimeter, one equal sector per face of the vertex; a highlighted vertex gets a ring.
+4. Vertex circles on the perimeter (and at the body's vertices inside the net), one equal sector per face of the
+   vertex; a highlighted vertex gets a ring.
 5. Optional debug labels (A_1, B_2, ...) next to all vertices, placed outside the net.
 Hatch is drawn in sheet units; lines and circles have constant pixel sizes, so they are drawn in device pixels.
 
@@ -23,7 +24,7 @@ from PyQt6.QtCore import QPointF, QRectF, Qt
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QPolygonF, QTransform
 from PyQt6.QtWidgets import QGraphicsItem, QStyleOptionGraphicsItem, QWidget
 
-from cube_net.core.cube import Face
+from cube_net.core.body import Face
 from cube_net.core.cutting import SplitNet
 from cube_net.core.labels import VertexLabel
 from cube_net.core.net import HalfEdge, Net, NetVertex, Region
@@ -31,6 +32,7 @@ from cube_net.core.sheet import SHEET_MARGIN
 from cube_net.ui import palette
 from cube_net.ui.qt_geometry import to_qpointf, to_qtransform
 from cube_net.ui.sheet import net_style
+from cube_net.ui.sheet.hatch import cells_around, hatch_brush, tiled_hatch
 from cube_net.ui.sheet.net_painting import (
     UP_RIGHT,
     DashedSegment,
@@ -41,24 +43,11 @@ from cube_net.ui.sheet.net_painting import (
 )
 
 
-def hatch_path() -> QPainterPath:
-    """The coloured triangles of the hatch in a face's local unit square: in every 1/10 x 1/5 cell, the triangle above
-    the diagonal from its bottom-left to its upper-right corner."""
-    path = QPainterPath()
-    w, h = 1 / net_style.HATCH_COLUMNS, 1 / net_style.HATCH_ROWS
-    for i in range(net_style.HATCH_COLUMNS):
-        for j in range(net_style.HATCH_ROWS):
-            x0, y0 = i * w, j * h
-            path.addPolygon(QPolygonF([QPointF(x0, y0), QPointF(x0 + w, y0 + h), QPointF(x0, y0 + h)]))
-            path.closeSubpath()
-    return path
-
-
 class NetItem(QGraphicsItem):
     def __init__(self, net: Net) -> None:
         super().__init__()
         self._net = net
-        self._hatch = hatch_path()
+        self._hatches: dict[Face, QPainterPath] = {}
         self._labels: dict[NetVertex, VertexLabel] | None = None
         self._highlight: HalfEdge | None = None
         self._highlight_vertex: NetVertex | None = None
@@ -74,6 +63,8 @@ class NetItem(QGraphicsItem):
 
     def set_net(self, net: Net) -> None:
         self.prepareGeometryChange()
+        if net.body is not self._net.body:
+            self._hatches = {}
         self._net = net
         self._labels = None
         self._highlight = None
@@ -91,7 +82,7 @@ class NetItem(QGraphicsItem):
 
     def restyle(self) -> None:
         """The style changed (colours, sizes, tiling, dashes): forget what was worked out with the old one."""
-        self._hatch = hatch_path()
+        self._hatches = {}
         self._dashes = {}
         self.update()
 
@@ -222,9 +213,22 @@ class NetItem(QGraphicsItem):
             painter.save()
             painter.setClipPath(outline, Qt.ClipOperation.IntersectClip)
             painter.fillPath(outline, palette.WHITE)
-            painter.setTransform(to_qtransform(region.placement), combine=True)
-            painter.fillPath(self._hatch, palette.FACE_COLORS[region.face])
+            painter.setTransform(to_qtransform(region.placement), combine=True)  # the face's own frame
+            color = palette.face_color(self._net.body, region.face)
+            brush = hatch_brush(color, painter.worldTransform())
+            if brush is not None:
+                left, bottom, right, top = cells_around(self._net.body.face(region.face).corners)
+                painter.fillRect(QRectF(left, bottom, right - left, top - bottom), brush)
+            else:  # zoomed in so far that a rectangle is too large for a brush: the paths
+                painter.fillPath(self._hatch(region.face), color)
             painter.restore()
+
+    def _hatch(self, face: Face) -> QPainterPath:
+        """The face's hatch, in its own frame: over the unit cells its corners cover."""
+        hatch = self._hatches.get(face)
+        if hatch is None:
+            hatch = self._hatches[face] = tiled_hatch(*cells_around(self._net.body.face(face).corners))
+        return hatch
 
     def _polygon(self, region: Region) -> QPolygonF:
         polygon = self._polygons.get(region)
@@ -240,8 +244,10 @@ class NetItem(QGraphicsItem):
         if he in self._dashes:
             segment = self._dashes[he]
         else:
-            a, b = he.origin, he.destination
-            segment = self._dashes[he] = prepare_dashed(a.position, b.position, a.point, b.point)
+            region = he.region if he.region is not None else he.twin.region
+            assert region is not None  # every edge has the net on at least one side
+            a, b = he.origin.position, he.destination.position
+            segment = self._dashes[he] = prepare_dashed(self._net.body, region, a, b)
         if segment is not None:
             paint_prepared(painter, world, segment, inset, width)
 
@@ -266,10 +272,13 @@ class NetItem(QGraphicsItem):
 
     def _paint_vertices(self, painter: QPainter, world: QTransform) -> None:
         if self._centers is None:
-            vertices = {v.id: v for v in self._net.boundary_vertices()}.values()
+            # The perimeter's, and the body's vertices inside the net (with 360 degrees around them: where a template's
+            # fold line bends, docs/template_plan.md §8.4).
+            inside = (v for v in self._net.vertices if v.point.vertex is not None)
+            vertices = {v.id: v for v in (*self._net.boundary_vertices(), *inside)}.values()
             self._centers = [(to_qpointf(v.position), v.point.faces) for v in vertices]
         for center, faces in self._centers:
-            paint_vertex(painter, world.map(center), faces, net_style.VERTEX_RADIUS_PX)
+            paint_vertex(painter, self._net.body, world.map(center), faces, net_style.VERTEX_RADIUS_PX)
 
     def _paint_labels(self, painter: QPainter, world: QTransform, labels: dict[NetVertex, VertexLabel]) -> None:
         if self._outward is None:  # the view only zooms and moves: directions in pixels stay the same

@@ -2,8 +2,11 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 import pytest
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QWidget
 from pytestqt.qtbot import QtBot
 
+from cube_net.core.body import CUBE
 from cube_net.ui.settings_panel.style_tab import (
     CUTS_AND_FOLDS,
     FACE_COLORS,
@@ -13,11 +16,12 @@ from cube_net.ui.settings_panel.style_tab import (
     StyleTab,
 )
 from cube_net.ui.style import DEFAULT_STYLE, Style
-from cube_net.ui.style.style import least_vertex_radius
+from cube_net.ui.style.default_style import least_vertex_radius
 
 
 def make(qtbot: QtBot) -> StyleTab:
     tab = StyleTab(DEFAULT_STYLE)
+    tab.set_face_colors(CUBE.colors, CUBE.colors)
     qtbot.addWidget(tab)
     return tab
 
@@ -28,10 +32,10 @@ def test_sections_in_order(qtbot: QtBot) -> None:
 
 def test_it_shows_the_style(qtbot: QtBot) -> None:
     tab = make(qtbot)
-    assert [f.color() for f in tab.face_fields] == list(DEFAULT_STYLE.face_colors)
+    assert [f.color() for f in tab.face_fields] == list(CUBE.colors)
     assert (tab.hatch_columns.value(), tab.hatch_rows.value()) == (10, 5)
     shown = (tab.dashes.value(), tab.edge_width.value(), tab.vertex_radius.value())
-    assert shown == (DEFAULT_STYLE.dashes_per_edge, DEFAULT_STYLE.edge_width, DEFAULT_STYLE.vertex_radius)
+    assert shown == (DEFAULT_STYLE.dashes_per_unit, DEFAULT_STYLE.edge_width, DEFAULT_STYLE.vertex_radius)
     assert tab.grid_width.value() == 1.0
     assert tab.edge_width.suffix() == ""
 
@@ -39,9 +43,9 @@ def test_it_shows_the_style(qtbot: QtBot) -> None:
 @pytest.mark.parametrize(
     ("box", "low", "high"),
     [
-        ("hatch_columns", 1, 30),
-        ("hatch_rows", 1, 30),
-        ("dashes", 1, 30),
+        ("hatch_columns", 0.01, 30),
+        ("hatch_rows", 0.01, 30),
+        ("dashes", 0.01, 30),
         ("edge_width", 1, 15),
         ("vertex_radius", least_vertex_radius(DEFAULT_STYLE.edge_width), 30),  # 140% of the default edges across
         ("grid_width", 0, 5),
@@ -52,6 +56,17 @@ def test_ranges(qtbot: QtBot, box: str, low: float, high: float) -> None:
     assert (field.minimum(), field.maximum()) == (low, high)
 
 
+def test_the_tiling_and_the_dashes_take_decimals(qtbot: QtBot) -> None:
+    tab = make(qtbot)
+    seen: list[Style] = []
+    tab.style_changed.connect(seen.append)
+    for field in (tab.hatch_columns, tab.hatch_rows, tab.dashes):
+        assert field.decimals() == 2
+    tab.hatch_columns.setValue(0.25)
+    tab.dashes.setValue(2.5)
+    assert seen[-1].hatch_columns == 0.25 and seen[-1].dashes_per_unit == 2.5
+
+
 def test_every_change_is_told(qtbot: QtBot) -> None:
     tab = make(qtbot)
     seen: list[Style] = []
@@ -60,7 +75,7 @@ def test_every_change_is_told(qtbot: QtBot) -> None:
     tab.dashes.setValue(3)
     tab.grid_width.setValue(0)
     assert [s.hatch_rows for s in seen] == [7, 7, 7]
-    assert seen[-1].dashes_per_edge == 3 and seen[-1].grid_width == 0
+    assert seen[-1].dashes_per_unit == 3 and seen[-1].grid_width == 0
     assert tab.grid_swatch.line_width() == 0
 
 
@@ -72,20 +87,54 @@ def test_restore_puts_back_just_its_section(qtbot: QtBot, monkeypatch: pytest.Mo
     monkeypatch.setattr("cube_net.ui.settings_panel.section.confirm_restore", lambda *_: True)
     tab.sections[CUTS_AND_FOLDS].restore_button.click()
     assert tab.style().edge_width == DEFAULT_STYLE.edge_width
-    assert tab.style().dashes_per_edge == DEFAULT_STYLE.dashes_per_edge
+    assert tab.style().dashes_per_unit == DEFAULT_STYLE.dashes_per_unit
     assert tab.edge_width.value() == DEFAULT_STYLE.edge_width
     assert tab.style().vertex_radius == 20
 
 
 def test_restore_face_colors(qtbot: QtBot, monkeypatch: pytest.MonkeyPatch) -> None:
     tab = make(qtbot)
+    changed: list[tuple[str, ...]] = []
+    tab.face_colors_changed.connect(changed.append)
     tab.face_fields[2].edit.setText("")
     qtbot.keyClicks(tab.face_fields[2].edit, "000000")
-    assert tab.style().face_colors[2] == "#000000"
+    assert tab.face_colors()[2] == "#000000"
+    assert changed[-1][2] == "#000000"
     monkeypatch.setattr("cube_net.ui.settings_panel.section.confirm_restore", lambda *_: True)
     tab.sections[FACE_COLORS].restore_button.click()
-    assert tab.style().face_colors == DEFAULT_STYLE.face_colors
-    assert tab.face_swatches[2].color().name().upper() == DEFAULT_STYLE.face_colors[2]
+    assert tab.face_colors() == changed[-1] == CUBE.colors
+    assert tab.face_swatches[2].color().name().upper() == CUBE.colors[2]
+    assert tab.style() == DEFAULT_STYLE  # the face colours aren't part of the style
+
+
+def test_a_row_per_face_of_the_projects_body(qtbot: QtBot) -> None:
+    tab = make(qtbot)
+    changed: list[tuple[str, ...]] = []
+    tab.face_colors_changed.connect(changed.append)
+    tab.set_face_colors(("#111111", "#222222"), ("#FFFFFF", "#FFFFFF"))
+    assert [f.color() for f in tab.face_fields] == ["#111111", "#222222"]
+    assert len(tab.face_swatches) == 2
+    assert changed == []  # shown, not changed by the user
+    tab.set_face_colors(CUBE.colors, CUBE.colors)
+    assert len(tab.face_fields) == 6
+
+
+def test_face_numbers_are_aligned_by_their_last_digit(qtbot: QtBot) -> None:
+    from PyQt6.QtCore import QPoint
+
+    tab = make(qtbot)
+    tab.set_face_colors(("#111111",) * 12, ("#FFFFFF",) * 12)
+    tab.show()
+    qtbot.waitExposed(tab)
+
+    def left(widget: QWidget) -> int:
+        return widget.mapTo(tab, QPoint(0, 0)).x()
+
+    assert len({left(swatch) for swatch in tab.face_swatches}) == 1
+    assert len({left(field) for field in tab.face_fields}) == 1
+    numbers = tab.face_numbers
+    assert {n.alignment() & Qt.AlignmentFlag.AlignRight for n in numbers} == {Qt.AlignmentFlag.AlignRight}
+    assert {left(n) + n.width() for n in numbers} == {left(numbers[0]) + numbers[0].width()}
 
 
 def test_units_are_outside_the_fields(qtbot: QtBot) -> None:
@@ -168,8 +217,7 @@ def test_a_colour_picker_for_every_face_only(qtbot: QtBot) -> None:
 
     from cube_net.ui.i18n import TRANSLATIONS, Language
 
-    tab = StyleTab(DEFAULT_STYLE)
-    qtbot.addWidget(tab)
+    tab = make(qtbot)
     assert all(field.pick_button is not None for field in tab.face_fields)
     assert tab.grid_color.pick_button is None
     titles: list[str] = []
@@ -189,4 +237,4 @@ def test_a_colour_picker_for_every_face_only(qtbot: QtBot) -> None:
     QTimer.singleShot(50, close)
     tab.face_fields[2].pick()
     assert titles == ["Цвет грани 3", "Face 3 color"]
-    assert tab.style() == DEFAULT_STYLE  # nothing chosen
+    assert tab.style() == DEFAULT_STYLE and tab.face_colors() == CUBE.colors  # nothing chosen

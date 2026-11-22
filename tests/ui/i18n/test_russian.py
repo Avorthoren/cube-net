@@ -21,8 +21,10 @@ TEXT_ARGUMENTS = {
     "add_labelled_row": (0,),
     "ProjectFileError": (0,),
     "_paragraph": (0,),
+    "_lines": (0, 1),
     "_title": (0,),
     "_caption": (0,),
+    "_finish_page": (0,),  # a tab's title (Help)
     "Hotkey": (1, 2),  # what the mouse does, what it does (Help's hotkeys)
     "HotkeyGroup": (0,),
 }

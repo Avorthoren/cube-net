@@ -24,7 +24,10 @@ PUZZLE_URL = "https://ru.braigam.com/?path=comments&puzzle=680"
 # The credits, with "this puzzle" where the link goes.
 CREDITS = "by UNDEFEAT in attempts to solve {puzzle}"
 
-# Who holds the copyright, and since when.
+# The author's e-mail (a crash report's window gives it; the copyright has it too).
+AUTHOR_EMAIL = "undefeatvip@gmail.com"
+
+# Who holds the copyright, and since when (a text of its own, to be translated: not made of `AUTHOR_EMAIL`).
 COPYRIGHT = "Copyright © 2026 Viktor Podust <undefeatvip@gmail.com>"
 
 # The license (the GNU GPL v3 or any later version), with its name where the link to it goes.
@@ -34,6 +37,9 @@ LICENSE_TEXT = "Free software under the {license}, with ABSOLUTELY NO WARRANTY"
 
 # Where the source code is (the GPL's promise to whoever has the program).
 SOURCE_URL = "https://github.com/Avorthoren/cube-net"
+
+# Where problems are reported (a crash report says so).
+ISSUES_URL = f"{SOURCE_URL}/issues"
 SOURCE_TEXT = "Source code: {source}"
 
 

@@ -5,9 +5,9 @@
 
 from PyQt6.QtGui import QColor
 
+from cube_net.core.style import Style
 from cube_net.ui import palette
 from cube_net.ui.sheet import net_style
-from cube_net.ui.style.style import Style
 
 
 def apply_style(style: Style) -> None:
@@ -17,9 +17,20 @@ def apply_style(style: Style) -> None:
         style.vertex_radius,
         style.hatch_columns,
         style.hatch_rows,
-        style.dashes_per_edge,
+        style.dashes_per_unit,
         style.grid_width,
     )
-    palette.set_colors(
-        {face: QColor(color) for face, color in enumerate(style.face_colors, start=1)}, QColor(style.grid_color)
+    palette.set_grid_color(QColor(style.grid_color))
+
+
+def style_in_place() -> Style:
+    """The style everything paints in now (the latest `apply_style`'s)."""
+    return Style(
+        hatch_columns=net_style.HATCH_COLUMNS,
+        hatch_rows=net_style.HATCH_ROWS,
+        dashes_per_unit=net_style.DASHES_PER_UNIT,
+        edge_width=net_style.EDGE_WIDTH_PX,
+        vertex_radius=net_style.VERTEX_RADIUS_PX,
+        grid_color=palette.GRID.name().upper(),
+        grid_width=net_style.GRID_WIDTH_PX,
     )

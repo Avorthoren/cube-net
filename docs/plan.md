@@ -16,6 +16,12 @@ gets fixed.
    rotation by k·90° plus a translation, so coordinates stay rational forever. Tests like "touches", "is collinear" and
    "lies on the perimeter" then need no tolerance. Floats are used only for drawing (and for the bounding-rectangle
    *display*, though see §4.7: even its area is rational).
+   Points the application works out (where a cut line crosses a cut or a fold, Shift's and a locked slope's points,
+   a rearranged net) are exact too, never rounded; only mouse clicks are (see 3). Their numbers grow with the
+   generations of cuts, so an action that would make a numerator or a denominator longer than `MAX_NUMBER_DIGITS`
+   (2100) digits is refused, telling which point it is (`geometry/long_numbers.py`, `cutting/too_long.py`,
+   `template/too_long.py`, `ui/too_long_message.py`). 2100 keeps every number well below the 4300 digits Python turns
+   into text by default, so saving never fails.
 3. **One entry point for user input.** Every point that comes from the mouse goes through one `quantize()` function
    (sheet floats → `Fraction`). For now it rounds each coordinate to 1/1000 unit, which keeps fractions small and
    readable. Snapping will go there later without touching anything else.
@@ -337,7 +343,7 @@ Undo and redo are available in every state. Each public method either performs o
   `apply_style` puts it into those modules, which everything reads when it paints or hit-tests.
 - **Vertex labels and session logs** (Settings → Preferences) are app settings (`AppSettings`, stored with `QSettings`).
   The feature stays in the app for good (it's how vertices on the same face are told apart);
-  `DEFAULT_SHOW_VERTEX_LABELS` is True while developing and becomes False for releases.
+  `DEFAULT_SHOW_VERTEX_LABELS` is True, in releases too (decided against switching it off for them).
 - **Status bar:** mouse coordinates in sheet units with 3 decimals, plus the current state name. The state name helps while
   developing and may stay.
 
@@ -427,10 +433,12 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
   a bright lime such as #39D353 and tune it in M4 by looking at it next to face 3.
 
 ### 6.6 Startup and files
-- On start, reopen the project the user worked on last, kept in `QSettings` (saving or opening a project sets it):
-  - nothing there: start a new untitled project with the default net;
-  - loading fails: show why, and offer a new project or Open…. It's forgotten then, so that it isn't asked about at
-    every start.
+- The window starts with nothing open (`MainWindow(empty=True)`, `show_nothing`): the grey `EmptyArea` instead of the
+  sheet, the instruments and Settings -> Style off, nothing to save or undo. Then it reopens the project the user worked
+  on last, kept in `QSettings` (saving or opening a project sets it):
+  - nothing there (the first start): File -> New's window; given up, nothing stays open;
+  - loading fails: show why (over the grey area), and offer a new project (File -> New's window) or Open…. It's
+    forgotten then, so that it isn't asked about at every start.
 - New/Open/Quit when there are unsaved changes: ask "Save changes?" with Save / Don't save / Cancel. A project has
   unsaved changes when the history's revision differs from the one it was saved at. Every action, undo and redo changes
   it: the history is saved too, so an undo back to the saved state still isn't what's in the file. Closing the window
@@ -462,8 +470,8 @@ A few custom items with hand-written `paint()` methods, not thousands of small i
   the current state (`MainWindow._record_state`), so the file alone is enough to reproduce what follows. Stopping
   writes `stop turned off by the user` and closes the file; starting again starts a new file.
 - **The state snapshot.** `state snapshot <base64>` holds the whole project, unsaved work included: the bytes of a project
-  file. It's written whenever recording starts and whenever another project comes along, except at launch with a project
-  about to be reopened: then the log's first snapshot is the reopened project (or, if that fails, the new one).
+  file. It's written whenever recording starts and whenever another project comes along; with nothing open (at launch)
+  there's none, so the log's first snapshot is the reopened project (or the one started instead).
   `python -m cube_net.ui.session.snapshots <log>` turns snapshots back into `.cubenet` files next to the log, ready for
   File → Open. The other `state …` lines are what a project doesn't hold (labels setting, window size, bounds, ruler,
   view), plus a short summary for a person to read.
@@ -550,10 +558,11 @@ mouse move and its repaint): hover 18 ms, the line following the mouse 23 ms, dr
 - The icon: the default net, faces filled with the default colours, transparent around it. `scripts/make_icon.py`
   draws it from the net and the colours into `src/cube_net/ui/icons/cube_net.png` (the window icon, 256 px) and
   `packaging/icons/` (`.ico` for Windows, `.icns` for macOS); a test fails when they're out of date.
-- The README's animation (`docs/media/cube-net.png`, an animated PNG): `scripts/make_readme_animation.py` plays a cut
-  with Help -> Help's engine (the real net and tools, the default style, no labels), records it and writes the APNG
-  (only the changed rectangle of each frame). Run it again whenever the default look changes (style, drawing, mouse
-  pointers); the modules that define it say so, and a test fails when the first picture no longer matches the app.
+- The README's animation (`docs/media/readme-animation-net.png`, an animated PNG): `scripts/make_readme_animation.py`
+  plays a cut with Help -> Help's engine (the real net and tools, from the torus project
+  `src/cube_net/ui/help/demo/torus.cubenet` in its own style, no labels), records it and writes the APNG (only the changed rectangle of each frame). Run it again whenever
+  the look changes (drawing, mouse pointers, the right click's menu, Place a vertex's window); the modules that define
+  it say so, and a test fails when the first picture no longer matches the app.
 
 ## 8. Open questions and deferred topics
 
@@ -566,8 +575,8 @@ Resolved:
   takes 50% of the screen (§6.2).
 - Snapping: cut-line points snap to perimeter vertices, cuts and fold lines, and SHIFT restricts segments. No snapping
   to the unit grid, none for the ruler (only its SHIFT restriction, M10).
-- Several user-made vertices on the same face are told apart by the vertex labels, which stay in the app (off by
-  default in releases).
+- Several user-made vertices on the same face are told apart by the vertex labels, which stay in the app (on by
+  default, in releases too).
 - "Save changes?" prompt on New/Open/Quit: yes (§6.6).
 - Line widths, hitbox widths and vertex radii: constant in pixels (§6.3).
 - Mouse input is rounded to 1/1000 unit until snapping exists (§1, `quantize()`).

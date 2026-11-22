@@ -5,8 +5,10 @@
 
 - A click on a perimeter vertex (inside its circle) or on a cut (inside its hitbox) starts the cut line there, or
   ends it there while cutting. A vertex wins over a cut.
-- While cutting, a click inside the net adds a point (on a fold line, if clicked in its hitbox); a thin line follows the
-  mouse from the last point (hidden while the ruler is active, which then takes the clicks).
+- While cutting, a click inside the net adds a point (on a fold line, if clicked in its hitbox); so does a click off
+  the net (outside it, or in a hole: a press there still pans the sheet if the mouse moves before it's released). A
+  thin line follows the mouse from the last point (hidden while the ruler is active, which then takes the clicks). The
+  line ends by itself where it divides the net in two (docs/template_plan.md §8.2).
 - In CUT_EDITING, a click on a segment's hollow middle circle adds a point there; Ctrl+click on an inner point deletes
   it (on release on the same point; while CTRL is held over it the mouse shows a red x); dragging a point moves it
   (with SHIFT too: see below), and it's checked when the mouse is released. An endpoint walks along the perimeter and
@@ -31,7 +33,7 @@ from collections.abc import Callable, Sequence
 
 from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
 
-from cube_net.core.cutting import CutPoint, straighten
+from cube_net.core.cutting import CutPoint, LineProblem, TooLong, straighten
 from cube_net.core.cutting.placement import (
     Action,
     Constraint,
@@ -55,6 +57,7 @@ from cube_net.ui.sheet.cut_hover import cut_hitbox, fold_target, perimeter_targe
 from cube_net.ui.sheet.cut_line_item import CutLineItem
 from cube_net.ui.sheet.ruler_tool import RulerTool
 from cube_net.ui.sheet.sheet_view import SheetView
+from cube_net.ui.too_long_message import REJECTED
 
 # How long a rejected segment stays black (docs/idea.txt).
 FLASH_MS = 200
@@ -66,6 +69,9 @@ class CutTool(QObject):
 
     # An action was rejected (the position of the point it was about).
     rejected = pyqtSignal(Vec)
+
+    # An action was rejected because a point it would make has a number too long: what to tell the user.
+    too_long = pyqtSignal(str)
 
     # The line was edited: "insert", "delete" or "move", the point's index, its position.
     edited = pyqtSignal(str, int, Vec)
@@ -97,6 +103,8 @@ class CutTool(QObject):
         self._view = view
         self._editor = editor
         self._ruler = ruler
+        # What to tell the user about a point whose number is too long (the main window's: it knows the names).
+        self.describe_too_long: Callable[[TooLong], str] = lambda found: tr(REJECTED)
 
         # Points drawn by others whose coordinates the hint shows too, as for vertices (the bounding rectangle's
         # corners, while it's shown): see `coordinates_at`.
@@ -138,6 +146,7 @@ class CutTool(QObject):
         self._armed: tuple[str, int] | None = None
         view.left_pressed.connect(self._on_left_pressed)
         view.left_released.connect(self._on_left_released)
+        view.pan_clicked.connect(self._on_pan_clicked)
         view.mouse_moved.connect(self._on_mouse_moved)
         view.mouse_left.connect(self._on_mouse_left)
         view.zoom_changed.connect(self._update_area)
@@ -406,6 +415,7 @@ class CutTool(QObject):
         """Any drawn point under the mouse (in its circle): the net's vertices, the cut line's points, its small dots
         (crossings with fold lines, the endpoints' counterpart images)."""
         positions = [point.position for point in self.item.points()] + self.item.crossings() + self.item.images()
+        positions += [entry.position for entry in self.item.entries()]
         positions += [vertex.position for vertex in self._editor.display_net.vertices]
         i = self._closest(x, y, positions, net_style.VERTEX_RADIUS_PX)
         return None if i is None else positions[i]
@@ -413,7 +423,9 @@ class CutTool(QObject):
     def move_origin(self, origin: Origin) -> None:
         """Show and take the coordinates from `origin` (an action, if it moved)."""
         before = self._editor.origin
-        self._editor.move_origin(origin)
+        rejection = self._editor.move_origin(origin)
+        if rejection is not None and rejection.too_long is not None:
+            self.too_long.emit(self.describe_too_long(rejection.too_long))
         if self._editor.origin != before:
             self.origin_changed.emit()
 
@@ -452,16 +464,13 @@ class CutTool(QObject):
         target = self._editor.candidate(p, cut, vertex, fold, straight, slope if cutting else None)
         action = Action.START if state is EditorState.DEFAULT else Action.ADD
         if cutting and slope is not None and line is not None:
-            constraint = self._sloped(target, line.last.position)
-            if constraint.fixed is None and not self._editor.net.contains(target.position):
-                return None  # outside the net, no point is made
-            return Placement(action, target.position, constraint)
+            return Placement(action, target.position, self._sloped(target, line.last.position))
         if target.vertex is not None:
             return None
         if target.edge is not None:  # the edge wins over SHIFT's line
             return Placement(action, target.position, Constraint.on_edge(target.edge))
-        if state is EditorState.DEFAULT or not self._editor.net.contains(target.position):
-            return None  # a line starts on the perimeter; outside the net, no point is made
+        if state is EditorState.DEFAULT:
+            return None  # a line starts on the perimeter (off the net, a point may go: docs/template_plan.md §8.2)
         if straight and line is not None:
             anchor = line.last.position
             constraint = Constraint.straight(anchor, horizontal=target.position.y == anchor.y)
@@ -481,7 +490,7 @@ class CutTool(QObject):
             return Constraint.on_fold(target.fold).fixed_at(target.position)
         return Constraint.along(anchor, self._slope)
 
-    def place(self, placement: Placement, p: Vec) -> Problem | None:
+    def place(self, placement: Placement, p: Vec) -> Problem | LineProblem | str | None:
         """Put the point of `placement` exactly at `p` (typed: nothing is rounded); or why it can't go there, and
         nothing changes (a dragged point stays dragged)."""
         net = self._editor.net
@@ -503,16 +512,17 @@ class CutTool(QObject):
         else:
             point = CutPoint(p, fold=fold_through(net, p))
         if placement.action is Action.START:
-            self._editor.start_at(point)
+            if (rejection := self._editor.start_at(point)) is not None:
+                return self._refused(rejection)
         elif placement.action is Action.ADD:
             if self._editor.too_many_points(point):
                 return Problem.TOO_MANY_POINTS
-            if self._editor.add_point(point) is not None:
-                return Problem.BREAKS_LINE
+            if (rejection := self._editor.add_point(point)) is not None:
+                return self._refused(rejection)
         else:
             assert placement.index is not None
-            if self._editor.move_point(placement.index, point) is not None:
-                return Problem.BREAKS_LINE
+            if (rejection := self._editor.move_point(placement.index, point)) is not None:
+                return self._refused(rejection)
             self._drag_index, self._drag_target, self._drag_over_perimeter = None, None, False
             self._drag_free = False
             self._end_slope()
@@ -536,7 +546,7 @@ class CutTool(QObject):
         """What's under the mouse: the point, then a cut or a perimeter vertex, or else a fold line. While cutting with
         SHIFT held, that's about where the mouse brings the end of the straight segment."""
         line = self._editor.cut_line
-        if self._straight() and line is not None and not line.closed:
+        if self._straight() and line is not None and self._editor.state is EditorState.CUTTING:
             return self._straight_hit(line.last.position, x, y)
         vertex, cut = perimeter_target(self._view, self._editor.net, x, y)
         on_perimeter = vertex is not None or cut is not None
@@ -559,7 +569,7 @@ class CutTool(QObject):
     def hover_target(self, x: float, y: float) -> tuple[NetVertex | None, HalfEdge | None] | None:
         """While cutting with SHIFT held, what highlights is what the straight segment would end on (see `CutHover`)."""
         line = self._editor.cut_line
-        if self._ruler.active or not self._straight() or line is None or line.closed:
+        if self._ruler.active or not self._straight() or line is None or self._editor.state is not EditorState.CUTTING:
             return None
         _, cut, vertex, _ = self._hit(x, y)
         return vertex, cut
@@ -600,6 +610,12 @@ class CutTool(QObject):
             self.unlock_slope()  # placed: the lock was for this point
             self.refresh()
             self.point_added.emit(line.last.position)
+
+    def _on_pan_clicked(self, x: float, y: float) -> None:
+        """A click off the net (a press there pans the sheet, unless it's released where it was pressed): while
+        cutting, a new point there (the line may go outside the net, or through a hole: docs/template_plan.md §8.2)."""
+        if self._editor.state is EditorState.CUTTING and not self._ruler.active and self._drag_index is None:
+            self._on_left_pressed(x, y)
 
     def _press_while_editing(self, x: float, y: float) -> None:
         line = self._editor.cut_line
@@ -725,8 +741,20 @@ class CutTool(QObject):
         else:
             self.edited.emit("delete", i, position)
 
+    def _refused(self, rejection: Rejection) -> Problem | LineProblem | str:
+        """What Place a vertex says about a refused point: the rule of the line it breaks, or the whole message about a
+        number too long."""
+        if rejection.too_long is not None:
+            return self.describe_too_long(rejection.too_long)
+        return rejection.problem or Problem.BREAKS_LINE
+
     def _reject(self, rejection: Rejection, position: Vec) -> None:
-        """Show the offending segments in black for a moment (with the rejection's preview of the line, if any)."""
+        """Show the offending segments in black for a moment (with the rejection's preview of the line, if any); a
+        point whose number is too long is told about instead (`too_long`)."""
+        if rejection.too_long is not None:
+            self.rejected.emit(position)
+            self.too_long.emit(self.describe_too_long(rejection.too_long))
+            return
         self.item.set_flash(rejection.segments)
         if rejection.preview is not None:
             self.item.set_points(rejection.preview)

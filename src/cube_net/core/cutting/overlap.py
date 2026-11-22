@@ -34,7 +34,7 @@ class _Sector:
 def overlapping_cuts(half_a: Iterable[HalfEdge], half_b: Iterable[HalfEdge]) -> frozenset[HalfEdge]:
     """The cuts of each half that take part in an overlap with the other; empty if the halves don't overlap.
 
-    `half_a` and `half_b` are the outside half-edges of the two perimeter cycles."""
+    `half_a` and `half_b` are the outside half-edges of the two halves' perimeters (with their holes')."""
     outer_a, outer_b = list(half_a), list(half_b)
     bad: set[HalfEdge] = set()
     contacts: set[Vec] = set()

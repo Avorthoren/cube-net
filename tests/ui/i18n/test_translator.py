@@ -25,7 +25,7 @@ def test_english_by_default() -> None:
 
 def test_russian(russian: None) -> None:
     assert tr("Ruler") == "Линейка"
-    assert tr('Save changes to "{name}"?', name="cube.cubenet") == "Сохранить изменения в проекте «cube.cubenet»?"
+    assert tr('Save changes to "{name}"?', name="cube.cubenet") == "Сохранить изменения в «cube.cubenet»?"
 
 
 def test_an_unknown_text_stays_as_it_is(russian: None) -> None:
@@ -76,3 +76,25 @@ def test_the_user_s_wording(russian: None) -> None:
     assert tr("by UNDEFEAT in attempts to solve {puzzle}", puzzle=tr("this puzzle")) == (
         "разработано UNDEFEAT в попытках решить эту задачу"
     )
+
+
+def test_russian_forms_for_numbers(russian: None) -> None:
+    from cube_net.ui.i18n.translator import russian_plural
+
+    assert [russian_plural(n) for n in (1, 2, 4, 5, 11, 12, 14, 21, 22, 25, 101, 111)] == [
+        0,
+        1,
+        1,
+        2,
+        2,
+        2,
+        2,
+        0,
+        1,
+        2,
+        0,
+        2,
+    ]
+    assert tr("State {n} actions ago was restored.", n=3) == "Восстановлено состояние 3 действия назад."
+    assert tr("State {n} actions ago was restored.", n=21) == "Восстановлено состояние 21 действие назад."
+    assert tr("State {n} actions ago was restored.", n=7) == "Восстановлено состояние 7 действий назад."

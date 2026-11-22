@@ -3,30 +3,48 @@
 
 """Help -> Help: a big window that explains how the application works, with animations of the real tools.
 
+Its tabs (`HelpTab`: Network, Template, Hotkeys) are down the left side, their titles turned; each tab's page scrolls on
+its own, and the tabs stay where they are. Every page starts with the application's name and the language list.
+
 The text is in a column of easy-to-read width, in blocks between the animations (`TextBlock`: selectable across
-paragraphs). The animations (`demo`) are drawn in the style chosen in the settings, with the vertex labels if they're
-switched on, and follow both when they change. Escape closes the window.
+paragraphs). The animations (`demo`) are drawn in the built-in Cube's look (`DEFAULT_CUBE_LOOK`), whatever the open
+document's style and colours are, and never with the vertex labels. Escape closes the window.
 """
 
 from collections.abc import Callable, Sequence
 from fractions import Fraction as F
 from html import escape
 
-from PyQt6.QtCore import QSize, Qt, pyqtSignal
-from PyQt6.QtGui import QKeyEvent
-from PyQt6.QtWidgets import QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
+from PyQt6.QtCore import QEvent, QObject, QPoint, QSize, QSizeF, Qt, QTimer, QUrl, pyqtSignal
+from PyQt6.QtGui import QFont, QFontMetricsF, QKeyEvent, QShowEvent
+from PyQt6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QScrollArea,
+    QStyle,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
-from cube_net.core.geometry import Box, Vec
+from cube_net.core.geometry import MAX_NUMBER_DIGITS, Box, Vec
+from cube_net.core.project import Project, TemplateDocument
 from cube_net.ui.help.about_dialog import APP_NAME
-from cube_net.ui.help.demo import scenes
+from cube_net.ui.help.demo import advanced, scenes, template_scenes
 from cube_net.ui.help.demo.demo_sheet import AROUND_THE_NET
 from cube_net.ui.help.demo.player import DemoPlayer
 from cube_net.ui.help.demo.steps import Step
+from cube_net.ui.help.demo.torus import torus_project
+from cube_net.ui.help.help_tab import HelpTab
 from cube_net.ui.help.hotkeys import HOTKEYS, HotkeyGroup
 from cube_net.ui.help.text_block import ACCENT, BADGE_PX, BADGE_SCHEME, TextBlock
 from cube_net.ui.i18n import TRANSLATIONS, bind, tr
 from cube_net.ui.language_box import LanguageBox
 from cube_net.ui.no_wheel import ignore_wheel
+from cube_net.ui.template.validation_messages import subscripted
 
 # The page and its text.
 PAGE = "#FFFFFF"
@@ -39,6 +57,9 @@ SUBTITLE_SIZE = 1.3
 TITLE_SIZE = 1.45
 PARAGRAPH_SIZE = 1.1
 
+# The height of a paragraph's lines, in its font's lines.
+LINE_HEIGHT = 1.45
+
 # The widths of the column of text and of the window around it (px).
 COLUMN_PX = 880
 WINDOW_PX = 1000
@@ -49,13 +70,13 @@ HALF = QSize(428, 400)
 AROUND_BOTH_RESULTS = Box(Vec(F(48, 5), F(43, 5)), Vec(F(77, 5), F(72, 5)))
 
 INTRO = (
-    "This application lets you build cube nets: simple polygons (without self-intersections) that, when folded, cover "
-    "the whole surface of the unit cube without overlaps. So the area of such a polygon is always equal to the surface "
-    "area of the unit cube: 6 square units."
+    "This application lets you build networks of solid bodies: polygons without self-intersections that, when folded, "
+    "can cover the whole surface of that body without overlaps. So the area of such a polygon is always equal to the "
+    "surface area of the body."
 )
 IDEA = (
-    "If a cube net is cut into two pieces, they can be rearranged and glued together again along a pair of edges that "
-    "meet on the cube. That's exactly what the application is for:"
+    "If a network is cut into two pieces, they can be rearranged and glued together again along a pair of edges that "
+    "meet on the body. That's exactly what the application is for:"
 )
 CUT_TITLE = "Make a cut"
 CUT_TEXT = (
@@ -77,18 +98,145 @@ GLUE_TEXT = (
 )
 GOOD_CAPTION = "No overlaps: approved"
 BAD_CAPTION = "Overlaps: cancelled"
-MORE_TITLE = "Good to know"
-EXACT_TEXT = (
-    "You can set specific coordinates for points or slopes for lines: try right-click (even when dragging a point)."
+ADVANCED_TITLE = "Advanced features"
+ADVANCED_EXACT_TEXT = (
+    "You can set specific coordinates for vertices or slopes for lines when creating or dragging vertices: try "
+    "right-click."
 )
-ORIGIN_TEXT = "You can move the working sheet origin: right-click on any vertex."
+ADVANCED_OUTSIDE_TEXT = (
+    "Cut should always start on the boundary, but other vertices of the cut line can even be outside the net: as soon "
+    "as net is divided into two pieces - cut line ends."
+)
+ADVANCED_ORIGIN_TEXT = (
+    "You can also move the origin by assigning desired coordinates to any vertex. Although, axes orientation and the "
+    "scale is constant."
+)
+MORE_TITLE = "Good to know"
 UNDO_TEXT = "Undo and redo work for up to 1000 actions: use Ctrl+Z and Ctrl+Y."
 BOUNDS_TEXT = (
     "The application keeps track of the minimum-area bounding rectangle of the net. To see the rectangle itself, "
-    "press the {bounds} button on the instrument panel."
+    "press the {bounds} button on the instrument panel. You can see the exact area value by hovering the mouse "
+    "over its approximate value."
 )
 VIEW_TEXT = "Zoom with the mouse wheel; drag the sheet to move it."
 HOTKEYS_TITLE = "Hotkeys"
+
+# The tabs' titles (the Hotkeys tab's is `HOTKEYS_TITLE`).
+NETWORK_TAB = "Network"
+TEMPLATE_TAB = "Template"
+
+# The first paragraph's number in the Network page's first block of text (after the name and "How it works").
+FIRST_PARAGRAPH = 2
+
+# The Template tab's texts.
+TEMPLATES_INTRO = (
+    "In addition to bodies available by default (cube and cube with a hole a.k.a. torus) user can define custom bodies "
+    "by drawing one of the networks. That's what Templates are for (File → New Template)."
+)
+TEMPLATES_USE = (
+    "Validated template then can be used: File → New → Custom template. Or use {create} button while template is "
+    "opened."
+)
+TEMPLATES_EXACT = (
+    'The application supports only templates in which every pair of related (those that were cut to "unfold" the '
+    'body, and that should be glued again to "wrap" the body) boundary segments are either parallel or perpendicular. '
+    "In this case it's guaranteed that if all initial vertices coordinates are rational - they'll stay rational after "
+    "any chain of rearrangements. It allows the application to store all coordinates exactly (up to {max} decimal "
+    "digits), making exact calculations, not losing anything due to rounding errors."
+)
+TEMPLATES_CHECKS = (
+    "The application doesn't prove formally that figure you drew is in fact valid network of some body, but it "
+    "performs various checks to exclude most of invalid cases. Most of them are not performed automatically and "
+    "should be triggered by the user with {validate} button. To be more specific, it's possible that performed checks "
+    "guarantee that it's a valid network, but the author of this application didn't prove that."
+)
+VALIDATE_WORD = "Validate"
+CREATE_NETWORK_WORD = "Create network"
+DRAW_LOOP_TITLE = "Draw outer boundary loop"
+FOLDS_TITLE = "Add fold-lines and inner loops"
+FOLDS_TEXT = "Fold-lines and boundaries define faces of the body (and their parts):"
+TEMPLATE_ADJUST_TEXT = (
+    "Adjust the template if needed: drag any of its vertices, click the circle in the middle of a segment to add a "
+    "vertex there, or hold Ctrl and click a vertex (or fold-line segment) to delete it. All similar to {networks}."
+)
+NAMES_TITLE = "Define vertices and faces"
+FACES_TEXT = (
+    "Faces of the body defined by their color: double-click on the area to set its color. This means, that pieces of "
+    "<b>exactly</b> the same color are considered parts of the same body face, and they have to be able to be glued "
+    "accordingly."
+)
+VERTICES_TEXT = (
+    "Vertices of the template that represent the same vertex of the body should have the same unique name (one or "
+    "two latin letters). Different images of the same body's vertex should have unique integer indices: right-click "
+    "on the vertex → {assign}."
+)
+IMAGES_TEXT = (
+    "Keep in mind, that every image of body's edge or cut on the surface of the body should have images of all "
+    "vertices that belong to that edge or cut. For example: since green body's face (D-B-F-G) shown in animation "
+    "below is cut through its edge D-B in point S we should create not only S1 (on the boundary of the top piece of "
+    "the green face of the network) and S2 (bottom piece of the green face), but also S3 (on the boundary of the top "
+    "blue face of the network), because it has another representation of the B-D body's edge."
+)
+VALIDATE_TITLE = "Validate it"
+TEMPLATE_ADVANCED_TEXT = (
+    "Similar to {networks} you can set specific coordinates for vertices or slopes for lines when creating or "
+    "dragging vertices. And you can move the origin."
+)
+NETWORKS_LINK = "Networks"
+CHECKS_TITLE = "Exact validation steps"
+CHECKS_TEXT = (
+    "Drawing rules are kept all the time: an action that breaks them (sides crossing, for example) is refused at "
+    "once. {validate} checks the rest, in this order, and tells about the first check that fails:"
+)
+CHECK_COLORS = "Every face has a color."
+CHECK_LABELS = "Every vertex has a label."
+CHECK_SELF_EDGES = (
+    "No segment of a boundary or of a fold-line joins two images of the same vertex of the body (like A1-A3): an edge "
+    "can't go from a vertex to itself."
+)
+CHECK_COUNTERPARTS = (
+    "Every segment of the boundaries (the outer one and the inner loops) has exactly one counterpart: another "
+    "boundary segment between vertices with the same two names. They are the two sides of one cut, glued together "
+    "when the body is wrapped."
+)
+CHECK_PARALLEL = "Counterparts are parallel or perpendicular (so that coordinates stay rational)."
+CHECK_LENGTHS = "Counterparts have the same length."
+CHECK_DIRECTIONS = (
+    "Counterparts run in opposite directions along their loops (otherwise one of them would have to be turned over "
+    "to glue them). To check imagine outer loop running counter-clockwise and every inner loop running clockwise."
+)
+CHECK_CUT_AND_FOLD = (
+    "No edge of the body is both a cut and a fold. If two boundary segments are counterparts, they are the two sides "
+    "of a cut along the body's edge between their two names, so no fold-line segment may join the same two names. For "
+    "example, if boundary segments A3-B1 and A2-B4 exist (the cut along the edge A-B), a fold-line segment "
+    "A1-B2 is forbidden: it would make the same edge A-B a fold too."
+)
+CHECK_SAME_FOLDS = (
+    "No two fold-line segments join the same two names (i.e. having fold-line segments A1-B3 and A2-B1 at the same "
+    "time is forbidden)."
+)
+CHECK_GLUED_NAMES = "All images of each vertex of the body are glued together into one point."
+CHECK_FOLD_COLORS = "Every fold-line separates two faces of different colors."
+CHECK_PIECES = "The pieces of each color are glued together into one face."
+CHECK_FOUR_FACES = "The body has at least 4 faces."
+CHECK_TOUCHES_ITSELF = (
+    "No face touches itself: a slit, or a point where a boundary touches itself, must lie between two faces."
+)
+CHECK_FLAT = "Every face, glued from its pieces, is one flat piece of paper: it doesn't overlap itself."
+CHECK_INDICES = "The indices of every name go starting from 1 without gaps."
+REINDEX_TEXT = (
+    "If the indices of some names have gaps (and nothing else is wrong), the application offers to renumber them: the "
+    "images of each name keep their order, and get the indices 1, 2, 3, ... (A2 and A5 become A1 and A2). The "
+    "template is valid then."
+)
+
+# Links to sections of the page: "section:<name>".
+SECTION_SCHEME = "section"
+ADJUST_SECTION = "adjust"
+ADVANCED_SECTION = "advanced"
+
+# Room above a section's title when a link goes there (px).
+SECTION_ROOM_PX = 16
 
 # Room between the application's name at the top and the language list after it (px).
 LANGUAGE_GAP_PX = 20
@@ -104,29 +252,46 @@ class HelpWindow(QWidget):
     # The user chose another language in the list at the top (a `Language`): it's the application's setting.
     language_changed = pyqtSignal(object)
 
-    def __init__(self, parent: QWidget | None = None, labels: bool = False) -> None:
-        """`labels`: whether the animations show the vertex labels (an app setting)."""
+    # The user went to another tab (a `HelpTab`).
+    tab_changed = pyqtSignal(object)
+
+    def __init__(self, parent: QWidget | None = None, tab: HelpTab = HelpTab.NETWORK) -> None:
+        """`tab`: the one shown at first (the one the user looked at last)."""
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.Window)
         bind(self, self.setWindowTitle, "{name} Help", name=APP_NAME)
-        self._labels = labels
         self.players: list[DemoPlayer] = []
+        # The Network tab's animations, and the Template tab's.
+        self.network_players: list[DemoPlayer] = []
+        self.template_players: list[DemoPlayer] = []
+        # The Network tab's blocks of text (`TextBlock`), in order, and the Hotkeys tab's.
         self.blocks: list[TextBlock] = []
+        self.template_blocks: list[TextBlock] = []
+        self.hotkey_blocks: list[TextBlock] = []
+        # Every tab's language list, and the block of the name it's placed after.
+        self.languages: list[LanguageBox] = []
+        self._language_places: list[tuple[LanguageBox, TextBlock]] = []
+        self._blocks = self.blocks
         self._block: TextBlock | None = None
+        self._column_widget = QWidget()
+        self._column = QVBoxLayout(self._column_widget)
+        self.tabs = QTabWidget(self)
+        self.tabs.setTabPosition(QTabWidget.TabPosition.West)  # down the left side, its texts turned
+        self.tabs.setDocumentMode(True)
+        # Each tab's page scrolls under the tabs, which stay where they are.
+        self.pages: dict[HelpTab, QScrollArea] = {}
+        # The sections links go to: their title's block and text (to find it there).
+        self._section_titles: dict[str, tuple[TextBlock, str]] = {}
+        # Each page's scroll area and centring layout, by its viewport (`_reserve_scroll_bar`).
+        self._page_layouts: dict[QWidget, tuple[QScrollArea, QHBoxLayout]] = {}
 
-        column = QWidget()
-        column.setFixedWidth(COLUMN_PX)
-        self._column = QVBoxLayout(column)
-        self._column.setContentsMargins(0, 28, 0, 40)
-        self._column.setSpacing(14)
-        self._heading()
-        self._language_box()
+        self._start_page(self.blocks)
         self._paragraph(INTRO)
         self._paragraph(IDEA)
         self._title(CUT_TITLE, 1)
         self._paragraph(CUT_TEXT)
         self._players([self._player(scenes.CUT, [], WIDE)])
-        self._title(ADJUST_TITLE, 2)
+        self._title(ADJUST_TITLE, 2, section=ADJUST_SECTION)
         self._paragraph(ADJUST_TEXT)
         self._players([self._player(scenes.ADJUST, [scenes.CUT], WIDE)])
         self._title(GLUE_TITLE, 3)
@@ -135,31 +300,97 @@ class HelpWindow(QWidget):
         good = self._player(scenes.GLUE_GOOD, before, HALF, AROUND_BOTH_RESULTS)
         bad = self._player(scenes.GLUE_BAD, before, HALF, AROUND_BOTH_RESULTS)
         self._players([good, bad], [self._caption(GOOD_CAPTION), self._caption(BAD_CAPTION)])
+        self._title(ADVANCED_TITLE, 4, section=ADVANCED_SECTION)
+        self._paragraph(ADVANCED_EXACT_TEXT)
+        self._paragraph(ADVANCED_OUTSIDE_TEXT)
+        self._paragraph(ADVANCED_ORIGIN_TEXT)
+        self._players([self._player(advanced.ADVANCED, [], advanced.SIZE, advanced.SHOWN, torus_project(), True)])
         self._title(MORE_TITLE)
-        self._paragraph(EXACT_TEXT, bullet=True)
-        self._paragraph(ORIGIN_TEXT, bullet=True)
         self._paragraph(UNDO_TEXT, bullet=True)
-        self._paragraph(BOUNDS_TEXT, lambda: {"bounds": f"<b>{tr('Bounds')}</b>"}, bullet=True)
+        self._paragraph(BOUNDS_TEXT, lambda: {"bounds": _bold(tr("Bounds"))}, bullet=True)
         self._paragraph(VIEW_TEXT, bullet=True)
+        self.scroll = self._finish_page(NETWORK_TAB, HelpTab.NETWORK)
+        self.language = self.languages[0]
+        # The tabs follow the first paragraph wherever the page's layout puts it (it's laid out after the window is
+        # shown, and again when the fonts or the texts change).
+        self._tabs_top: int | None = None
+        self.blocks[0].installEventFilter(self)
+        first_layout = self.blocks[0].document().documentLayout()  # type: ignore[union-attr]
+        first_layout.documentSizeChanged.connect(self._on_first_text_resized)  # type: ignore[union-attr]
+        self._start_page(self.template_blocks)
+        self._template_page()
+        self._finish_page(TEMPLATE_TAB, HelpTab.TEMPLATE)
+        self._start_page(self.hotkey_blocks)
         self._title(HOTKEYS_TITLE)
         for group in HOTKEYS:
             self._hotkeys(group)
+        self._finish_page(HOTKEYS_TITLE, HelpTab.HOTKEYS)
+        TRANSLATIONS.changed.connect(self._place_languages)  # after the texts' own refresh: it's connected before
 
-        page = QWidget()
-        page.setObjectName("page")
-        page.setStyleSheet(f"#page {{ background: {PAGE}; }} QLabel {{ color: {TEXT}; }}")
-        centred = QHBoxLayout(page)
-        centred.addStretch(1)
-        centred.addWidget(column)
-        centred.addStretch(1)
-        self.scroll = QScrollArea(self)
-        self.scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setWidget(page)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.scroll)
-        self._resize_to_screen()
+        layout.addWidget(self.tabs)
+        self.show_tab(tab)
+        self.tabs.currentChanged.connect(lambda _index: self.tab_changed.emit(self.tab()))
+        self.restore_default_size()
+
+    def showEvent(self, a0: QShowEvent | None) -> None:
+        super().showEvent(a0)
+        self.align_tabs()
+        QTimer.singleShot(0, self.align_tabs)  # once the page is laid out for the window's size
+
+    def _on_first_text_resized(self, _size: QSizeF) -> None:
+        self.align_tabs()  # (a method, not a lambda: Qt disconnects it when the window is gone)
+
+    def eventFilter(self, a0: QObject | None, a1: QEvent | None) -> bool:
+        """The first block of text moved or changed its size: the tabs follow its first paragraph. A page's scroll bar
+        came or went: its column stays where it is."""
+        if a1 is None:
+            return False
+        if isinstance(a0, QWidget) and a0 in self._page_layouts:
+            if a1.type() == QEvent.Type.Resize:
+                self._reserve_scroll_bar(*self._page_layouts[a0])
+        elif a1.type() in (QEvent.Type.Move, QEvent.Type.Resize):
+            self.align_tabs()
+        return False
+
+    def _reserve_scroll_bar(self, scroll: QScrollArea, centred: QHBoxLayout) -> None:
+        """A page without its scroll bar keeps its room on the right: the column is centred in the same width on every
+        page, whether it scrolls or not."""
+        bar, style = scroll.verticalScrollBar(), scroll.style()
+        assert bar is not None and style is not None
+        extent = style.pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent, None, bar)
+        centred.setContentsMargins(0, 0, 0 if bar.isVisibleTo(scroll) else extent, 0)
+
+    def align_tabs(self) -> None:
+        """The tabs start where the Network page's first paragraph does (its first line's top, under the name and "How
+        it works"), as far as the page is from the window's top when it isn't scrolled."""
+        top = self.first_paragraph_top()
+        if top is not None and top != self._tabs_top:
+            self._tabs_top = top
+            self.tabs.setStyleSheet(f"QTabWidget::tab-bar {{ top: {top}px; }}")
+
+    def first_paragraph_top(self) -> int | None:
+        """Where the Network page's first paragraph's first line starts, from the page's top (px); None while its text
+        is being set anew (not laid out)."""
+        block = self.blocks[0]
+        document = block.document()
+        layout = document.documentLayout() if document is not None else None
+        paragraph = document.findBlockByNumber(FIRST_PARAGRAPH) if document is not None else None
+        lines = paragraph.layout() if paragraph is not None and paragraph.isValid() else None
+        viewport = block.viewport()
+        page = self.scroll.widget()
+        if layout is None or lines is None or lines.lineCount() == 0 or viewport is None or page is None:
+            return None
+        top = layout.blockBoundingRect(paragraph).top() + lines.lineAt(0).y()
+        return viewport.mapTo(page, QPoint(0, round(top))).y()
+
+    def tab(self) -> HelpTab:
+        """The tab shown."""
+        return list(self.pages)[self.tabs.currentIndex()]
+
+    def show_tab(self, tab: HelpTab) -> None:
+        self.tabs.setCurrentIndex(list(self.pages).index(tab))
 
     def keyPressEvent(self, event: QKeyEvent | None) -> None:
         if event is not None and event.key() == Qt.Key.Key_Escape:
@@ -167,16 +398,117 @@ class HelpWindow(QWidget):
             return
         super().keyPressEvent(event)
 
-    def restyle(self) -> None:
-        """The style changed in the settings: the animations follow it."""
-        for player in self.players:
-            player.restyle()
+    def _template_page(self) -> None:
+        """The Template tab: what templates are for, how one is made, step by step, and what Validate checks."""
+        networks_link = lambda section: lambda: {"networks": _link(section, tr(NETWORKS_LINK))}  # noqa: E731
+        self._lines(TEMPLATES_INTRO, TEMPLATES_USE, lambda: {"create": _bold(tr(CREATE_NETWORK_WORD))})
+        self._paragraph(TEMPLATES_EXACT, lambda: {"max": str(MAX_NUMBER_DIGITS)})
+        self._paragraph(TEMPLATES_CHECKS, lambda: {"validate": _bold(tr(VALIDATE_WORD))})
+        self._title(DRAW_LOOP_TITLE, 1)
+        self._players([self._template_player(template_scenes.DRAW_LOOP, template_scenes.empty_start())])
+        self._title(FOLDS_TITLE, 2)
+        self._paragraph(FOLDS_TEXT)
+        self._players([self._template_player(template_scenes.FOLDS_AND_HOLE, template_scenes.loop_start(), panel=True)])
+        self._title(ADJUST_TITLE, 3)
+        self._paragraph(TEMPLATE_ADJUST_TEXT, networks_link(ADJUST_SECTION))
+        self._title(NAMES_TITLE, 4)
+        self._paragraph(FACES_TEXT, names=True)
+        self._paragraph(VERTICES_TEXT, lambda: {"assign": _bold(tr("Assign label"))}, names=True)
+        self._paragraph(IMAGES_TEXT, names=True)
+        self._players([self._template_player(template_scenes.COLORS_AND_LABELS, template_scenes.folds_start())])
+        self._title(VALIDATE_TITLE, 5)
+        self._players([self._template_player(template_scenes.VALIDATING, template_scenes.validate_start(), panel=True)])
+        self._title(ADVANCED_TITLE, 6)
+        self._paragraph(TEMPLATE_ADVANCED_TEXT, networks_link(ADVANCED_SECTION))
+        self._title(CHECKS_TITLE)
+        self._paragraph(CHECKS_TEXT, lambda: {"validate": _bold(tr(VALIDATE_WORD))})
+        self._paragraph(CHECK_COLORS, bullet=True)
+        self._paragraph(CHECK_LABELS, bullet=True)
+        self._paragraph(CHECK_SELF_EDGES, bullet=True, names=True)
+        self._paragraph(CHECK_COUNTERPARTS, bullet=True)
+        self._paragraph(CHECK_PARALLEL, bullet=True)
+        self._paragraph(CHECK_LENGTHS, bullet=True)
+        self._paragraph(CHECK_DIRECTIONS, bullet=True)
+        self._paragraph(CHECK_CUT_AND_FOLD, bullet=True, names=True)
+        self._paragraph(CHECK_SAME_FOLDS, bullet=True, names=True)
+        self._paragraph(CHECK_GLUED_NAMES, bullet=True)
+        self._paragraph(CHECK_FOLD_COLORS, bullet=True)
+        self._paragraph(CHECK_PIECES, bullet=True)
+        self._paragraph(CHECK_FOUR_FACES, bullet=True)
+        self._paragraph(CHECK_TOUCHES_ITSELF, bullet=True)
+        self._paragraph(CHECK_FLAT, bullet=True)
+        self._paragraph(CHECK_INDICES, bullet=True)
+        self._paragraph(REINDEX_TEXT, names=True)
 
-    def set_labels_shown(self, shown: bool) -> None:
-        """The vertex labels were switched on or off in the settings: the animations follow."""
-        self._labels = shown
-        for player in self.players:
-            player.set_labels_shown(shown)
+    def _template_player(self, steps: Sequence[Step], start: TemplateDocument, panel: bool = False) -> DemoPlayer:
+        """An animation of making the torus template (`template_scenes`), from `start`; with the instrument panel if
+        `panel` (for one that clicks its buttons)."""
+        shown = template_scenes.PANEL_SHOWN if panel else template_scenes.SHOWN
+        player = DemoPlayer(steps, [], template_scenes.SIZE, shown, template=start, panel=panel)
+        self.players.append(player)
+        self.template_players.append(player)
+        return player
+
+    def _follow_link(self, url: QUrl) -> None:
+        """A link to a section (`SECTION_SCHEME`): its tab shown, scrolled so that its title is at the top."""
+        if url.scheme() != SECTION_SCHEME:
+            return
+        found = self._section_titles.get(url.path())
+        if found is None:
+            return
+        block, text = found
+        tab = next(tab for tab, page in self.pages.items() if page.isAncestorOf(block))
+        self.show_tab(tab)
+        page = self.pages[tab]
+        document = block.document()
+        layout = document.documentLayout() if document is not None else None
+        cursor = document.find(tr(text)) if document is not None else None
+        viewport, content = block.viewport(), page.widget()
+        if layout is None or cursor is None or cursor.isNull() or viewport is None or content is None:
+            return
+        top = layout.blockBoundingRect(cursor.block()).top()
+        bar = page.verticalScrollBar()
+        if bar is not None:
+            bar.setValue(viewport.mapTo(content, QPoint(0, round(top))).y() - SECTION_ROOM_PX)
+
+    # --- the tabs ----------------------------------------------------------------------------------------------------
+
+    def _start_page(self, blocks: list[TextBlock]) -> None:
+        """A new tab's page is written from now on, its blocks of text into `blocks`: it starts with the application's
+        name and the language list."""
+        self._blocks = blocks
+        self._block = None
+        self._column_widget = column = QWidget()  # kept: nothing else holds it until its page does
+        column.setFixedWidth(COLUMN_PX)
+        self._column = QVBoxLayout(column)
+        self._column.setContentsMargins(0, 28, 0, 40)
+        self._column.setSpacing(14)
+        self._heading()
+        self._language_box()
+
+    def _finish_page(self, title: str, tab: HelpTab) -> QScrollArea:
+        """The page written since `_start_page`: centred, scrolled, in its tab (`title`: the tab's)."""
+        column = self._column_widget
+        self._column.addStretch(1)  # a short page stays at the top
+        page = QWidget()
+        page.setObjectName("page")
+        page.setStyleSheet(f"#page {{ background: {PAGE}; }} QLabel {{ color: {TEXT}; }}")
+        centred = QHBoxLayout(page)
+        centred.addStretch(1)
+        centred.addWidget(column)
+        centred.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(page)
+        viewport = scroll.viewport()
+        assert viewport is not None
+        self._page_layouts[viewport] = (scroll, centred)
+        viewport.installEventFilter(self)  # resized whenever the scroll bar comes or goes
+        index = self.tabs.addTab(scroll, "")
+        bind(self.tabs, lambda text, i=index: self.tabs.setTabText(i, text), title)
+        self.pages[tab] = scroll
+        return scroll
 
     # --- the parts of the page ---------------------------------------------------------------------------------------
 
@@ -184,7 +516,8 @@ class HelpWindow(QWidget):
         """The block of text being written: a new one after an animation."""
         if self._block is None:
             self._block = TextBlock(COLUMN_PX)
-            self.blocks.append(self._block)
+            self._block.anchorClicked.connect(self._follow_link)
+            self._blocks.append(self._block)
             self._column.addWidget(self._block)
         return self._block
 
@@ -198,45 +531,56 @@ class HelpWindow(QWidget):
 
     def _language_box(self) -> None:
         """The language list, right after the application's name, where it's seen at once (over the text, which stays
-        one document to select in): the same setting as Settings -> Preferences."""
+        one document to select in): the same setting as Settings -> Preferences. Every tab has its own."""
         block = self._text()
-        self.language = LanguageBox(TRANSLATIONS.language, block)
-        bind(self.language, self.language.setToolTip, "Language")
-        self.language.chosen.connect(self.language_changed)
-        ignore_wheel([self.language], self)  # the wheel scrolls the page wherever the mouse is
-        self._place_language()
-        TRANSLATIONS.changed.connect(self._place_language)  # after the text's own refresh: it's connected before
+        language = LanguageBox(TRANSLATIONS.language, block)
+        bind(language, language.setToolTip, "Language")
+        language.chosen.connect(self.language_changed)
+        ignore_wheel([language], self)  # the wheel scrolls the page wherever the mouse is
+        self.languages.append(language)
+        self._language_places.append((language, block))
+        _place_language(language, block)
 
-    def _place_language(self) -> None:
-        """`LANGUAGE_GAP_PX` after the name's end, its middle on the middle of the name's line."""
-        block = self.blocks[0]
-        document = block.document()
-        assert document is not None
-        layout = document.documentLayout()
-        first = document.firstBlock()
-        lines = first.layout()
-        assert layout is not None and lines is not None
-        line = lines.lineAt(0)
-        top = layout.blockBoundingRect(first).top() + line.y()
-        size = self.language.sizeHint()
-        self.language.resize(size)
-        x = line.x() + line.naturalTextWidth() + LANGUAGE_GAP_PX
-        self.language.move(round(x), round(top + line.height() / 2 - size.height() / 2))
+    def _place_languages(self) -> None:
+        for language, block in self._language_places:
+            _place_language(language, block)
+        self.align_tabs()  # the texts above the first paragraph may be of another height now
 
-    def _paragraph(self, text: str, values: Callable[[], dict[str, str]] | None = None, bullet: bool = False) -> None:
+    def _paragraph(
+        self,
+        text: str,
+        values: Callable[[], dict[str, str]] | None = None,
+        bullet: bool = False,
+        names: bool = False,
+    ) -> None:
         """A paragraph (an item of a list, if `bullet`); `values` gives what goes into its {placeholders}, in the
-        current language."""
+        current language; `names`: the vertices' names in it ("S1") with their indices as subscripts."""
 
         def html() -> str:
             translated = tr(text)
+            if names:
+                translated = subscripted(translated)
             if values is not None:
                 translated = translated.format(**values())
             return _paragraph_html(translated, bullet)
 
         self._text().add(html)
 
-    def _title(self, text: str, number: int | None = None) -> None:
-        """The title of a part of the page, with its step number if it's one of the steps."""
+    def _lines(self, first: str, second: str, values: Callable[[], dict[str, str]] | None = None) -> None:
+        """A paragraph of two texts, the second on a line of its own; `values` gives what goes into the second one's
+        {placeholders}, in the current language."""
+
+        def html() -> str:
+            filled = tr(second) if values is None else tr(second).format(**values())
+            return _paragraph_html(f"{tr(first)}<br>{filled}", False)
+
+        self._text().add(html)
+
+    def _title(self, text: str, number: int | None = None, section: str | None = None) -> None:
+        """The title of a part of the page, with its step number if it's one of the steps; `section`: the name a link
+        to it goes by (`SECTION_SCHEME`)."""
+        if section is not None:
+            self._section_titles[section] = (self._text(), text)
 
         def html() -> str:
             title = _span(tr(text), TITLE_SIZE, bold=True)
@@ -282,9 +626,17 @@ class HelpWindow(QWidget):
         return caption
 
     def _player(
-        self, steps: Sequence[Step], before: Sequence[Sequence[Step]], size: QSize, shown: Box = AROUND_THE_NET
+        self,
+        steps: Sequence[Step],
+        before: Sequence[Sequence[Step]],
+        size: QSize,
+        shown: Box = AROUND_THE_NET,
+        project: Project | None = None,
+        coordinates: bool = False,
     ) -> DemoPlayer:
-        player = DemoPlayer(steps, before, size, shown, self._labels)
+        """An animation (`DemoPlayer`): of the default net, or of `project`'s, with the coordinates hint if wanted."""
+        player = DemoPlayer(steps, before, size, shown, project=project, coordinates=coordinates)
+        self.network_players.append(player)
         self.players.append(player)
         return player
 
@@ -301,10 +653,13 @@ class HelpWindow(QWidget):
         self._column.addLayout(grid)
         self._column.addSpacing(4)
 
-    def _resize_to_screen(self) -> None:
+    def restore_default_size(self) -> None:
+        """The size it's made for: the column's width with room around it, most of the screen's height. It opens with
+        it every time (`MainWindow.show_help`), whatever the user resized it to before."""
         screen = self.screen()
         height = 900 if screen is None else int(screen.availableGeometry().height() * 0.85)
-        self.resize(WINDOW_PX, height)
+        bar = self.tabs.tabBar()
+        self.resize(WINDOW_PX + (bar.sizeHint().width() if bar is not None else 0), height)  # the page, and the tabs
 
 
 def _points(size: float) -> str:
@@ -319,10 +674,41 @@ def _span(text: str, size: float, bold: bool = False, colour: str = TEXT) -> str
 
 
 def _paragraph_html(text: str, bullet: bool) -> str:
-    """A paragraph with roomy lines; an item of a list has a bullet before it, and its lines start after the bullet."""
-    style = f"line-height: 145%; margin: 0 0 12px 0; color: {TEXT};"
+    """A paragraph with roomy lines, all of the same height (a character another font draws, like "→", or a
+    subscript, doesn't push its line apart); an item of a list has a bullet before it, and its lines start after the
+    bullet."""
+    font = QFont(QApplication.font())
+    font.setPointSizeF(font.pointSizeF() * PARAGRAPH_SIZE)
+    line = f"line-height: {round(QFontMetricsF(font).height() * LINE_HEIGHT)}px; -qt-line-height-type: fixed;"
+    style = f"{line} margin: 0 0 12px 0; color: {TEXT};"
     size = _points(PARAGRAPH_SIZE)
     if bullet:
-        style = f"line-height: 145%; margin: 0 0 6px 22px; text-indent: -22px; color: {TEXT};"
+        style = f"{line} margin: 0 0 6px 22px; text-indent: -22px; color: {TEXT};"
         text = f"&#8226;&nbsp;&nbsp;&nbsp;{text}"
     return f'<p style="{style} {size}">{text}</p>'
+
+
+def _place_language(language: LanguageBox, block: TextBlock) -> None:
+    """`LANGUAGE_GAP_PX` after the name's end (the first line of `block`), its middle on the middle of the name's
+    line."""
+    document = block.document()
+    assert document is not None
+    layout = document.documentLayout()
+    first = document.firstBlock()
+    lines = first.layout()
+    assert layout is not None and lines is not None
+    line = lines.lineAt(0)
+    top = layout.blockBoundingRect(first).top() + line.y()
+    size = language.sizeHint()
+    language.resize(size)
+    x = line.x() + line.naturalTextWidth() + LANGUAGE_GAP_PX
+    language.move(round(x), round(top + line.height() / 2 - size.height() / 2))
+
+
+def _bold(text: str) -> str:
+    """`text` in bold, kept on one line."""
+    return f"<b>{escape(text).replace(' ', '&nbsp;')}</b>"
+
+
+def _link(section: str, text: str) -> str:
+    return f'<a href="{SECTION_SCHEME}:{section}" style="color: {ACCENT};">{text}</a>'

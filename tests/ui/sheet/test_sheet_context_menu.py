@@ -409,15 +409,16 @@ class TestMoveTheOrigin:
         view = window.sheet_view
         on_vertex = self.answer(close)
         view.right_pressed.emit(11.0, 13.0)
-        in_a_face = self.answer(close)
-        view.right_pressed.emit(11.5, 13.5)
-        assert on_vertex == [[False, False, True]] and in_a_face == [[False, False, False]]
+        assert on_vertex == [[False, False, True]]
+        menu = window.workspace.context_menu
+        assert menu is not None and not menu.offered_at(11.5, 13.5)  # nothing to choose there: no menu (2026-11-20)
         view.left_pressed.emit(11.5, 14 - inside(window))
         view.left_pressed.emit(11.5, 13.5)
         view.left_pressed.emit(12 - inside(window), 13.5)
         on_a_line_point = self.answer(close)
         view.right_pressed.emit(11.5, 13.5)  # CUT_EDITING, no drag: only this item
         assert on_a_line_point == [[False, False, True]]
+        assert not menu.offered_at(11.8, 13.2)  # CUT_EDITING away from the points: nothing to choose, no menu
         view.left_pressed.emit(11.5, 13.5)
         view.mouse_moved.emit(11.6, 13.6)
         dragging = self.answer(close)

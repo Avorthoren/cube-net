@@ -1,9 +1,12 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""The look of the net and the sheet the user can change (Settings -> Style): an app setting, not a project's one."""
+"""The look of the net and the sheet the user can change (Settings -> Style): the open document's (a project's or a
+template's), put in place for everything that paints."""
 
+from cube_net.core.style import Style, StyleError
 from cube_net.ui.style.apply import apply_style
-from cube_net.ui.style.style import DEFAULT_STYLE, Style, StyleError
+from cube_net.ui.style.default_style import DEFAULT_STYLE, fitted
+from cube_net.ui.style.look import DEFAULT_CUBE_LOOK, Look
 
-__all__ = ["DEFAULT_STYLE", "Style", "StyleError", "apply_style"]
+__all__ = ["DEFAULT_CUBE_LOOK", "DEFAULT_STYLE", "Look", "Style", "StyleError", "apply_style", "fitted"]

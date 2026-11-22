@@ -6,8 +6,9 @@ from pytestqt.qtbot import QtBot
 
 from cube_net.core.editor import EditorState
 from cube_net.ui.help.demo.demo_sheet import FRAME_MS, DemoSheet
-from cube_net.ui.help.demo.steps import Keys, Move, Wait, click
+from cube_net.ui.help.demo.steps import Keys, Move, RightClick, ToItem, Type, Wait, click
 from cube_net.ui.sheet.cursors import CursorKind
+from cube_net.ui.sheet.sheet_context_menu import MOVE_ORIGIN, PLACE_VERTEX
 
 
 def make(qtbot: QtBot) -> DemoSheet:
@@ -51,15 +52,12 @@ def test_held_keys_go_with_the_mouse(qtbot: QtBot) -> None:
     assert sheet.view.ctrl_held()
 
 
-def test_labels_of_the_cut_lines_new_points_too(qtbot: QtBot) -> None:
-    sheet = DemoSheet(QSize(560, 400), labels=True)
-    qtbot.addWidget(sheet)
+def test_no_vertex_labels(qtbot: QtBot) -> None:
+    sheet = make(qtbot)
     item = sheet.view.net_item()
-    assert item is not None and item.labels() is not None
+    assert item is not None and item.labels() is None
     for _ in sheet.play([Move((11.0, 14.0), 0), *click(), Move((11.6, 12.2), 0), *click()], instant=True):
         pass
-    assert sheet.workspace.cut_tool.item.labels() != ()  # the new point is named
-    sheet.set_labels_shown(False)
     assert item.labels() is None and sheet.workspace.cut_tool.item.labels() == ()
 
 
@@ -81,3 +79,231 @@ def test_no_coordinates_hint_in_the_animations(qtbot: QtBot) -> None:
     sheet = DemoSheet(QSize(560, 400))
     assert sheet.workspace.sheet_cursor is None
     assert sheet.findChildren(CoordinatesHint) == []
+
+
+def play(sheet: DemoSheet, steps: list) -> None:
+    for _ in sheet.play(steps, instant=True):
+        pass
+
+
+# A cut started at the default net's A_1, and the mouse on the net beside it.
+CUTTING = [Move((11.0, 14.0), 0), *click(), Move((11.4, 12.6), 0)]
+
+
+def test_a_right_click_opens_the_sheets_menu_there(qtbot: QtBot) -> None:
+    sheet = make(qtbot)
+    play(sheet, [*CUTTING, RightClick()])
+    menu = sheet.menu
+    assert menu is not None and menu.isVisible()
+    assert [item.enabled for item in menu.items] == [True, True, False]  # no drawn point under the mouse to move to
+    play(sheet, [ToItem(PLACE_VERTEX)])
+    assert menu.current() == PLACE_VERTEX  # highlighted under the mouse
+    assert sheet.pointer.kind() is CursorKind.ARROW
+
+
+def test_a_click_off_its_items_closes_the_menu(qtbot: QtBot) -> None:
+    sheet = make(qtbot)
+    play(sheet, [*CUTTING, RightClick(), ToItem(MOVE_ORIGIN), *click()])  # disabled
+    assert sheet.menu is None and sheet.small_window is None
+    assert sheet.workspace.editor.state is EditorState.CUTTING  # the click didn't reach the sheet
+
+
+def test_place_a_vertex_typed_into_its_window(qtbot: QtBot) -> None:
+    from fractions import Fraction as F
+
+    from cube_net.core.geometry import Vec
+
+    sheet = make(qtbot)
+    play(sheet, [*CUTTING, RightClick(), ToItem(PLACE_VERTEX), *click()])
+    window = sheet.small_window
+    assert window is not None and window.isVisible() and window.focusWidget() is window.y.numerator
+    play(sheet, [Type("25\t2\t23\t2")])  # the numerator typed, its denominator is 1 until typed too
+    assert [field.text() for field in (window.y.numerator, window.y.denominator)] == ["25", "2"]
+    assert [field.text() for field in (window.x.numerator, window.x.denominator)] == ["23", "2"]
+    play(sheet, [Type("\n")])
+    assert window.message.isHidden(), window.message.text()
+    assert sheet.small_window is None
+    line = sheet.workspace.editor.cut_line
+    assert line is not None and line.last.position == sheet.workspace.editor.origin.sheet(Vec(F(23, 2), F(25, 2)))
+
+
+def test_the_built_in_cubes_look_whatever_is_in_place(qtbot: QtBot) -> None:
+    """Help's animations look the same whatever is open: another style, a body's colours, a template."""
+    from dataclasses import replace
+
+    from PyQt6.QtGui import QImage
+
+    from cube_net.core.body import CUBE
+    from cube_net.ui import palette
+    from cube_net.ui.style import DEFAULT_CUBE_LOOK, DEFAULT_STYLE, apply_style
+    from cube_net.ui.style.apply import style_in_place
+
+    def picture() -> QImage:
+        sheet = make(qtbot)
+        play(sheet, [*CUTTING, Move((11.6, 12.2), 0), *click()])
+        return sheet.grab().toImage().convertToFormat(QImage.Format.Format_ARGB32)
+
+    plain = picture()
+    other = replace(DEFAULT_STYLE, edge_width=1.0, vertex_radius=3.0, hatch_columns=1.0, dashes_per_unit=2.0)
+    colors = ("#111111",) * len(CUBE.colors)
+    apply_style(other)
+    palette.set_face_colors(colors, CUBE)
+    try:
+        assert make(qtbot).look == DEFAULT_CUBE_LOOK
+        assert picture() == plain
+        assert style_in_place() == other and palette.face_colors_in_place() == (colors, CUBE)  # still the project's
+    finally:
+        palette.set_face_colors(CUBE.colors, CUBE)
+
+
+def test_set_slope_typed_into_its_window(qtbot: QtBot) -> None:
+    from cube_net.core.geometry import Vec
+    from cube_net.ui.sheet.set_slope_window import SetSlopeWindow
+    from cube_net.ui.sheet.sheet_context_menu import SET_SLOPE
+
+    sheet = make(qtbot)
+    play(sheet, [*CUTTING, RightClick(), ToItem(SET_SLOPE), *click()])
+    assert isinstance(sheet.small_window, SetSlopeWindow)
+    play(sheet, [Type("-2\t1\n")])
+    assert sheet.small_window is None
+    slope = sheet.workspace.cut_tool.slope()
+    assert slope is not None and slope.cross(Vec(1, -2)) == 0
+
+
+def test_move_the_origin_typed_into_its_window(qtbot: QtBot) -> None:
+    from fractions import Fraction as F
+
+    from cube_net.core.geometry import Vec
+    from cube_net.ui.sheet.move_origin_window import MoveOriginWindow
+
+    sheet = make(qtbot)
+    play(sheet, [Move((11.0, 14.0), 0), RightClick(), ToItem(MOVE_ORIGIN), *click()])  # on the vertex A_1
+    assert isinstance(sheet.small_window, MoveOriginWindow)
+    play(sheet, [Type("\t\t-8\t3\n")])  # its x only
+    assert sheet.small_window is None
+    origin = sheet.workspace.editor.origin
+    assert origin.shown(Vec(11, 14)) == Vec(F(-8, 3), 14)
+
+
+def test_the_coordinates_hint_if_wanted(qtbot: QtBot) -> None:
+    from cube_net.core.geometry import Vec
+    from cube_net.ui.sheet.coordinates_text import coordinate_lines
+
+    assert make(qtbot).coordinates_hint is None
+    sheet = DemoSheet(QSize(560, 400), coordinates=True)
+    qtbot.addWidget(sheet)
+    sheet.show()
+    qtbot.waitExposed(sheet)
+    play(sheet, [Move((11.0, 14.0), 0)])  # A_1
+    assert sheet.coordinates_hint is not None and sheet.coordinates_hint.lines() == coordinate_lines(Vec(11, 14))
+
+
+def make_template(qtbot: QtBot, panel: bool = False) -> DemoSheet:
+    from cube_net.ui.help.demo import template_scenes
+
+    shown = template_scenes.PANEL_SHOWN if panel else template_scenes.SHOWN
+    sheet = DemoSheet(template_scenes.SIZE, shown, template=template_scenes.folds_start(), panel=panel)
+    qtbot.addWidget(sheet)
+    sheet.show()
+    qtbot.waitExposed(sheet)
+    return sheet
+
+
+def test_a_template_without_a_panel_has_no_buttons(qtbot: QtBot) -> None:
+    from cube_net.ui.template.template_tool import TemplateTool
+
+    sheet = make_template(qtbot)
+    assert isinstance(sheet.tool, TemplateTool) and sheet.workspace is None
+    assert sheet.panel is None and sheet.validate_button is None
+
+
+def test_the_panel_down_the_left_side_with_all_its_buttons_and_the_template_right_of_it(qtbot: QtBot) -> None:
+    from PyQt6.QtCore import QPointF
+
+    from cube_net.ui.help.demo import template_scenes
+    from cube_net.ui.help.demo.steps import DRAW_HOLE, VALIDATE
+
+    sheet = make_template(qtbot, panel=True)
+    panel = sheet.panel
+    assert panel is not None and sheet.validate_button is panel.validate
+    assert list(panel.buttons) == [DRAW_HOLE, VALIDATE]
+    assert panel.area().topLeft() == QPoint(0, 0) and panel.area().height() == sheet.height()
+    left = sheet.view.from_sheet(QPointF(float(template_scenes.PANEL_SHOWN.lo.x), 50.0)).x()
+    assert left >= panel.width() - 1
+
+
+def test_the_mouse_goes_to_validate_and_clicks_it(qtbot: QtBot) -> None:
+    from cube_net.ui.dialogs.message_window import MessageWindow
+    from cube_net.ui.help.demo.steps import VALIDATE, Press, ToWidget
+
+    sheet = make_template(qtbot, panel=True)
+    play(sheet, [Move((39.0, 52.0), 0), ToWidget(VALIDATE, 0)])
+    assert sheet.validate_button is not None
+    button = sheet.validate_button.button
+    assert sheet._button_here() is button and button.testAttribute(Qt.WidgetAttribute.WA_UnderMouse)
+    assert sheet.pointer.kind() is CursorKind.ARROW
+    play(sheet, [Press()])
+    assert button.isDown()
+    play(sheet, click()[1:])
+    assert not button.isDown()
+    assert isinstance(sheet.small_window, MessageWindow)  # (its faces have no colours)
+    play(sheet, [Type("\n")])
+    assert sheet.small_window is None
+
+
+def test_draw_hole_on_the_panel_starts_a_hole(qtbot: QtBot) -> None:
+    from cube_net.ui.help.demo import template_scenes
+    from cube_net.ui.help.demo.steps import DRAW_HOLE, ToWidget
+    from cube_net.ui.template.template_tool import TemplateTool
+
+    sheet = DemoSheet(
+        template_scenes.SIZE, template_scenes.PANEL_SHOWN, template=template_scenes.loop_start(), panel=True
+    )
+    qtbot.addWidget(sheet)
+    sheet.show()
+    assert sheet.panel is not None and sheet.panel.draw_hole is not None
+    play(sheet, [Move((39.0, 52.0), 0), ToWidget(DRAW_HOLE, 0), *click()])
+    assert isinstance(sheet.tool, TemplateTool) and sheet.tool.drawing_hole
+    assert not sheet.panel.draw_hole.button.isEnabled()  # as the window's, while a hole is drawn
+
+
+def test_a_click_on_the_panel_off_its_buttons_reaches_nothing(qtbot: QtBot) -> None:
+    from cube_net.ui.help.demo import template_scenes
+    from cube_net.ui.template.template_tool import TemplateTool
+
+    sheet = DemoSheet(
+        template_scenes.SIZE, template_scenes.PANEL_SHOWN, template=template_scenes.empty_start(), panel=True
+    )
+    qtbot.addWidget(sheet)
+    sheet.show()
+    assert sheet.panel is not None
+    bottom = sheet.view.to_sheet(QPointF(sheet.panel.width() / 2, sheet.height() - 20))
+    play(sheet, [Move((bottom.x(), bottom.y()), 0), *click()])
+    assert isinstance(sheet.tool, TemplateTool) and sheet.tool.editor.template.vertices == ()
+
+
+def test_a_double_click_on_a_face_opens_its_colour_whose_code_is_selected_and_pasted_over(qtbot: QtBot) -> None:
+    from PyQt6.QtWidgets import QColorDialog, QLineEdit
+
+    from cube_net.core.template import ValidationStatus
+    from cube_net.ui.help.demo import template_scenes
+    from cube_net.ui.help.demo.steps import COLOR_CODE, DoubleClick, Paste, ToWidget
+    from cube_net.ui.template.template_tool import TemplateTool
+
+    sheet = make_template(qtbot, panel=True)
+    assert isinstance(sheet.tool, TemplateTool) and sheet.validate_button is not None
+    sheet.validate_button.set_status(ValidationStatus.INVALID)
+    play(sheet, [Move(template_scenes.GREEN_PIECES[0], 0), DoubleClick()])
+    assert isinstance(sheet.small_window, QColorDialog)
+    window = sheet.small_window
+    play(sheet, [ToWidget(COLOR_CODE, 0), *click()])
+    field = window.focusWidget()
+    assert isinstance(field, QLineEdit) and field.text() == "#ffffff" and not field.hasSelectedText()
+    play(sheet, [Keys(Qt.KeyboardModifier.ControlModifier), Type("a", 0)])
+    assert field.selectedText() == "#ffffff" and sheet.pointer._ctrl  # (the key cap shown)
+    play(sheet, [Paste(template_scenes.GREEN), Keys(Qt.KeyboardModifier.NoModifier)])
+    assert field.text() == template_scenes.GREEN and window.currentColor().name().upper() == template_scenes.GREEN
+    play(sheet, [Type("\n")])
+    assert sheet.small_window is None
+    assert [face.color for face in sheet.tool.editor.template.faces].count(template_scenes.GREEN) == 1
+    assert sheet.validate_button.status is ValidationStatus.UNDEFINED  # not the template validated any more

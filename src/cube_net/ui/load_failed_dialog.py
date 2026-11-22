@@ -19,7 +19,7 @@ class AfterLoadFailed(Enum):
 def ask_after_load_failed(parent: QWidget | None, message: str) -> AfterLoadFailed:
     """Tell why it failed, and suggest a new project. Closing the question means just that."""
     window = MessageWindow(
-        tr("Can't open the project"),
+        tr("Can't open the file"),
         message,
         tr("Start a new project, or open another one?"),
         MessageIcon.WARNING,

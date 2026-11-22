@@ -99,7 +99,7 @@ class PreferencesTab(QWidget):
         bind(
             self.max_zoom,
             self.max_zoom.setToolTip,
-            "How far in the sheet can be zoomed: how many pixels the edge of the cube takes",
+            "How far in the sheet can be zoomed: how many pixels a unit of length takes",
         )
         self.max_zoom.valueChanged.connect(self.max_zoom_changed)
         layout = QFormLayout(self)

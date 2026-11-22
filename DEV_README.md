@@ -1,7 +1,9 @@
 # Cube Net: for developers
 
 How to run Cube Net from its sources, test it, release it, and run its builds. What the application does and how
-it's built is in [docs/idea.txt](docs/idea.txt) (the specification) and [docs/plan.md](docs/plan.md) (the design).
+it's built is in [docs/idea.txt](docs/idea.txt) (the specification) and [docs/plan.md](docs/plan.md) (the design);
+templates and bodies other than the cube in [docs/template_idea.txt](docs/template_idea.txt) and
+[docs/template_plan.md](docs/template_plan.md).
 
 ## 1. Running from the sources
 
@@ -29,7 +31,7 @@ python main.py
 
 | Argument | What it does |
 |---|---|
-| `PROJECT_FILE` | Opens that project (`.cubenet`) instead of the one worked on last. If it can't be opened, the application asks what to do, as when the last one can't. Only the first argument that doesn't start with `-` counts. |
+| `PROJECT_FILE` | Opens that project (`.cubenet`) or template (`.nettemplate`) instead of the one worked on last. If it can't be opened, the application asks what to do: start a new one, or open another file. Only the first argument that doesn't start with `-` counts. |
 | `--smoke-test` | The builds' launch test: the window opens and the application quits by itself after 1.5 s, with exit code 0. It uses throwaway settings (the real ones aren't read or changed), opens no project and checks for no update. |
 | Qt's own options | Qt takes these before the application sees its arguments. For example `-platform xcb` or `-platform wayland` (Linux), `-platform offscreen` (no window on the screen), `-reverse` (right-to-left layout). |
 
@@ -37,7 +39,7 @@ python main.py
 
 | Variable | What it does |
 |---|---|
-| `QT_QPA_PLATFORM` | Like `-platform`: `xcb`, `wayland`, `offscreen`. The tests use `offscreen`. |
+| `QT_QPA_PLATFORM` | Like `-platform`: `xcb`, `wayland`, `offscreen`. The tests set `offscreen` themselves (`tests/conftest.py`) unless it's set already. |
 | `CUBE_NET_UPDATES_URL` | Where the update check asks for the releases, instead of GitHub (a JSON file shaped like GitHub's list of releases, or like a single release). For trying updates without publishing one: see `scripts/make_test_release.py` below. |
 
 ### Where it keeps its files
@@ -48,33 +50,48 @@ python main.py
 | Windows | registry, `HKEY_CURRENT_USER\Software\cube_net` | `%APPDATA%\cube_net\Cube Net\sessions` |
 | macOS | `~/Library/Preferences/com.cube-net.Cube Net.plist` | `~/Library/Application Support/cube_net/Cube Net/sessions` |
 
-Every copy of the application uses the same settings: a run from the sources, a build, an installed release. The
-date of the last automatic update check is among them (`last_check` under `[updates]` in the Linux file): delete it,
-and the next start checks again.
+A run from the sources has settings and session logs of its own: "Cube Net (dev)" in place of "Cube Net" above
+(`~/.config/cube_net/Cube Net (dev).conf`, say), so it never changes the installed application's (its last project
+above all: one saved in a newer format couldn't be reopened by an older installed version). The builds and installed
+releases share theirs. The date of the last automatic update check is among the settings (`last_check` under
+`[updates]` in the Linux file): delete it, and the next start checks again.
 
 A session log records what the user did, for reproducing a problem: `python -m cube_net.ui.session.snapshots LOG`
-turns its project snapshots into `.cubenet` files.
+turns its snapshots into files, `.cubenet` for a project and `.nettemplate` for a template.
+
+A crash report (`crash-report-<time>-<pid>.log`, in the same folder) is written when an exception nothing caught
+happens: the window tells the user where it is, and the application closes (`src/cube_net/ui/crash`). It has the
+traceback, the environment (versions, system, screen, language, time), the state of the application as a session log
+starts with it, the latest ~500 lines of input (kept in memory all the time, recording or not), and the session log,
+if one was being recorded. Its first snapshot is the document open at the crash, unsaved changes included:
+`python -m cube_net.ui.session.snapshots REPORT` turns it into a file as well.
+
+An error report (`error-report-<time>-<pid>.log`) is written when a safety net refuses an action because it would have
+corrupted the project (a bug: in a template, faces that don't add up); the application goes on. It has the stack
+where it was refused instead of a traceback, and, after the state, the refused template's snapshot. That one can be
+extracted with the same command, but not opened: it's the broken template (its data is gzipped JSON).
 
 ## 2. Tests and checks
 
 From the repository's root, with the virtual environment active:
 
 ```bash
-QT_QPA_PLATFORM=offscreen python -m pytest -q
+python -m pytest -q
 ```
 
-About 1700 tests, about two minutes. `QT_QPA_PLATFORM=offscreen` keeps their windows off the screen. Some useful
-variants:
+Their windows stay off the screen: `tests/conftest.py` sets `QT_QPA_PLATFORM=offscreen` unless the variable is set
+already (`QT_QPA_PLATFORM=xcb python -m pytest ...` shows them). Some useful variants:
 
 ```bash
-QT_QPA_PLATFORM=offscreen python -m pytest -q tests/core
+python -m pytest -q tests/core
 ```
 ```bash
-QT_QPA_PLATFORM=offscreen python -m pytest -q tests/ui/test_main_window.py -k TestUpdates
+python -m pytest -q tests/ui/main_window/test_window_help_and_updates.py -k TestUpdates
 ```
 
-The tests mirror the sources: `tests/core/test_version.py` tests `src/cube_net/core/version.py`, and so on. A few
-of them check the project as a whole:
+The tests mirror the sources: `tests/core/test_version.py` tests `src/cube_net/core/version.py`, and so on (the main
+window's are many: they're a folder of modules by topic, `tests/ui/main_window/`). A few of them check the project as a
+whole:
 
 - `tests/ui/i18n/test_russian.py`: every text the user sees has a Russian translation (`src/cube_net/ui/i18n/russian.py`).
 - `tests/test_license.py`: every Python file starts with the copyright and license lines.
@@ -101,7 +118,8 @@ python -m mypy
 | Script | What it does |
 |---|---|
 | `python scripts/make_icon.py` | Draws the application's icon (PNG, `.ico`, `.icns`). Run it if the default net or its default colours change. |
-| `python scripts/make_readme_animation.py` | Records the README's animation (`docs/media/cube-net.png`) with the application itself, about 20 s. Run it if the default look changes: style, drawing, mouse pointers. |
+| `python scripts/make_readme_animation.py` | Records the README's animation (`docs/media/readme-animation-net.png`) with the application itself, from `src/cube_net/ui/help/demo/torus.cubenet`, about 30 s. Run it if the look changes: drawing, mouse pointers, the right click's menu, Place a vertex's window. |
+| `python -m scripts.embed_template projects/torus.nettemplate` | Makes the built-in Cube with a hole (File -> New) from the author's template file: only the template, its origin and its style go into `src/cube_net/core/project/builtin/cube_with_a_hole.nettemplate`. The template must be valid and have a style. |
 | `python scripts/make_test_release.py PACKAGE VERSION` | Makes a fake release of a build's package, on the disk, for trying "Download and update" without publishing anything. It prints the `CUBE_NET_UPDATES_URL=...` to start the application with. |
 | `python scripts/measure_code.py` | How much there is of everything: characters (without indentation, and without comments, separately) and lines of the app's source, the tests, developer scripts, build and release files, and docs, and the biggest files. It counts the files git tracks; a new kind of file it doesn't know is listed at the end, to be given a category in the script. |
 | `python -m scripts.build` | Builds the application for this system, as the release workflow does (see below). Needs PyInstaller, and on Linux appimagetool (`$APPIMAGETOOL`), on Windows Inno Setup. |
@@ -116,9 +134,9 @@ python -m mypy
 > [!WARNING]
 > **Generated pictures.** After changing how the application looks by default, make sure you also updated the icons
 > (`src/cube_net/ui/icons/cube_net.png`, `packaging/icons/cube_net.ico` and `.icns`: they're the default net in the
-> default face colours) with `python scripts/make_icon.py`, and the README's animation (`docs/media/cube-net.png`)
-> with `python scripts/make_readme_animation.py`. Tests fail while they're out of date, so `release.sh` would stop
-> at its tests.
+> default face colours) with `python scripts/make_icon.py`, and the README's animation
+> (`docs/media/readme-animation-net.png`) with `python scripts/make_readme_animation.py`. Tests fail while they're out
+> of date, so `release.sh` would stop at its tests.
 
 A release is a version tag on `master`, pushed to GitHub: the workflow then builds it and makes a draft release.
 `release.sh` does all of it, after checking that everything is in order.

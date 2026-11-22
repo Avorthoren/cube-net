@@ -18,8 +18,8 @@ from pathlib import Path
 from PyQt6.QtCore import QBuffer, QIODevice, QRect, Qt
 from PyQt6.QtGui import QColor, QImage, QPainter
 
+from cube_net.core.body import CUBE
 from cube_net.core.net import Net, default_net
-from cube_net.ui.style import DEFAULT_STYLE
 
 ROOT = Path(__file__).resolve().parent.parent
 WINDOW_ICON = ROOT / "src/cube_net/ui/icons/cube_net.png"
@@ -67,7 +67,7 @@ def draw(size: int) -> QImage:
         corners = [he.origin.position for he in Net.region_cycle(region)]
         x = int(min(c.x for c in corners) - box.lo.x)
         y = int(box.hi.y - max(c.y for c in corners))  # the sheet's y goes up, the picture's down
-        painter.setBrush(QColor(DEFAULT_STYLE.face_colors[region.face - 1]))
+        painter.setBrush(QColor(CUBE.colors[region.face - 1]))
         painter.drawRect(QRect(left + x * unit, top + y * unit, unit, unit))
     painter.end()
     return image

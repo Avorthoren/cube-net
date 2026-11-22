@@ -7,9 +7,10 @@ from random import Random
 
 import pytest
 
-from cube_net.core.cutting import MAX_POINTS_AFTER_FIRST, CutLine, CutPoint
+from cube_net.core.body import CUBE
+from cube_net.core.cutting import MAX_POINTS_AFTER_FIRST, CutLine, CutPoint, TooLongKind
 from cube_net.core.editor import Editor, EditorState
-from cube_net.core.geometry import Vec, quantize
+from cube_net.core.geometry import MAX_NUMBER_DIGITS, Axis, LongNumber, Part, Vec, digits, quantize
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import HalfEdge, Net, NetVertex, boundary_vertex_at, default_net, validate_net
 
@@ -21,7 +22,7 @@ def net() -> Net:
 
 @pytest.fixture
 def cut(net: Net) -> Callable[[str], HalfEdge]:
-    labels = vertex_labels(net, PointLabels())
+    labels = vertex_labels(net, PointLabels(CUBE))
     by_name = {f"{labels[he.origin]}-{labels[he.destination]}": he for he in net.boundary_edges()}
     return lambda name: by_name[name]
 
@@ -56,10 +57,20 @@ def test_click_off_any_cut_in_default_does_nothing(net: Net) -> None:
 def test_rejection_keeps_the_line_and_reports_the_segment(net: Net, cut: Callable[[str], HalfEdge]) -> None:
     editor = Editor(net)
     editor.click(v("11.5", "14"), cut("B_1-A_1"))
-    rejection = editor.click(v("12.5", "13.5"), None)  # outside the net
+    rejection = editor.click(v("12.5", "12"), None)  # through the perimeter's vertex D_1 at (12, 13)
     assert rejection is not None
-    assert rejection.segment == (v("11.5", "14"), v("12.5", "13.5"))
+    assert rejection.segment == (v("11.5", "14"), v("12.5", "12"))
     assert positions(editor) == [v("11.5", "14")]
+
+
+def test_points_outside_the_net_and_the_line_ends_where_it_divides_it(net: Net, cut: Callable[[str], HalfEdge]) -> None:
+    """From the top of face 1 down, out of it into the empty corner on the left: the line divides the net where it
+    leaves it, and ends there (the point clicked outside is dropped)."""
+    editor = Editor(net)
+    editor.click(v("11.5", "14"), cut("B_1-A_1"))
+    assert editor.click(v("10.5", "13.5"), None) is None  # outside the net
+    assert editor.state is EditorState.CUT_EDITING
+    assert positions(editor) == [v("11.5", "14"), v("11", "13.75")]  # where it left face 1
 
 
 def test_two_images_of_the_same_point_may_be_the_ends(net: Net, cut: Callable[[str], HalfEdge]) -> None:
@@ -748,7 +759,9 @@ class TestLongSession:
         editor.undo()
         editor.undo()
 
-    def test_coordinates_stay_small_and_the_net_valid(self) -> None:
+    def test_numbers_never_longer_than_the_limit_and_the_net_valid(self) -> None:
+        """Crossings are exact, so numbers grow with the generations of cuts (to ~1000 digits by 30 of them): an action
+        that would make one longer than the limit is refused, the net stays as it was."""
         rng = Random(7)
         editor = Editor(default_net())
         tries = 0
@@ -757,9 +770,62 @@ class TestLongSession:
             self.try_a_cut(editor, rng)
         assert editor.approved_cuts == 30
         validate_net(editor.net)
-        positions = [v.position for v in editor.net.vertices]
-        largest = max(max(p.x.denominator, p.y.denominator) for p in positions)
-        assert largest < 10**100  # with the exact closest point it's thousands of digits by 45 cuts, and growing fast
+        numbers = [n for v in editor.net.vertices for c in (v.position.x, v.position.y) for n in c.as_integer_ratio()]
+        assert max(digits(n) for n in numbers) <= MAX_NUMBER_DIGITS
+
+
+class TestTooLongNumbers:
+    """An action that would make a number longer than `MAX_NUMBER_DIGITS` digits is refused, saying which point."""
+
+    # A step that makes a point near x = 11.5 as long as it may be (its numerator: 2100 digits), while a point 2/5 or
+    # 4/5 of it away (where the line crosses something) has one digit more.
+    E = F(1, 7 * 10 ** (MAX_NUMBER_DIGITS - 2))
+
+    def start(self, editor: Editor, cut: Callable[[str], HalfEdge]) -> None:
+        assert editor.start_at(editor.point_on_cut(v("11.5", "14"), cut("B_1-A_1"))) is None
+
+    def test_a_vertex(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        long = Vec(F(23, 2), 14 - F(1, 10**MAX_NUMBER_DIGITS))
+        rejection = editor.start_at(CutPoint(long, cut("B_1-A_1")))
+        assert rejection is not None and rejection.too_long is not None
+        assert rejection.too_long.kind is TooLongKind.VERTEX and rejection.too_long.position == long
+        assert rejection.too_long.number == LongNumber(Axis.Y, Part.NUMERATOR, MAX_NUMBER_DIGITS + 2)
+        assert editor.state is EditorState.DEFAULT and not editor.history.can_undo  # nothing happened
+
+    def test_the_end_where_the_line_is_cut_short(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        self.start(editor, cut)
+        beyond = Vec(F(23, 2) + self.E, 9)  # fine itself; the line leaves the net at y = 10, x = 11.5 + 4/5 * E
+        rejection = editor.add_point(CutPoint(beyond))
+        assert rejection is not None and rejection.too_long is not None
+        assert rejection.too_long.kind is TooLongKind.END
+        assert rejection.too_long.position == Vec(F(23, 2) + self.E * F(4, 5), 10)
+        assert rejection.too_long.edge is not None and rejection.too_long.number.digits > MAX_NUMBER_DIGITS
+        assert positions(editor) == [v("11.5", "14")]  # the line as it was
+
+    def test_where_the_line_crosses_a_fold(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        self.start(editor, cut)
+        rejection = editor.add_point(CutPoint(Vec(F(23, 2) + self.E, F(23, 2))))  # inside, below the fold at y = 13
+        assert rejection is not None and rejection.too_long is not None
+        assert rejection.too_long.kind is TooLongKind.FOLD_CROSSING
+        assert rejection.too_long.position == Vec(F(23, 2) + self.E * F(2, 5), 13)
+        assert rejection.too_long.edge is not None
+
+    def test_the_origin(self, net: Net) -> None:
+        from cube_net.core.origin import Origin
+
+        editor = Editor(net)
+        long = Vec(F(1, 10**MAX_NUMBER_DIGITS), 0)
+        rejection = editor.move_origin(Origin(long, long))
+        assert rejection is not None and rejection.too_long is not None
+        assert rejection.too_long.kind is TooLongKind.ORIGIN and editor.origin.position == Vec(0, 0)
+
+    def test_short_numbers_are_fine(self, net: Net, cut: Callable[[str], HalfEdge]) -> None:
+        editor = Editor(net)
+        self.start(editor, cut)
+        assert editor.add_point(CutPoint(Vec(F(23, 2) + self.E * 5, F(23, 2)))) is None  # a fifth of it: short again
 
 
 class TestTypedPoints:
@@ -902,3 +968,29 @@ class TestMoveOrigin:
         assert editor.origin == moved
         assert editor.undo() and editor.origin == moved  # undoing the point leaves the origin
         assert editor.undo() and editor.origin == DEFAULT_ORIGIN
+
+
+def test_a_refusal_says_which_rule_of_the_line_it_is() -> None:
+    """Started at A_1 (11, 14): a point far off the net, (-5, -5), straight from there leaves the net at once. Off the
+    net is fine as such: from a point inside, the line goes there, and ends where it leaves the net."""
+    from cube_net.core.cutting import LineProblem
+
+    def started() -> Editor:
+        editor = Editor(default_net())
+        a1 = next(vertex for vertex in editor.net.vertices if vertex.position == Vec(11, 14))
+        assert editor.click(a1.position, None, vertex=a1) is None
+        return editor
+
+    editor = started()
+    rejection = editor.add_point(CutPoint(Vec(-5, -5)))
+    assert rejection is not None and rejection.problem is LineProblem.NOT_INTO_THE_NET
+    rejection = editor.add_point(CutPoint(Vec(11, 14)))
+    assert rejection is not None and rejection.problem is LineProblem.NO_LENGTH
+    editor = started()
+    assert editor.add_point(CutPoint(Vec(F(23, 2), F(27, 2)))) is None
+    assert editor.add_point(CutPoint(Vec(-5, -5))) is None
+    assert editor.state is EditorState.CUT_EDITING  # it ends where it leaves the net
+    line = editor.cut_line
+    assert line is not None
+    rejection = editor.move_point(1, CutPoint(Vec(11, 14)))  # onto the first point
+    assert rejection is not None and rejection.problem is LineProblem.NO_LENGTH

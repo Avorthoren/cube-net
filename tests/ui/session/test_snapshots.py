@@ -97,3 +97,19 @@ class TestCommand:
         done = subprocess.run([sys.executable, "-c", code, str(log)], capture_output=True, text=True)
         assert done.returncode == 0, done.stderr
         assert (tmp_path / "session-1-1.cubenet").exists()
+
+
+def test_a_template_comes_out_as_a_template_file(tmp_path: Path) -> None:
+    from cube_net.core.geometry import Vec
+    from cube_net.core.project import TemplateDocument, load_document
+    from cube_net.core.template import TemplateEditor
+
+    editor = TemplateEditor()
+    editor.add_point(Vec(10, 10))
+    log = tmp_path / "session.log"
+    document = TemplateDocument(editor.snapshot(), editor.history)
+    log.write_text(f"0.001 state snapshot {snapshot_text(document)}\n", encoding="utf-8")
+    (path,) = extract_snapshots(log)
+    assert path.name == "session-1.nettemplate"
+    loaded = load_document(path)
+    assert isinstance(loaded, TemplateDocument) and loaded.state == document.state

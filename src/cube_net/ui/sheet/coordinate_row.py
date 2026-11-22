@@ -5,6 +5,8 @@
 Move the origin): its numerator, its denominator, and what it's worth.
 
     y: [numerator] / [denominator]  ≈ 12.922
+
+Every edit of the numerator sets the denominator to 1: a whole number typed is the coordinate.
 """
 
 from fractions import Fraction
@@ -27,6 +29,7 @@ class CoordinateRow:
         grid.addWidget(QLabel("/", parent), row, 2)
         grid.addWidget(self.denominator, row, 3)
         grid.addWidget(self.worth, row, 4)
+        self.numerator.textEdited.connect(self._whole)
         self.numerator.textChanged.connect(self.show_worth)
         self.denominator.textChanged.connect(self.show_worth)
         self.set_value(value)
@@ -46,6 +49,12 @@ class CoordinateRow:
     def set_typed(self, typed: bool) -> None:
         for field in (self.numerator, self.denominator):
             field.setEnabled(typed)
+
+    def _whole(self) -> None:
+        """The numerator was edited (typed, deleted, pasted, undone: anything but the program's setting it): the
+        denominator becomes 1, so what's typed is the coordinate as it is (asked for on 2026-11-20)."""
+        if self.denominator.text() != "1":
+            set_number(self.denominator, 1)
 
     def show_worth(self) -> None:
         value = self.value()

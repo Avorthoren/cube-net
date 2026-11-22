@@ -7,9 +7,10 @@ Scene coordinates are cube units with the Y axis pointing up (the view's transfo
 from the core are used as-is.
 """
 
+import math
 from collections.abc import Callable
 
-from PyQt6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QPoint, QPointF, QRect, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QCursor,
     QGuiApplication,
@@ -31,6 +32,8 @@ from cube_net.ui import palette
 from cube_net.ui.sheet import zoom
 from cube_net.ui.sheet.net_item import NetItem
 from cube_net.ui.sheet.sheet_item import SheetItem
+from cube_net.ui.sheet.view_place import ViewPlace
+from cube_net.ui.style.look import Look
 
 type HitTest = Callable[[float, float], bool]
 """Tells whether a sheet point (x, y) lies on the cube net."""
@@ -66,6 +69,14 @@ class SheetView(QGraphicsView):
     # Left button released at a sheet point (x, y), unless it ended panning.
     left_released = pyqtSignal(float, float)
 
+    # A left press that would pan the sheet was released without moving (a click on what the tools don't claim) at a
+    # sheet point (x, y).
+    pan_clicked = pyqtSignal(float, float)
+
+    # Left button double-clicked at a sheet point (x, y): the second press (the first one came as a press, which may
+    # have started panning, and a release).
+    left_double_clicked = pyqtSignal(float, float)
+
     # Right button pressed at a sheet point (x, y) (not while the sheet is being dragged).
     right_pressed = pyqtSignal(float, float)
 
@@ -81,6 +92,8 @@ class SheetView(QGraphicsView):
         self._sheet_item = SheetItem()
         self._scene().addItem(self._sheet_item)
         self._net_item: NetItem | None = None
+        # The view's own look, which it paints in and hit-tests with (None: the open document's, in place anyway).
+        self._look: Look | None = None
 
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.NoAnchor)  # zoom anchoring is done manually
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.NoAnchor)
@@ -97,11 +110,15 @@ class SheetView(QGraphicsView):
         self._max_scale = zoom.DEFAULT_MAX_ZOOM
         self._press_claim: HitTest = lambda _x, _y: False
         self._pan_last: QPoint | None = None
+        # Where a press that pans began, until the mouse goes further than a drag starts (then it's no click).
+        self._pan_start: QPoint | None = None
         self._panning_enabled = True
         self._press_modifiers = Qt.KeyboardModifier.NoModifier
         self._shift_held = False
         self._ctrl_held = False
         self._pending_initial_view: Box | None = None
+        # A place to show once the view is shown (`show_place`).
+        self._pending_place: ViewPlace | None = None
 
         # A view that always shows this box, filling this share of it (see `show_fixed`).
         self._fixed: tuple[Box, float] | None = None
@@ -184,12 +201,53 @@ class SheetView(QGraphicsView):
         """Zoom so that the net takes 50% of the screen height and center it. Deferred until the view is shown."""
         if not self.isVisible():
             self._pending_initial_view = net
+            self._pending_place = None
             return
         self._pending_initial_view = None
         self._scale = zoom.clamp_scale(zoom.initial_scale(self._screen_height(), float(net.height)), self.zoom_limits())
         self._apply_transform()
         self.centerOn(float(net.center.x), float(net.center.y))
         self._viewport_origin = self._viewport_origin_in_window()
+
+    def place(self) -> ViewPlace:
+        """Where the view is now: the sheet point at its window's top left corner, and its zoom."""
+        origin = self._viewport_origin_in_window()
+        corner = self.to_sheet(QPointF(-origin.x(), -origin.y()))
+        return ViewPlace(corner.x(), corner.y(), self._scale)
+
+    def show_place(self, place: ViewPlace) -> None:
+        """Show `place` (from `place`, maybe at another time, in a view of another size): its point at the window's top
+        left corner, its zoom (within the limits now). Deferred until the view is shown, instead of the initial view."""
+        if not self.isVisible():
+            self._pending_initial_view = None
+            self._pending_place = place
+            return
+        self._pending_place = None
+        self._scale = zoom.clamp_scale(place.scale, self.zoom_limits())
+        self._apply_transform()
+        self.centerOn(place.x, place.y)
+        origin = self._viewport_origin_in_window()
+        at = self.from_sheet(QPointF(place.x, place.y))  # in the middle now: on to the window's corner
+        self.pan_by(at.x() + origin.x(), at.y() + origin.y())
+        self._viewport_origin = origin
+
+    def center_on(self, point: QPointF, box: Box, seen: QRect | None = None) -> None:
+        """Center: `point` (sheet coordinates) in the middle of the part of the view the user sees (`seen`, in the
+        viewport's pixels: the settings panel may lie over the rest; None: all of it), zoomed out as far as the zoom
+        rules let a net as large as `box` be (within the view's own limits)."""
+        width, height = self._screen_size()
+        if box.width > 0 and box.height > 0:
+            low = zoom.zoom_limits(width, height, float(box.width), float(box.height), self._max_scale)[0]
+        else:
+            low = self.zoom_limits()[0]
+        self._scale = zoom.clamp_scale(low, self.zoom_limits())
+        self._apply_transform()
+        self.centerOn(point)
+        viewport = self.viewport()
+        if seen is None or viewport is None or seen.isEmpty():
+            return
+        at, wanted = self.from_sheet(point), QRectF(seen).center()
+        self.pan_by(at.x() - wanted.x(), at.y() - wanted.y())
 
     def show_fixed(self, box: Box, fill: float) -> None:
         """Always show `box` in the middle, as large as `fill` (0 to 1) of the view allows, whatever the zoom limits;
@@ -286,12 +344,12 @@ class SheetView(QGraphicsView):
         return True
 
     def pan_by(self, dx: float, dy: float) -> None:
-        """Scroll the view by (dx, dy) pixels: positive dx shows content further to the right."""
-        h, v = self.horizontalScrollBar(), self.verticalScrollBar()
-        if h is not None:
-            h.setValue(h.value() + round(dx))
-        if v is not None:
-            v.setValue(v.value() + round(dy))
+        """Scroll the view by (dx, dy) pixels: positive dx shows content further to the right. As far as the scroll bars
+        go: a place far off the sheet (a damaged setting's last view) shows its edge (no number too large for Qt)."""
+        for bar, d in ((self.horizontalScrollBar(), dx), (self.verticalScrollBar(), dy)):
+            if bar is None or math.isnan(d):
+                continue
+            bar.setValue(round(min(max(bar.value() + d, bar.minimum()), bar.maximum())))
 
     # --- Qt events --------------------------------------------------------------------------------------------------
 
@@ -308,6 +366,21 @@ class SheetView(QGraphicsView):
         else:
             super().wheelEvent(event)  # outside the sheet the wheel just scrolls
 
+    def set_look(self, look: Look | None) -> None:
+        """Paint in `look` and hit-test with it, whatever the open document's is (None: in the open document's)."""
+        self._look = look
+        self.viewport().update()
+
+    def look(self) -> Look | None:
+        return self._look
+
+    def viewportEvent(self, event: QEvent | None) -> bool:
+        """Every event of the viewport (its painting, the mouse) is handled in the view's own look, if it has one."""
+        if self._look is None:
+            return super().viewportEvent(event)
+        with self._look.used():
+            return super().viewportEvent(event)
+
     def mousePressEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
             return
@@ -316,7 +389,7 @@ class SheetView(QGraphicsView):
         if event.button() == Qt.MouseButton.LeftButton:
             p = self.to_sheet(event.position())
             if self._panning_enabled and not self.press_claimed(p.x(), p.y()):
-                self._pan_last = event.position().toPoint()
+                self._pan_last = self._pan_start = event.position().toPoint()
                 self.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
             else:
                 self.left_pressed.emit(p.x(), p.y())
@@ -329,11 +402,21 @@ class SheetView(QGraphicsView):
             return
         super().mousePressEvent(event)
 
+    def mouseDoubleClickEvent(self, event: QMouseEvent | None) -> None:
+        if event is not None and event.button() == Qt.MouseButton.LeftButton and self._pan_last is None:
+            p = self.to_sheet(event.position())
+            self.left_double_clicked.emit(p.x(), p.y())
+        super().mouseDoubleClickEvent(event)
+
     def mouseMoveEvent(self, event: QMouseEvent | None) -> None:
         if event is None:
             return
         self._note_modifiers(event.modifiers())
         pos = event.position()
+        if self._pan_start is not None and (pos.toPoint() - self._pan_start).manhattanLength() >= (
+            QApplication.startDragDistance()
+        ):
+            self._pan_start = None  # a drag: no click
         if self._pan_last is not None:
             delta = pos.toPoint() - self._pan_last
             self._pan_last = pos.toPoint()
@@ -347,6 +430,10 @@ class SheetView(QGraphicsView):
             if self._pan_last is not None:
                 self._pan_last = None
                 self.viewport().unsetCursor()
+                if self._pan_start is not None:
+                    self._pan_start = None
+                    p = self.to_sheet(event.position())
+                    self.pan_clicked.emit(p.x(), p.y())
             else:
                 p = self.to_sheet(event.position())
                 self.left_released.emit(p.x(), p.y())
@@ -439,6 +526,8 @@ class SheetView(QGraphicsView):
         self._apply_fixed()
         if self._pending_initial_view is not None:
             self.show_initial_view(self._pending_initial_view)
+        if self._pending_place is not None:
+            self.show_place(self._pending_place)
 
     # --- internals --------------------------------------------------------------------------------------------------
 

@@ -94,6 +94,12 @@ class SettingsPanel(QFrame):
         assert page is not None
         page.setObjectName(key)
 
+    def set_template_mode(self, template: bool) -> None:
+        """While a template is made, what means nothing for it isn't shown: the vertex labels' switch (labels are always
+        shown) and the faces' colours (a template's faces get theirs on the sheet)."""
+        self.preferences.show_labels.setVisible(not template)
+        self.style_tab.set_face_colors_shown(not template)
+
     def tab_name(self) -> str:
         """The shown tab's key (the same in every language)."""
         widget = self.tabs.currentWidget()

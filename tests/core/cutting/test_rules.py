@@ -5,16 +5,20 @@ from collections.abc import Callable
 from fractions import Fraction as F
 from math import ceil, lcm
 
+from cube_net.core.body import CUBE
 from cube_net.core.cutting import (
     CutLine,
     CutPoint,
+    LineProblem,
+    added_segment_problem,
     invalid_segments,
     project_onto,
     segment_allowed,
+    segment_problem,
     segment_valid,
     strictly_inside,
 )
-from cube_net.core.cutting.rules import PROJECTION_STEP
+from cube_net.core.cutting.perimeter import PROJECTION_STEP
 from cube_net.core.geometry import Vec, on_segment
 from cube_net.core.net import HalfEdge, Net
 
@@ -75,8 +79,12 @@ def test_segment_valid_checks_any_segment_of_the_line(net: Net, cut: Callable[[s
     good = [CutPoint(v("11.5", "14"), top), CutPoint(v("11.5", "13.5")), CutPoint(v("11.7", "14"), top)]
     assert all(segment_valid(net, good, i) for i in range(2))
     assert invalid_segments(net, good, (0, 1)) == []
-    outside = [good[0], CutPoint(v("10.5", "13.5")), good[2]]  # the middle point is in the empty corner
-    assert invalid_segments(net, outside, (0, 1)) == [0, 1]
+    outside = [good[0], CutPoint(v("10.5", "13.5")), good[2]]  # the middle point is in the empty corner: allowed
+    assert invalid_segments(net, outside, (0, 1)) == []
+    through_a_vertex = [good[0], CutPoint(v("12.5", "12"))]  # through D_1 at (12, 13)
+    assert invalid_segments(net, through_a_vertex, (0,)) == [0]
+    out_at_once = [good[0], CutPoint(v("11.5", "14.5"))]  # straight out of the net from where it starts
+    assert invalid_segments(net, out_at_once, (0,)) == [0]
     crossing = [
         CutPoint(v("11.2", "14"), top),
         CutPoint(v("11.8", "13.5")),
@@ -87,15 +95,34 @@ def test_segment_valid_checks_any_segment_of_the_line(net: Net, cut: Callable[[s
     assert invalid_segments(net, good, (-1, 2, 5)) == []  # indices outside the line are ignored
 
 
+def test_each_rule_says_which_it_is(net: Net, cut: Callable[[str], HalfEdge]) -> None:
+    top = cut("B_1-A_1")
+    line = line_from(top, v("11.5", "14"), v("11.5", "13.5"))
+    assert added_segment_problem(net, line, CutPoint(v("11.5", "13"))) is None
+    assert added_segment_problem(net, line, CutPoint(v("11.5", "13.5"))) is LineProblem.NO_LENGTH
+    assert added_segment_problem(net, line, CutPoint(v("10", "12.5"))) is LineProblem.ON_THE_PERIMETER  # not on a cut
+    bent = line_from(top, v("11.5", "14"), v("11.5", "13"), v("11.8", "12.5"))
+    assert added_segment_problem(net, bent, CutPoint(v("11.2", "13.8"))) is LineProblem.TOUCHES_ITSELF
+    start = line_from(top, v("11.5", "14"))
+    assert added_segment_problem(net, start, CutPoint(v("11.5", "14.5"))) is LineProblem.NOT_INTO_THE_NET
+    from_the_left = line_from(cut("A_2-E_2"), v("10", "12.5"), v("10.5", "12.5"))
+    through_c1 = added_segment_problem(net, from_the_left, CutPoint(v("11.5", "13.5")))  # exactly through C_1
+    assert through_c1 is LineProblem.ALONG_THE_PERIMETER
+    # Back into the net from a point on the perimeter it reached from inside: it didn't go out there.
+    left = cut("A_1-C_1")
+    there = [CutPoint(v("11.5", "14"), top), CutPoint(v("11.5", "13.5")), CutPoint(v("11", "13.7"), left)]
+    assert segment_problem(net, [*there, CutPoint(v("11.5", "13.2"))], 2) is LineProblem.NOT_THROUGH
+
+
 class TestProjectionStaysSimple:
     """The numbers must not double in length with every generation of cuts (docs/plan.md, M10)."""
 
     def slanted(self) -> HalfEdge:
-        from cube_net.core.cube import SurfacePoint
+        from cube_net.core.body import SurfacePoint
         from cube_net.core.net import EdgeKind, NetVertex
 
-        a = NetVertex(0, Vec(F(1, 3), F(1, 7)), SurfacePoint(1, Vec(0, 0)))
-        b = NetVertex(1, Vec(F(14, 3), F(22, 7)), SurfacePoint(1, Vec(1, 1)))
+        a = NetVertex(0, Vec(F(1, 3), F(1, 7)), SurfacePoint(CUBE, 1, Vec(0, 0)))
+        b = NetVertex(1, Vec(F(14, 3), F(22, 7)), SurfacePoint(CUBE, 1, Vec(1, 1)))
         edge, twin = HalfEdge(0, a, EdgeKind.BOUNDARY, None), HalfEdge(1, b, EdgeKind.BOUNDARY, None)
         edge.twin, twin.twin = twin, edge
         return edge
@@ -131,11 +158,11 @@ class TestProjectionStaysSimple:
         assert project_onto(edge, Vec(50, 50)) == edge.destination.position
 
     def test_a_very_short_cut_has_just_its_ends(self) -> None:
-        from cube_net.core.cube import SurfacePoint
+        from cube_net.core.body import SurfacePoint
         from cube_net.core.net import EdgeKind, NetVertex
 
-        a = NetVertex(0, Vec(0, 0), SurfacePoint(1, Vec(0, 0)))
-        b = NetVertex(1, Vec(F(1, 5000), 0), SurfacePoint(1, Vec(1, 1)))
+        a = NetVertex(0, Vec(0, 0), SurfacePoint(CUBE, 1, Vec(0, 0)))
+        b = NetVertex(1, Vec(F(1, 5000), 0), SurfacePoint(CUBE, 1, Vec(1, 1)))
         edge, twin = HalfEdge(0, a, EdgeKind.BOUNDARY, None), HalfEdge(1, b, EdgeKind.BOUNDARY, None)
         edge.twin, twin.twin = twin, edge
         assert project_onto(edge, Vec(F(1, 20000), 0)) == a.position

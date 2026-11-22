@@ -7,7 +7,9 @@ These are building blocks: they keep the half-edge links right, but the net as a
 (`Net.reindex()` has to be called when the whole change is done).
 """
 
-from cube_net.core.cube import SurfacePoint
+import math
+
+from cube_net.core.body import SurfacePoint
 from cube_net.core.geometry import Vec
 from cube_net.core.net.elements import EdgeKind, HalfEdge, NetVertex, Region
 from cube_net.core.net.net import Net, _cycle
@@ -58,12 +60,26 @@ def split_edge(net: Net, he: HalfEdge, position: Vec, point: SurfacePoint) -> Ne
     return w
 
 
-def corner(vertex: NetVertex, region: Region) -> HalfEdge:
-    """The half-edge leaving `vertex` along the boundary of `region`."""
-    for he in outgoing(vertex):
-        if he.region is region:
-            return he
-    raise ValueError(f"{vertex} is not on the boundary of {region}")
+def corner(vertex: NetVertex, region: Region, toward: Vec | None = None) -> HalfEdge:
+    """The half-edge leaving `vertex` along the boundary of `region`. If the region has several corners at the vertex
+    (it goes round it more than once: a seam left inside it ends there, or the net touches itself), the one whose
+    angle holds the direction `toward`."""
+    found = [he for he in outgoing(vertex) if he.region is region]
+    if not found:
+        raise ValueError(f"{vertex} is not on the boundary of {region}")
+    if len(found) == 1 or toward is None:
+        return found[0]
+    p = vertex.position
+
+    def angle(v: Vec) -> float:
+        return math.atan2(float(v.y), float(v.x))
+
+    def holds(he: HalfEdge) -> bool:
+        out, back = angle(he.destination.position - p), angle(he.prev.origin.position - p)
+        span = (back - out) % (2 * math.pi) or 2 * math.pi
+        return (angle(toward - p) - out) % (2 * math.pi) < span
+
+    return next((he for he in found if holds(he)), found[0])
 
 
 def add_edge(net: Net, a: NetVertex, b: NetVertex, region: Region, kind: EdgeKind) -> HalfEdge:
@@ -72,7 +88,7 @@ def add_edge(net: Net, a: NetVertex, b: NetVertex, region: Region, kind: EdgeKin
     `a` must be on the region's boundary. A brand-new `b` (no edges yet) makes a dead end inside the region. If `b` is
     on the boundary too, the edge divides the region in two: one part keeps `region`, the other is a new region.
     """
-    ha = corner(a, region)
+    ha = corner(a, region, b.position)
     forward = new_half_edge(net, a, kind, region)
     backward = new_half_edge(net, b, kind, region)
     forward.twin, backward.twin = backward, forward
@@ -83,7 +99,7 @@ def add_edge(net: Net, a: NetVertex, b: NetVertex, region: Region, kind: EdgeKin
         backward.next, ha.prev = ha, backward
         b.edge = backward
         return forward
-    hb = corner(b, region)
+    hb = corner(b, region, a.position)
     pb = hb.prev
     pa.next, forward.prev = forward, pa
     forward.next, hb.prev = hb, forward
@@ -129,8 +145,7 @@ def glue_cuts(
     if end_a is not None:
         _link(in_a, out_a)
 
-    on_cube_edge = len(a.point.faces & b.point.faces) == 2
-    kept.kind = moved.kind = EdgeKind.FOLD if on_cube_edge else EdgeKind.SEAM
+    kept.kind = moved.kind = EdgeKind.FOLD if net.body_edge_of(kept) is not None else EdgeKind.SEAM
     kept.twin, moved.twin = moved, kept
     net.half_edges.remove(outer_kept)
     net.half_edges.remove(outer_moved)

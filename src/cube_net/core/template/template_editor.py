@@ -1,0 +1,328 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""`TemplateEditor`: making a template, action by action, with undo and redo (docs/template_idea.txt).
+
+INITIAL       a point anywhere on the sheet   -> the loop's first vertex -> LOOPING
+LOOPING       a point                         -> the next vertex (if its segment touches nothing)
+              the first vertex again          -> the loop closed (3 segments at least) -> FINALIZATION
+FINALIZATION  a side's middle                 -> a new vertex there
+              delete a vertex                 -> (6 stay at least; its folds go with it)
+              move a vertex                   -> (if the loop and the folds stay as they must)
+              a vertex to another             -> a fold
+              delete a fold; colour a face; label a vertex
+
+Every action is recorded in the history (at most 1000 are kept); undo and redo go back and forth through them. What
+changes nothing isn't an action. The editor never touches Qt.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
+from enum import Enum
+from itertools import pairwise
+
+from cube_net.core.geometry import Vec
+from cube_net.core.history import ActionKind, History
+from cube_net.core.origin import DEFAULT_ORIGIN, Origin
+from cube_net.core.template.glued_faces import aligned_hatches
+from cube_net.core.template.holes import closed_hole, recut, with_hole_point
+from cube_net.core.template.rules import (
+    MIN_VERTICES,
+    MIN_VERTICES_TO_CLOSE,
+    TemplateProblem,
+    TemplateRejection,
+    check,
+    faces_consistent,
+    fold_problem,
+    hole_outline_problem,
+    on_the_sheet,
+)
+from cube_net.core.template.template import Fold, Label, LoopVertex, Template
+from cube_net.core.template.too_long import origin_too_long, template_too_long
+from cube_net.core.template.validation import reindexed
+
+
+class TemplateState(Enum):
+    INITIAL = "initial"
+    LOOPING = "looping"
+    FINALIZATION = "finalization"
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateSnapshot:
+    """Everything an action changes (what the history keeps, and what's saved)."""
+
+    template: Template
+    origin: Origin = DEFAULT_ORIGIN
+
+
+class TemplateEditor:
+    def __init__(self, template: Template | None = None) -> None:
+        self.template = Template() if template is None else template
+        self.origin = DEFAULT_ORIGIN
+        self.history: History[TemplateSnapshot] = History()
+        # The latest template the safety net refused (`_record`): what an error report shows.
+        self.refused: Template | None = None
+
+    @property
+    def state(self) -> TemplateState:
+        if self.template.closed:
+            return TemplateState.FINALIZATION
+        return TemplateState.LOOPING if self.template.vertices else TemplateState.INITIAL
+
+    def snapshot(self) -> TemplateSnapshot:
+        return TemplateSnapshot(self.template, self.origin)
+
+    def load(self, snapshot: TemplateSnapshot, history: History[TemplateSnapshot]) -> None:
+        """Continue a saved template."""
+        self.template, self.origin = snapshot.template, snapshot.origin
+        self.history = history
+
+    # --- the loop -----------------------------------------------------------------------------------------------------
+
+    def add_point(self, p: Vec) -> TemplateRejection | None:
+        """The loop's next vertex at `p`; at its first vertex, the loop is closed."""
+        if self.template.closed:
+            raise ValueError("the loop is closed")
+        if not on_the_sheet(p):
+            return TemplateRejection(TemplateProblem.OFF_THE_SHEET)
+        vertices = self.template.vertices
+        if vertices and p == vertices[0].position:
+            if len(vertices) < MIN_VERTICES_TO_CLOSE:
+                return TemplateRejection(TemplateProblem.TOO_EARLY_TO_CLOSE)
+            closed = self.template.closed_loop()
+            return self._apply(ActionKind.ADD_VERTEX, closed, [(vertices[-1].id, vertices[0].id)])
+        if vertices and p == vertices[-1].position:
+            return TemplateRejection(TemplateProblem.CROSSING)  # a segment of no length
+        after = self.template.with_vertex_appended(p)
+        changed = [(vertices[-1].id, after.vertices[-1].id)] if vertices else []
+        return self._apply(ActionKind.ADD_VERTEX, after, changed)
+
+    def insert_vertex(self, a: int, b: int) -> TemplateRejection | None:
+        """A new vertex in the middle of the side from `a` to `b` of the loop or a hole (always allowed; refused only by
+        the safety net, see `_record`)."""
+        self._require_closed()
+        middle = (self.template.position(a) + self.template.position(b)) / 2
+        return self._recorded(ActionKind.ADD_VERTEX, self.template.with_vertex_inserted(a, b, middle))
+
+    def move_problem(self, vertex_id: int, p: Vec) -> TemplateRejection | None:
+        """What would be wrong with the vertex at `p` (None: nothing), without moving it."""
+        if not on_the_sheet(p):
+            return TemplateRejection(TemplateProblem.OFF_THE_SHEET)
+        moved = self.template.with_vertex_moved(vertex_id, p)
+        hole = moved.hole_of(vertex_id)
+        if hole is not None and moved.holes[hole].closed:
+            problem = hole_outline_problem(moved, hole)  # (the folds can't be cut by a hole that crosses itself)
+            if problem is not None:
+                return problem
+        after = self._moved(vertex_id, p)
+        return check(after, self._segments_at(after, vertex_id))
+
+    def _moved(self, vertex_id: int, p: Vec) -> Template:
+        """The template with the vertex at `p`: a closed hole's vertex cuts the folds its sides now cross, as drawing
+        the hole there would have (docs/template_plan.md, §8.5)."""
+        after = self.template.with_vertex_moved(vertex_id, p)
+        hole = after.hole_of(vertex_id)
+        if hole is not None and after.holes[hole].closed:
+            after = recut(after, self.template, hole)
+        return after
+
+    def move_vertex(self, vertex_id: int, p: Vec) -> TemplateRejection | None:
+        self._require_closed()
+        if p == self.template.position(vertex_id):
+            return None  # released where it was: not an action
+        problem = self.move_problem(vertex_id, p)
+        return problem if problem is not None else self._record(ActionKind.MOVE_VERTEX, self._moved(vertex_id, p))
+
+    def delete_vertex(self, vertex_id: int) -> TemplateRejection | None:
+        """Delete a vertex: its two sides become one, and the folds that end at it go too (and those left hanging); a
+        fold vertex: the folds at it go (and those left hanging)."""
+        self._require_closed()
+        if self.template.is_fold_vertex(vertex_id):
+            folds = self.template.folds_at(vertex_id)
+            after = self.template.without_vertex(vertex_id)
+            merged = [f for f in after.folds if f not in self.template.folds]
+            if len(folds) == 2 and merged:  # its two segments became one: where it goes is checked as a new fold's
+                (fold,) = merged
+                problem = fold_problem(self.template, fold.start, fold.end) or check(after, [(fold.start, fold.end)])
+                if problem is not None:
+                    return problem
+            return self._recorded(ActionKind.DELETE_VERTEX, after)
+        hole = self.template.hole_of(vertex_id)
+        if hole is not None:
+            if not self.template.holes[hole].closed:
+                return TemplateRejection(TemplateProblem.CROSSING)  # a hole being drawn: Undo takes its points back
+            after = self.template.without_vertex(vertex_id)
+            vertices = self.template.holes[hole].vertices
+            i = next(k for k, v in enumerate(vertices) if v.id == vertex_id)
+            joined = [] if len(vertices) <= 3 else [(vertices[i - 1].id, vertices[(i + 1) % len(vertices)].id)]
+            return self._apply(ActionKind.DELETE_VERTEX, after, joined)
+        if len(self.template.vertices) <= MIN_VERTICES:
+            return TemplateRejection(TemplateProblem.TOO_FEW_VERTICES)
+        i = self.template.index_of(vertex_id)
+        vertices = self.template.vertices
+        before, after_id = vertices[i - 1].id, vertices[(i + 1) % len(vertices)].id
+        after = self.template.without_vertex(vertex_id)
+        return self._apply(ActionKind.DELETE_VERTEX, after, [(before, after_id)])
+
+    # --- folds, colours, labels ---------------------------------------------------------------------------------------
+
+    def add_hole_point(self, p: Vec) -> TemplateRejection | None:
+        """The next vertex of the hole being drawn at `p`, or the first of a new hole; at the hole's first vertex, the
+        hole is closed (docs/template_plan.md, §8.5)."""
+        self._require_closed()
+        if not on_the_sheet(p):
+            return TemplateRejection(TemplateProblem.OFF_THE_SHEET)
+        template = self.template
+        if template.drawing_hole:
+            vertices = template.holes[-1].vertices
+            if p == vertices[0].position:
+                if len(vertices) < MIN_VERTICES_TO_CLOSE:
+                    return TemplateRejection(TemplateProblem.TOO_EARLY_TO_CLOSE)
+                problem = hole_outline_problem(template, len(template.holes) - 1)  # (its closing side, above all)
+                if problem is not None:
+                    return problem
+                after = closed_hole(template)
+                return self._apply(ActionKind.ADD_VERTEX, after, after.holes[-1].sides())
+            if p == vertices[-1].position:
+                return TemplateRejection(TemplateProblem.CROSSING)  # a segment of no length
+            after = with_hole_point(template, p)
+            return self._apply(ActionKind.ADD_VERTEX, after, [(vertices[-1].id, after.holes[-1].vertices[-1].id)])
+        return self._apply(ActionKind.ADD_VERTEX, with_hole_point(template, p), [])
+
+    def add_fold(self, start: int, end: int) -> TemplateRejection | None:
+        """A fold line of one segment."""
+        return self.add_fold_line(start, (), end)
+
+    def add_fold_line(self, start: int, points: Sequence[Vec], end: int) -> TemplateRejection | None:
+        """A fold line from vertex `start` through new fold vertices at `points` to vertex `end` (docs/template_plan.md,
+        §8.4)."""
+        self._require_closed()
+        problem = self.fold_line_problem(start, points, end)
+        if problem is not None:
+            return problem
+        return self._record(ActionKind.ADD_FOLD, self.template.with_fold_line(start, points, end))
+
+    def fold_line_problem(self, start: int, points: Sequence[Vec], end: int | None) -> TemplateRejection | None:
+        """What's wrong with the fold line (None: nothing); `end` None: it isn't finished yet, its last point is the
+        last of `points`. Where it goes is checked first: one that crosses another fold has no face to divide."""
+        template = self.template
+        if not points and end is not None:
+            problem = fold_problem(template, start, end)
+            if problem is not None:
+                return problem
+        if end is not None and end == start:
+            return TemplateRejection(TemplateProblem.NOT_A_FOLD)
+        if not all(on_the_sheet(p) for p in points):
+            return TemplateRejection(TemplateProblem.OFF_THE_SHEET)
+        ids = list(range(template.next_id, template.next_id + len(points)))
+        chain = [start, *ids] + ([end] if end is not None else [])
+        folds = tuple(Fold(a, b) for a, b in pairwise(chain))
+        drawn = replace(
+            template,
+            folds=(*template.folds, *folds),
+            fold_vertices=(*template.fold_vertices, *(LoopVertex(i, p) for i, p in zip(ids, points, strict=True))),
+            next_id=template.next_id + len(points),
+        )
+        return check(drawn, [(f.start, f.end) for f in folds])
+
+    def insert_fold_vertex(self, fold: Fold) -> TemplateRejection | None:
+        """A new fold vertex in the middle of a fold segment (always allowed; refused only by the safety net)."""
+        self._require_closed()
+        middle = (self.template.position(fold.start) + self.template.position(fold.end)) / 2
+        return self._recorded(ActionKind.ADD_VERTEX, self.template.with_fold_vertex_inserted(fold, middle))
+
+    def delete_fold(self, fold: Fold) -> TemplateRejection | None:
+        """Delete a fold segment, and what's left hanging (refused only by the safety net)."""
+        self._require_closed()
+        return self._recorded(ActionKind.DELETE_FOLD, self.template.without_fold(fold))
+
+    def set_face_color(self, face_index: int, color: str) -> None:
+        """Give a face a colour: even the one it has (it's numbered anew, its hatch tied to the grid again)."""
+        self._require_closed()
+        self._record(ActionKind.SET_FACE_COLOR, self.template.with_face_color(face_index, color))
+
+    def align_hatches(self) -> None:
+        """Every piece's hatch continuing its basis piece's (a valid template's, after Validate): one action, if it
+        changes anything."""
+        after = aligned_hatches(self.template)
+        if after != self.template:
+            self._record(ActionKind.ALIGN_HATCHES, after)
+
+    def set_label(self, vertex_id: int, label: Label | None) -> TemplateRejection | None:
+        """Give a vertex a label (None: take its label away). Another vertex's label can't be taken."""
+        if label is not None:
+            owner = self.template.label_owner(label)
+            if owner is not None and owner.id != vertex_id:
+                return TemplateRejection(TemplateProblem.LABEL_TAKEN)
+        if self.template.vertex(vertex_id).label != label:
+            self._record(ActionKind.SET_LABEL, self.template.with_label(vertex_id, label))
+        return None
+
+    def reindex(self) -> None:
+        """Every name's indices made 1, 2, 3, ... in their order (validation's offer): one action."""
+        after = reindexed(self.template)
+        if after != self.template:
+            self._record(ActionKind.SET_LABEL, after)
+
+    # --- the origin, undo and redo ------------------------------------------------------------------------------------
+
+    def move_origin(self, origin: Origin) -> TemplateRejection | None:
+        """The coordinates are shown and typed from `origin` from now on; refused if its numbers are too long."""
+        if origin == self.origin:
+            return None
+        found = origin_too_long(origin.position)
+        if found is not None:
+            return TemplateRejection(TemplateProblem.TOO_LONG, too_long=found)
+        before = self.snapshot()
+        self.origin = origin
+        self.history.record(ActionKind.MOVE_ORIGIN, before, self.snapshot())
+        return None
+
+    def undo(self) -> bool:
+        return self._go_to(self.history.undo())
+
+    def redo(self) -> bool:
+        return self._go_to(self.history.redo())
+
+    # --- helpers ------------------------------------------------------------------------------------------------------
+
+    def _go_to(self, snapshot: TemplateSnapshot | None) -> bool:
+        if snapshot is None:
+            return False
+        self.template, self.origin = snapshot.template, snapshot.origin
+        return True
+
+    def _apply(self, kind: ActionKind, after: Template, changed: list[tuple[int, int]]) -> TemplateRejection | None:
+        problem = check(after, changed)
+        return problem if problem is not None else self._record(kind, after)
+
+    def _recorded(self, kind: ActionKind, after: Template) -> TemplateRejection | None:
+        return self._record(kind, after)
+
+    def _record(self, kind: ActionKind, after: Template) -> TemplateRejection | None:
+        """Make `after` the template, as an action; or refuse it (nothing changes): if a point it makes has a number
+        too long (TOO_LONG), or as a safety net, if its faces don't add up (UNEXPECTED: a bug), so that it never reaches
+        a file."""
+        found = template_too_long(self.template, after)
+        if found is not None:
+            return TemplateRejection(TemplateProblem.TOO_LONG, too_long=found)
+        if after.closed and not faces_consistent(after):
+            self.refused = after
+            return TemplateRejection(TemplateProblem.UNEXPECTED)
+        before = self.snapshot()
+        self.template = after
+        self.history.record(kind, before, self.snapshot())
+        return None
+
+    def _require_closed(self) -> None:
+        if not self.template.closed:
+            raise ValueError("the loop isn't closed yet")
+
+    @staticmethod
+    def _segments_at(template: Template, vertex_id: int) -> list[tuple[int, int]]:
+        """The loop's sides and the folds that end at a vertex."""
+        sides = [side for side in template.all_loop_sides() if vertex_id in side]
+        return sides + [(f.start, f.end) for f in template.folds_at(vertex_id)]

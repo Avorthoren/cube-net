@@ -3,23 +3,27 @@
 
 import random
 from collections import deque
+from collections.abc import Callable
 from fractions import Fraction as F
 
 import pytest
+from net_checks import assert_consistent
 
+from cube_net.core.body import Body
 from cube_net.core.cutting import (
     CutLine,
     CutPoint,
     Rearranged,
     SplitNet,
     approve,
+    real_cut,
     rearrange,
     segment_valid,
     split_net,
     strictly_inside,
 )
 from cube_net.core.geometry import Rigid90, Vec, on_segment, signed_area
-from cube_net.core.net import EdgeKind, HalfEdge, Net, boundary_edge_from, default_net, validate_net
+from cube_net.core.net import EdgeKind, HalfEdge, Net, boundary_edge_from, default_net, starting_net, validate_net
 
 
 def v(x: str, y: str) -> Vec:
@@ -271,4 +275,162 @@ def _random_line(net: Net, rng: random.Random) -> CutLine | None:
     for i in range(len(points) - 1):
         if not segment_valid(net, points[: i + 2], i):
             return None
+    real = real_cut(net, points)
+    if real is None or not real.divides_at_end:
+        return None  # not a finished line: it doesn't divide the net at its end (it left the net on the way)
     return CutLine(points)
+
+
+# Bodies other than the cube (tests/core/conftest.py).
+OTHER_BODIES = ["long_box", "l_prism", "pinwheel_box", "pillow", "flat_pillow"]
+
+
+def _cut_and_glue(net: Net, line: CutLine, choose: Callable[[list[HalfEdge]], list[HalfEdge]]) -> Net | None:
+    """Split along `line` and approve the first valid rearrangement among the cuts `choose` picks."""
+    split = split_net(net, line)
+    cuts = [he for he in split.net.boundary_edges() if he not in split.same_half_cuts and he not in split.line_edges]
+    for he in choose(cuts):
+        result = rearrange(split, he)
+        if result is not None and result.valid:
+            glued = approve(result)  # runs validate_net
+            assert_consistent(glued)
+            return glued
+    return None
+
+
+@pytest.mark.parametrize("seed", [1, 2])
+@pytest.mark.parametrize("body_name", OTHER_BODIES)
+def test_random_chains_of_cuts_on_other_bodies(body_name: str, seed: int, request: pytest.FixtureRequest) -> None:
+    """Random cuts through random points, each result checked, each on top of the previous one."""
+    _random_chain(request.getfixturevalue(body_name), seed)
+
+
+@pytest.mark.parametrize("seed", [3, 4, 5, 10])
+def test_random_chains_of_cuts_on_cube_with_a_hole(cube_with_a_hole: Body, seed: int) -> None:
+    """As on the other bodies. Gluing may leave the seam of the face around the hole ending in the middle of the net
+    (these seeds did, before it was moved to a vertex)."""
+    _random_chain(cube_with_a_hole, seed)
+
+
+def _random_chain(body: Body, seed: int) -> None:
+    """6 random cuts, each glued somewhere valid on top of the previous ones; every net checked on the way."""
+    rng = random.Random(seed)
+    net = starting_net(body)
+    approved = 0
+    for _ in range(200):
+        if approved == 6:
+            break
+        line = _random_line(net, rng)
+        if line is None:
+            continue
+
+        def some(cuts: list[HalfEdge]) -> list[HalfEdge]:
+            rng.shuffle(cuts)
+            return cuts[:5]
+
+        glued = _cut_and_glue(net, line, some)
+        if glued is not None:
+            net, approved = glued, approved + 1
+    assert approved == 6
+    assert net.body is body
+    assert sum(signed_area(net.region_polygon(r)) for r in net.regions) == body.area
+
+
+@pytest.mark.parametrize("body_name", OTHER_BODIES)
+def test_cutting_along_folds_on_other_bodies(body_name: str, request: pytest.FixtureRequest) -> None:
+    """From the starting net, cutting along a fold and gluing elsewhere, a few levels deep: every result is a valid net
+    of the body, made of the body's whole faces."""
+    body: Body = request.getfixturevalue(body_name)
+    start = starting_net(body)
+    face_areas = sorted(signed_area(body.face(f).corners) for f in body.face_numbers)
+    level = [start]
+    found = 0
+    for _ in range(2):
+        next_level = []
+        for net in level[:6]:
+            perimeter = set(net.boundary_vertices())
+            for fold in net.fold_edges():
+                if fold.origin not in perimeter or fold.destination not in perimeter:
+                    continue  # it ends at a vertex inside the net: not a whole cut line by itself
+                line = CutLine([on(net, fold.origin.position), on(net, fold.destination.position)])
+                glued = _cut_and_glue(net, line, lambda cuts: cuts)
+                if glued is not None:
+                    assert sorted(signed_area(glued.region_polygon(r)) for r in glued.regions) == face_areas
+                    next_level.append(glued)
+        found += len(next_level)
+        level = next_level
+    assert (found > 0) == bool(start.fold_edges())
+
+
+def test_a_flat_vertex_of_the_body_can_end_up_inside_the_net(pinwheel_box: Body) -> None:
+    """The pinwheel box's S (the middle of the top's front side, 360 degrees around it) gets glued all around."""
+    found = None
+    for seed in range(1, 6):
+        rng = random.Random(seed)
+        net = starting_net(pinwheel_box)
+        for _ in range(60):
+            line = _random_line(net, rng)
+            glued = None if line is None else _cut_and_glue(net, line, lambda cuts: cuts)
+            if glued is not None:
+                net = glued
+                perimeter = set(net.boundary_vertices())
+                inner = [v for v in net.vertices if v not in perimeter]
+                if inner:
+                    found = inner
+                    break
+        if found:
+            break
+    assert found is not None
+    assert all(v.point.vertex is not None and pinwheel_box.vertex_angle(v.point.vertex) == 360 for v in found)
+
+
+def test_two_cuts_between_the_same_two_points(pillow: Body) -> None:
+    """In the pillow, Q and S are joined by a diagonal of face 1 and by one of face 2: two different cuts with the
+    same ends. Each one's counterpart is its own other image, not the other diagonal's."""
+    net = starting_net(pillow)
+    split = split_net(net, CutLine([on(net, Vec(1, 0)), on(net, Vec(0, 1))]))  # face 1's diagonal
+    first = rearrange(split, cut_between(split, Vec(2, 0), Vec(2, 1)))  # its triangle goes to the right of face 2
+    assert first is not None and first.valid
+    net = approve(first)
+    split = split_net(net, CutLine([on(net, Vec(1, 0)), on(net, Vec(2, 1))]))  # face 2's diagonal
+    diagonals = [
+        he for he in split.net.boundary_edges() if {he.origin.point.vertex, he.destination.point.vertex} == {"Q", "S"}
+    ]
+    assert len(diagonals) == 4  # two images of each diagonal
+    for he in diagonals:
+        other = split.net.counterpart(he)
+        assert other is not he and split.net.counterpart(other) is he
+        assert net.body_edge_of(he) is None
+        assert (other.region is not None and he.region is not None) and other.region.face == he.region.face
+    moved = _cut_and_glue(net, CutLine([on(net, Vec(1, 0)), on(net, Vec(2, 1))]), lambda cuts: cuts)
+    assert moved is not None
+
+
+def test_a_cut_from_the_holes_corner_glued_inside_the_face_around_the_hole() -> None:
+    """Cube with a hole: a cut from the hole's corner I1 (sheet (43, 61)) to the cut O2-Q2, glued back on the far side
+    of the net. The face around the hole keeps a seam (without it, it would be a ring); gluing left the seam's end on
+    the fold C-H, in the middle of the net. It ends at a vertex now, as in the net the project starts with: H."""
+    from cube_net.core.editor import Editor
+    from cube_net.core.history import History
+    from cube_net.core.project.builtin_templates import cube_with_a_hole
+    from cube_net.core.project.from_template import project_from_template
+
+    project = project_from_template(cube_with_a_hole())
+    editor = Editor(project.state.net)
+    editor.load(project.state, History())
+    corner = next(vertex for vertex in editor.net.vertices if vertex.position == Vec(43, 61))
+    middle = Vec(49, F(107, 2))  # of the cut O2-Q2, from (49, 53) to (49, 55)
+    cut = next(he for he in editor.net.boundary_edges() if he.origin.position == Vec(49, 55))
+    assert on_segment(middle, cut.origin.position, cut.destination.position)
+    editor.click(corner.position, None, vertex=corner)
+    editor.click(middle, cut)
+    glued = next(
+        he
+        for he in editor.split().net.boundary_edges()
+        if (he.origin.position, he.destination.position) == (Vec(51, 58), Vec(51, F(117, 2)))  # near U2, on U2-O1
+    )
+    editor.glue(glued)
+    assert editor.rearranged is not None and editor.rearranged.valid
+    editor.approve()  # (the net is validated: no point is left inside it that isn't a vertex of the body)
+    seams = [(he.origin.position, he.destination.position) for he in editor.net.inner_seams()]
+    assert seams in ([(Vec(43, 61), Vec(44, 58))], [(Vec(44, 58), Vec(43, 61))])

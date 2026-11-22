@@ -1,0 +1,249 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""A template file's contents as plain JSON data, and back: the template, its origin, and its history (so that undo
+and redo go on after reopening). Like a project's (docs/plan.md, section 5.3): exact numbers as strings, and every
+template stored once, in a table, the states referring to it by index.
+
+`{"format_version": 1, "kind": "template", "style": {...}, "validation": "valid", "templates": [...], "states": [...],
+"state": i, "history": {...}}` (no "style": saved before the style belonged to documents; no "validation": saved
+before it was kept, Undefined)
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from cube_net.core.body.body import COLOR_PATTERN
+from cube_net.core.geometry import Rigid90
+from cube_net.core.history import ActionKind, History, HistoryEntry
+from cube_net.core.project.codec import (
+    read_motion,
+    read_origin,
+    read_style,
+    read_vec,
+    write_motion,
+    write_origin,
+    write_style,
+    write_vec,
+)
+from cube_net.core.project.project import ProjectFileError
+from cube_net.core.style import Style
+from cube_net.core.template.template import Fold, Hole, Label, LoopVertex, Template, TemplateFace
+from cube_net.core.template.template_editor import TemplateSnapshot
+from cube_net.core.template.validation_status import ValidationStatus
+
+# Raise it whenever the format changes (and keep reading the older ones, if there's anything worth keeping).
+TEMPLATE_FORMAT_VERSION = 1
+
+# What a template file holds (a project is the other kind).
+TEMPLATE_KIND = "template"
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateDocument:
+    """What a template file keeps: the template being made, its history, and its style."""
+
+    state: TemplateSnapshot
+    history: History[TemplateSnapshot]
+
+    # Settings -> Style while the template is made; a project made from it starts with it. None: not chosen yet (a new
+    # template, or one saved before the style belonged to documents); the application fills it in.
+    style: Style | None = None
+
+    # What the last explicit Validate said about the template in `state`.
+    validation: ValidationStatus = ValidationStatus.UNDEFINED
+
+
+def encode_template(document: TemplateDocument) -> dict[str, Any]:
+    templates: list[Template] = []
+    templates_data: list[dict[str, Any]] = []
+    states: dict[TemplateSnapshot, int] = {}
+    states_data: list[dict[str, Any]] = []
+
+    def template_index(template: Template) -> int:
+        for i, known in enumerate(templates):
+            if known is template:
+                return i
+        templates.append(template)
+        templates_data.append(_write_template(template))
+        return len(templates) - 1
+
+    def state_index(state: TemplateSnapshot) -> int:
+        if state not in states:
+            states[state] = len(states_data)
+            states_data.append({"template": template_index(state.template), "origin": write_origin(state.origin)})
+        return states[state]
+
+    def entry(e: HistoryEntry[TemplateSnapshot]) -> dict[str, Any]:
+        return {"kind": e.kind.value, "before": state_index(e.before), "after": state_index(e.after)}
+
+    state = state_index(document.state)
+    history = {
+        "done": [entry(e) for e in document.history.done_entries()],
+        "undone": [entry(e) for e in document.history.undone_entries()],
+    }
+    return {
+        "format_version": TEMPLATE_FORMAT_VERSION,
+        "kind": TEMPLATE_KIND,
+        "style": write_style(document.style),
+        "validation": document.validation.value,
+        "templates": templates_data,
+        "states": states_data,
+        "state": state,
+        "history": history,
+    }
+
+
+def decode_template(data: object) -> TemplateDocument:
+    """The template from `encode_template`'s data. Raises `ProjectFileError` if there's anything wrong with it."""
+    if not isinstance(data, dict) or data.get("kind") != TEMPLATE_KIND:
+        raise ProjectFileError("It isn't a Cube Net template.")
+    version = data.get("format_version")
+    if version != TEMPLATE_FORMAT_VERSION:
+        if isinstance(version, int) and version > TEMPLATE_FORMAT_VERSION:
+            raise ProjectFileError("It was saved by a newer version of the application.")
+        raise ProjectFileError("It has an unknown format version: {version}.", version=repr(version))
+    try:
+        templates = [_read_template(t) for t in data["templates"]]
+        states = [TemplateSnapshot(templates[s["template"]], read_origin(s["origin"])) for s in data["states"]]
+
+        def entry(e: dict[str, Any]) -> HistoryEntry[TemplateSnapshot]:
+            return HistoryEntry(ActionKind(e["kind"]), states[e["before"]], states[e["after"]])
+
+        history: History[TemplateSnapshot] = History.restored(
+            [entry(e) for e in data["history"]["done"]], [entry(e) for e in data["history"]["undone"]]
+        )
+        validation = ValidationStatus(data.get("validation", ValidationStatus.UNDEFINED.value))
+        return TemplateDocument(states[data["state"]], history, read_style(data.get("style")), validation)
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError, ZeroDivisionError) as e:
+        raise ProjectFileError("It is damaged ({detail}).", detail=f"{type(e).__name__}: {e}") from e
+
+
+def _write_template(template: Template) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        "vertices": [_write_vertex(v) for v in template.vertices],
+        "closed": template.closed,
+        "folds": [[f.start, f.end] for f in template.folds],
+        "faces": [_write_face(f) for f in template.faces],
+        "next_id": template.next_id,
+        "next_number": template.next_number,
+    }
+    if template.fold_vertices:  # written only if there are any (docs/template_plan.md, §8.4)
+        data["fold_vertices"] = [_write_vertex(v) for v in template.fold_vertices]
+    if template.holes:  # written only if there are any (docs/template_plan.md, §8.5)
+        data["holes"] = [
+            {"vertices": [_write_vertex(v) for v in h.vertices], "closed": h.closed} for h in template.holes
+        ]
+    return data
+
+
+def _write_vertex(v: LoopVertex) -> dict[str, Any]:
+    return {
+        "id": v.id,
+        "at": write_vec(v.position),
+        "label": None if v.label is None else [v.label.name, v.label.index],
+    }
+
+
+def _read_vertex(v: dict[str, Any]) -> LoopVertex:
+    return LoopVertex(_int(v["id"]), read_vec(v["at"]), None if v["label"] is None else Label(*v["label"]))
+
+
+def _read_hole(data: dict[str, Any]) -> Hole:
+    closed = data["closed"]
+    if not isinstance(closed, bool):
+        raise TypeError(f"expected true or false, got {closed!r}")
+    return Hole(tuple(_read_vertex(v) for v in data["vertices"]), closed)
+
+
+def _write_face(face: TemplateFace) -> dict[str, Any]:
+    """Its corners and colour; its number and hatch only if it has them (not the identity)."""
+    data: dict[str, Any] = {"corners": list(face.corners), "color": face.color}
+    if face.number is not None:
+        data["number"] = face.number
+    if not face.hatch.is_identity():
+        data["hatch"] = write_motion(face.hatch)
+    if face.holes:
+        data["holes"] = [list(cycle) for cycle in face.holes]
+    return data
+
+
+def _read_face(data: dict[str, Any]) -> TemplateFace:
+    number = data.get("number")
+    return TemplateFace(
+        tuple(_int(c) for c in data["corners"]),
+        _color(data["color"]),
+        None if number is None else _int(number),
+        read_motion(data["hatch"]) if "hatch" in data else Rigid90.identity(),
+        tuple(tuple(_int(c) for c in cycle) for cycle in data.get("holes", ())),
+    )
+
+
+def _read_template(data: dict[str, Any]) -> Template:
+    vertices = tuple(_read_vertex(v) for v in data["vertices"])
+    closed = data["closed"]
+    if not isinstance(closed, bool):
+        raise TypeError(f"expected true or false, got {closed!r}")
+    template = Template(
+        vertices,
+        closed,
+        tuple(Fold(_int(start), _int(end)) for start, end in data["folds"]),
+        tuple(_read_face(f) for f in data["faces"]),
+        _int(data["next_id"]),
+        _int(data.get("next_number", 1)),
+        tuple(_read_vertex(v) for v in data.get("fold_vertices", ())),
+        tuple(_read_hole(h) for h in data.get("holes", ())),
+    )
+    _check(template)
+    return template
+
+
+def _check(template: Template) -> None:
+    """What every template the editor makes is like (a damaged file may say otherwise)."""
+    ids = [v.id for v in template.all_vertices]
+    if len(set(ids)) != len(ids) or (ids and template.next_id <= max(ids)):
+        raise ValueError("vertex ids aren't distinct and below the next one")
+    labels = [v.label for v in template.all_vertices if v.label is not None]
+    if len(set(labels)) != len(labels):
+        raise ValueError("two vertices have the same label")
+    if any(f.number is not None and not 1 <= f.number < template.next_number for f in template.faces):
+        raise ValueError("a face's number isn't below the next one")
+    if any(not h.closed for h in template.holes[:-1]) or any(len(h.vertices) < 3 for h in template.holes if h.closed):
+        raise ValueError("a hole that isn't the last one is open, or a closed one has fewer than 3 vertices")
+    if not template.closed:
+        if template.folds or template.faces or template.fold_vertices or template.holes:
+            raise ValueError("an open loop with folds or faces")
+        return
+    if len(template.vertices) < 3:
+        raise ValueError("a closed loop of fewer than 3 vertices")
+    if any(len(template.folds_at(v.id)) < 2 for v in template.fold_vertices):
+        raise ValueError("a fold vertex that isn't between two fold segments at least")
+    sides = [
+        *template.all_loop_sides(),
+        *((f.start, f.end) for f in template.folds),
+        *((f.end, f.start) for f in template.folds),
+    ]
+    for face in template.faces:
+        if any(len(c) < 3 or not set(c) <= set(ids) for c in face.cycles):
+            raise ValueError(f"a face with wrong corners: {face.cycles}")
+    for a, b in sides:
+        if sum(face.has_side(a, b) for face in template.faces) != 1:
+            raise ValueError(f"the side {a}-{b} isn't on exactly one face")
+    if sum(len(c) for face in template.faces for c in face.cycles) != len(sides):
+        raise ValueError("the faces have sides that are neither the loop's nor folds")
+
+
+def _int(value: object) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise TypeError(f"expected a whole number, got {value!r}")
+    return value
+
+
+def _color(value: object) -> str | None:
+    if value is None:
+        return None  # not given yet
+    if not isinstance(value, str) or not COLOR_PATTERN.fullmatch(value):
+        raise ValueError(f"expected a colour as #RRGGBB, got {value!r}")
+    return value

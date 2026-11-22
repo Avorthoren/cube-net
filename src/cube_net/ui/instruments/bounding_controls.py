@@ -18,13 +18,14 @@
 
 from fractions import Fraction
 
-from PyQt6.QtCore import QEvent, QLocale, QObject, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QFont, QFontMetrics
-from PyQt6.QtWidgets import QApplication, QDoubleSpinBox, QLabel, QToolBar, QWidget
+from PyQt6.QtWidgets import QApplication, QLabel, QToolBar, QWidget
 
 from cube_net.core.bounding import BoundingRectangle
 from cube_net.core.project_settings import MAX_AREA_THRESHOLD, MIN_AREA_THRESHOLD
 from cube_net.ui import palette
+from cube_net.ui.decimal_box import DecimalBox
 from cube_net.ui.i18n import TRANSLATIONS, bind, tr
 from cube_net.ui.instant_tooltips import InstantTooltips
 from cube_net.ui.instruments.button_look import RADIUS_PX
@@ -64,25 +65,24 @@ class BoundingControls(QObject):
         self._blink_on = False
         self._blink_enabled = True
 
-        toolbar.addSeparator()
+        # What it put on the toolbar, to show or hide together.
+        self._toolbar_actions = [toolbar.addSeparator()]
         self.label = QLabel(toolbar)
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.tooltips = InstantTooltips(self.label)  # at once: no waiting over the area
         self._show_tooltip()  # and again with every area, and in another language
-        toolbar.addWidget(self.label)
+        self._toolbar_actions.append(toolbar.addWidget(self.label))
         self.target_label = QLabel(toolbar)
         bind(self.target_label, self.target_label.setText, "Target area")
         self.target_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        toolbar.addWidget(self.target_label)
-        self.target = QDoubleSpinBox(toolbar)
-        self.target.setLocale(QLocale.c())  # always 7.100, never 7,100
-        self.target.setDecimals(TARGET_DECIMALS)
-        self.target.setRange(float(MIN_AREA_THRESHOLD), float(MAX_AREA_THRESHOLD))
-        self.target.setSingleStep(TARGET_STEP)
+        self._toolbar_actions.append(toolbar.addWidget(self.target_label))
+        self.target = DecimalBox(
+            TARGET_DECIMALS, (float(MIN_AREA_THRESHOLD), float(MAX_AREA_THRESHOLD)), TARGET_STEP, toolbar
+        )  # 7.100 (never 7,100), but 7.1 while it's typed
         self.target.setKeyboardTracking(False)  # a value is taken when it's entered, not at every digit typed
         bind(self.target, self.target.setToolTip, "The project's goal: an area below this is a success")
         self.target.valueChanged.connect(self._on_target)
-        toolbar.addWidget(self.target)
+        self._toolbar_actions.append(toolbar.addWidget(self.target))
         app = QApplication.instance()
         assert app is not None
         app.installEventFilter(self)  # see `eventFilter`
@@ -93,6 +93,7 @@ class BoundingControls(QObject):
         bind(self.action, self.action.setToolTip, "Show the smallest bounding rectangle (B)")
         self.action.toggled.connect(self._on_toggled)
         toolbar.addAction(self.action)
+        self._toolbar_actions.append(self.action)
         self.button: QWidget | None = toolbar.widgetForAction(self.action)
 
         TRANSLATIONS.changed.connect(self._show_area)
@@ -166,6 +167,13 @@ class BoundingControls(QObject):
         if self._rectangle is not None:
             text += "\n" + exact_area_text(self._rectangle.area, limit)
         return text
+
+    def set_shown(self, shown: bool) -> None:
+        """Show or hide all of it (hidden while a template is made, which has no target and no rectangle)."""
+        for action in self._toolbar_actions:
+            action.setVisible(shown)
+        if not shown:
+            self.action.setChecked(False)
 
     def hint_shown(self) -> bool:
         """Is the area's hint shown now?"""

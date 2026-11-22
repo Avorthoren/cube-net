@@ -31,6 +31,19 @@ class ActionKind(Enum):
     APPROVE = "approve"
     MOVE_ORIGIN = "move origin"
 
+    # A template's (docs/template_idea.txt): a loop vertex added (the loop closed, too) or deleted, or moved; a fold
+    # added or deleted; a face given a colour; a vertex given a label (or its label taken away).
+    ADD_VERTEX = "add vertex"
+    DELETE_VERTEX = "delete vertex"
+    MOVE_VERTEX = "move vertex"
+    ADD_FOLD = "add fold"
+    DELETE_FOLD = "delete fold"
+    SET_FACE_COLOR = "set face color"
+    SET_LABEL = "set label"
+
+    # A valid template's pieces of one face hatched as its basis piece's hatch continues (Validate).
+    ALIGN_HATCHES = "align hatches"
+
 
 @dataclass(frozen=True, slots=True)
 class HistoryEntry[State]:

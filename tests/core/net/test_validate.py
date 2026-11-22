@@ -41,7 +41,7 @@ def test_seam_left_behind(net: Net) -> None:
         validate_net(net)
 
 
-def test_two_perimeter_cycles_are_not_a_finished_net() -> None:
+def test_a_net_in_two_pieces_is_not_a_finished_net() -> None:
     from fractions import Fraction as F
 
     from cube_net.core.cutting import CutLine, CutPoint, split_net
@@ -51,5 +51,5 @@ def test_two_perimeter_cycles_are_not_a_finished_net() -> None:
     right = next(he for he in net.boundary_edges() if he.destination.position == Vec(12, 14))
     line = CutLine([CutPoint(Vec(F(23, 2), 14), top), CutPoint(Vec(12, F(27, 2)), right)])
     split = split_net(net, line)
-    with pytest.raises(NetInvariantError, match="perimeter cycles"):
+    with pytest.raises(NetInvariantError, match="in pieces"):
         validate_net(split.net)

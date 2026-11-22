@@ -1,7 +1,8 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""The state of the project in a session log: one line with the whole project, so that a log can be reproduced exactly.
+"""The state of the project (or the template) in a session log: one line with the whole of it, so that a log can be
+reproduced exactly.
 
 The line holds the bytes of a project file, in base64. To get them back as files that the app can open:
 
@@ -16,15 +17,25 @@ import contextlib
 import sys
 from pathlib import Path
 
-from cube_net.core.project import PROJECT_SUFFIX, Project, project_to_bytes
+from cube_net.core.project import (
+    PROJECT_SUFFIX,
+    TEMPLATE_SUFFIX,
+    Project,
+    ProjectFileError,
+    TemplateDocument,
+    document_from_bytes,
+    project_to_bytes,
+    template_to_bytes,
+)
 
 # What comes after the time on a snapshot's line.
 SNAPSHOT_FIELDS = ("state", "snapshot")
 
 
-def snapshot_text(project: Project) -> str:
-    """The project as one word, to go into a log line."""
-    return base64.b64encode(project_to_bytes(project)).decode("ascii")
+def snapshot_text(document: Project | TemplateDocument) -> str:
+    """The project (or the template) as one word, to go into a log line."""
+    content = project_to_bytes(document) if isinstance(document, Project) else template_to_bytes(document)
+    return base64.b64encode(content).decode("ascii")
 
 
 def snapshots_in(log: Path) -> list[bytes]:
@@ -44,10 +55,18 @@ def extract_snapshots(log: Path) -> list[Path]:
     """Write the log's snapshots to files next to it: `<log's name>-1.cubenet`, ... Returns their paths."""
     paths = []
     for i, content in enumerate(snapshots_in(log), start=1):
-        path = log.with_name(f"{log.stem}-{i}{PROJECT_SUFFIX}")
+        path = log.with_name(f"{log.stem}-{i}{_suffix(content)}")
         path.write_bytes(content)
         paths.append(path)
     return paths
+
+
+def _suffix(content: bytes) -> str:
+    """A template's file ending for a template, a project's for anything else."""
+    try:
+        return TEMPLATE_SUFFIX if isinstance(document_from_bytes(content), TemplateDocument) else PROJECT_SUFFIX
+    except ProjectFileError:
+        return PROJECT_SUFFIX
 
 
 def main(argv: list[str]) -> int:

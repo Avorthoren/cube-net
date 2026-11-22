@@ -6,7 +6,8 @@
 The values here are the defaults. Some of them are app settings the user can change (Settings -> Style); `set_sizes`
 puts the user's values in place, and everything reads them from here when it paints or hit-tests.
 
-The README's animation shows the default look: after changing a default here, run scripts/make_readme_animation.py.
+The README's animation shows them, but those of a style (its project has its own): after changing another one here,
+run scripts/make_readme_animation.py.
 """
 
 # Width of fold edges and cuts (cuts lie fully inside their face).
@@ -15,12 +16,13 @@ EDGE_WIDTH_PX = 4.0
 # Radius of the vertex circles on the perimeter.
 VERTEX_RADIUS_PX = 6.0
 
-# A face is divided into 10 x 5 rectangles of 1/10 x 1/5 units (docs/idea.txt).
-HATCH_COLUMNS = 10
-HATCH_ROWS = 5
+# A unit square (a cube's face) is divided into 10 x 5 rectangles of 1/10 x 1/5 units (docs/idea.txt). Any positive
+# numbers will do (below 1, a rectangle is more than a unit).
+HATCH_COLUMNS = 10.0
+HATCH_ROWS = 5.0
 
-# A whole cube edge has this many dashes of each of its 2 colours.
-DASHES_PER_EDGE = 10
+# A unit of length (a whole cube edge) has this many dashes of each of its 2 colours.
+DASHES_PER_UNIT = 10.0
 
 # Width of the grid lines on the sheet (0: no grid).
 GRID_WIDTH_PX = 1.0
@@ -46,6 +48,9 @@ CUT_LINE_HALO_PX = 3.0
 
 # Width of the segment from the cut line's last point to the mouse.
 RUBBER_BAND_PX = 1.5
+
+# Width of the cut line where it's off the net (thin and dashed), and of the outline of its points there.
+OFF_NET_LINE_PX = 1.5
 
 # Width of the ring around a highlighted (hovered) perimeter vertex.
 VERTEX_HIGHLIGHT_PX = 3.0
@@ -97,16 +102,16 @@ COORDINATES_RIGHT_OFFSET_PX = 32
 def set_sizes(
     edge_width: float,
     vertex_radius: float,
-    hatch_columns: int,
-    hatch_rows: int,
-    dashes_per_edge: int,
+    hatch_columns: float,
+    hatch_rows: float,
+    dashes_per_unit: float,
     grid_width: float,
 ) -> None:
     """Use these values from now on; the sizes that follow from the edge width follow it."""
-    global EDGE_WIDTH_PX, VERTEX_RADIUS_PX, HATCH_COLUMNS, HATCH_ROWS, DASHES_PER_EDGE, GRID_WIDTH_PX
+    global EDGE_WIDTH_PX, VERTEX_RADIUS_PX, HATCH_COLUMNS, HATCH_ROWS, DASHES_PER_UNIT, GRID_WIDTH_PX
     global CUT_HITBOX_PX, HIGHLIGHT_WIDTH_PX, FOLD_HITBOX_PX
     EDGE_WIDTH_PX, VERTEX_RADIUS_PX, GRID_WIDTH_PX = edge_width, vertex_radius, grid_width
-    HATCH_COLUMNS, HATCH_ROWS, DASHES_PER_EDGE = hatch_columns, hatch_rows, dashes_per_edge
+    HATCH_COLUMNS, HATCH_ROWS, DASHES_PER_UNIT = hatch_columns, hatch_rows, dashes_per_unit
     CUT_HITBOX_PX = EDGE_WIDTH_PX * CUT_HITBOX_FACTOR
     HIGHLIGHT_WIDTH_PX = CUT_HITBOX_PX
     FOLD_HITBOX_PX = CUT_HITBOX_PX

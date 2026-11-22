@@ -2,22 +2,32 @@
 
 ## About
 
-Cube Net is a desktop application that lets you build cube networks (simple polygons that, when folded,
-can cover the whole surface of a cube without overlaps) by transforming one valid network into another
-using cuts and rearrangements.
+Cube Net is a desktop application that lets you build networks of solid bodies (polygons without self-intersections
+that, when folded, can cover the whole surface of a that body without overlaps) by transforming one valid network into
+another using cuts and rearrangements.
 
 <!--
 The animation is made by the application itself: scripts/make_readme_animation.py plays this cut with the real net
-and tools, in the default look (with two exceptions: no vertex labels and bounding rectangle is ON), and records it.
-Run it again whenever the default look changes: the default style (colours, sizes, tiling), how the sheet, the net,
-the cut line and its buttons are drawn, or how the mouse pointer looks over them.
+and tools, starting from src/cube_net/ui/help/demo/torus.cubenet (in that project's style, with no vertex labels and
+the bounding rectangle ON), and records it. Run it again whenever the look changes: how the sheet, the net, the cut line
+and its buttons, the right click's menu or Place a vertex's window are drawn, or how the mouse pointer looks over them.
 A test fails when the animation's first picture no longer matches the app.
 -->
 <p align="center">
-  <img src="docs/media/cube-net.png" width="600" alt="A cut from A1 through two faces to F1 divides the default cube net in two; one half is glued to the other along F1-B3, and the new net is approved. The bounding rectangle follows the net">
+  <img src="docs/media/readme-animation-net.png" width="600" alt="A net of a cube with a hole: a cut is drawn by clicks,
+       and its end is typed in the Place a vertex window. One half is glued to the other along a cut, and the new net
+       is approved. The bounding rectangle follows the net">
 </p>
 
 In the application, **Help → Help** (F1) explains how it all works, with animations.
+
+It supports only bodies that have networks, in which every pair of related (those that were cut to "unfold" the body,
+and that should be glued again to "wrap" the body) boundary segments are either parallel or perpendicular. In this case
+it's guaranteed that if all initial vertices coordinates are rational - they'll stay rational after any chain of
+rearrangements. It allows the application to store all coordinates exactly (up to 2100 decimal digits), making exact
+calculations, not losing anything due to rounding errors.
+
+Initially, application was developed solely for cube networks manipulations. Hence, the name: Cube Net.
 
 ## Installation
 

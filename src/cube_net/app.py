@@ -13,9 +13,11 @@ from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication
 
 from cube_net.ui.app_settings import AppSettings
+from cube_net.ui.crash.crash_handler import CrashHandler
 from cube_net.ui.desktop_integration import ENTRY_NAME, running_appimage
 from cube_net.ui.file_requests import FileRequests
 from cube_net.ui.main_window import APP_TITLE, MainWindow
+from cube_net.ui.session.start import session_log_directory
 
 # The application's icon (drawn by scripts/make_icon.py).
 ICON = files("cube_net.ui.icons") / "cube_net.png"
@@ -46,12 +48,16 @@ def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv if argv is None else argv
     if SMOKE_TEST in arguments[1:]:
         with tempfile.TemporaryDirectory() as folder:
+            crashes = install_crash_handler(app, Path(folder))
             settings = AppSettings(QSettings(str(Path(folder) / "settings.ini"), QSettings.Format.IniFormat))
             window = MainWindow(settings=settings, session_dir=Path(folder))
+            attach_main_window(crashes, window)
             window.show()
             QTimer.singleShot(SMOKE_TEST_MS, app.quit)
             return app.exec()
-    window = MainWindow(appimage=running_appimage())
+    crashes = install_crash_handler(app, session_log_directory())  # before anything else: a crash at start too
+    window = MainWindow(appimage=running_appimage(), empty=True)  # nothing open until the last project is reopened
+    attach_main_window(crashes, window)
     window.show()
     window.offer_menu_entry()  # an AppImage asks once; later it only keeps the entry up to date
     # A file asked for later (macOS sends double-clicked ones so, even at launch) replaces what's shown then.
@@ -60,10 +66,24 @@ def main(argv: list[str] | None = None) -> int:
     if project is not None:
         window.open_project_at_start(project)
     else:
-        window.reopen_last_project()
+        window.reopen_last_project()  # or File -> New's window, the first time
     window.show_help_at_first_start()  # over the project
     window.check_for_updates_at_start()  # in the background; it says something only if there's a newer version
     return app.exec()
+
+
+def install_crash_handler(app: QApplication, directory: Path) -> CrashHandler:
+    """From now on, an exception nothing caught writes a crash report into `directory` (the session logs' folder),
+    tells the user, and closes the application (`CrashHandler`)."""
+    handler = CrashHandler(lambda: directory, app)
+    handler.install()
+    return handler
+
+
+def attach_main_window(handler: CrashHandler, window: MainWindow) -> None:
+    """A crash report has the main window's state, its latest input and its session log; a crash ends its recording."""
+    handler.sections = window.crash_sections
+    handler.end_recording = window.end_recording_after_crash
 
 
 def project_argument(arguments: list[str]) -> Path | None:

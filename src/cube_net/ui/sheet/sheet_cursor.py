@@ -25,13 +25,14 @@ from cube_net.ui.sheet.cut_tool import CutTool
 from cube_net.ui.sheet.ruler_tool import RulerTool
 from cube_net.ui.sheet.sheet_view import SheetView
 from cube_net.ui.sheet.tooltip_label import TooltipLabel
+from cube_net.ui.template.template_tool import TemplateTool
 
 # How long the mouse stays over something before its tooltip appears.
 TOOLTIP_DELAY_MS = 500
 
 
 class SheetCursor(QObject):
-    def __init__(self, view: SheetView, cut_tool: CutTool, ruler: RulerTool) -> None:
+    def __init__(self, view: SheetView, cut_tool: CutTool | TemplateTool, ruler: RulerTool | None) -> None:
         super().__init__(view)
         self._view = view
         self._cut_tool = cut_tool
@@ -56,7 +57,8 @@ class SheetCursor(QObject):
         cut_tool.line_changed.connect(self.update)
         cut_tool.net_changed.connect(self.update)
         cut_tool.origin_changed.connect(self.update)
-        ruler.points_changed.connect(self.update)
+        if ruler is not None:
+            ruler.points_changed.connect(self.update)
         view.zoom_changed.connect(lambda *_: self.update())
 
     def kind(self) -> CursorKind:

@@ -13,7 +13,7 @@ for real when a segment is chosen for gluing (M6).
 
 from dataclasses import dataclass
 
-from cube_net.core.cube import SurfacePoint
+from cube_net.core.body import SurfacePoint
 from cube_net.core.cutting.cut_line import CutPoint
 from cube_net.core.cutting.pieces import surface_point_at
 from cube_net.core.geometry import Vec

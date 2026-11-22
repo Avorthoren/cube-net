@@ -5,6 +5,7 @@ from fractions import Fraction as F
 
 from pytestqt.qtbot import QtBot
 
+from cube_net.core.body import CUBE
 from cube_net.core.editor import EditorState
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels
@@ -69,7 +70,7 @@ def test_labels_with_the_given_names_or_none(qtbot: QtBot) -> None:
     from cube_net.core.labels import PointLabels
 
     view, workspace = make(qtbot)
-    workspace.show_labels(PointLabels())
+    workspace.show_labels(PointLabels(CUBE))
     item = view.net_item()
     assert item is not None and item.labels() is not None
     workspace.show_labels(None)
@@ -78,7 +79,7 @@ def test_labels_with_the_given_names_or_none(qtbot: QtBot) -> None:
 
 def test_point_names(qtbot: QtBot) -> None:
     view, workspace = make(qtbot)
-    names = PointLabels()
+    names = PointLabels(CUBE)
     assert workspace.point_name(Vec(11, 13), names) == "C_1"
     corner_cut(view)
     assert workspace.point_name(Vec(F(23, 2), F(27, 2)), names) is not None  # a new point of the line: its preview name

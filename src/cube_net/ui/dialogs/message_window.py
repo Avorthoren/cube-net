@@ -13,6 +13,7 @@ come in the order the system wants them.
 from enum import Enum
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QTextDocument
 from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QHBoxLayout,
@@ -54,9 +55,6 @@ class MessageWindow(SmallWindow):
         self.icon_label.setPixmap(style.standardIcon(icon.value).pixmap(ICON_PX, ICON_PX))
         self.icon_label.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.text_label = _label(text, self)
-        font = self.text_label.font()
-        font.setBold(True)
-        self.text_label.setFont(font)
         self.details_label = _label(details, self)
         self.details_label.setVisible(bool(details))
         words = QVBoxLayout()
@@ -149,9 +147,18 @@ def _label(text: str, parent: QWidget) -> QLabel:
     label = QLabel(text, parent)
     label.setWordWrap(True)
     label.setMaximumWidth(TEXT_WIDTH_PX)
-    label.setMinimumWidth(min(TEXT_WIDTH_PX, label.fontMetrics().horizontalAdvance(text) + 2))
+    label.setMinimumWidth(min(TEXT_WIDTH_PX, label.fontMetrics().horizontalAdvance(_shown(text)) + 2))
     label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
     return label
+
+
+def _shown(text: str) -> str:
+    """The words a label shows for its text: rich text (Qt takes it for one, as the label does) without its tags."""
+    if not Qt.mightBeRichText(text):
+        return text
+    document = QTextDocument()
+    document.setHtml(text)
+    return document.toPlainText()
 
 
 def tell(
@@ -167,3 +174,13 @@ def tell(
     window.set_default(ok)
     window.set_escape(ok)
     window.ask()
+
+
+def ask_yes_no(parent: QWidget | None, text: str, details: str = "") -> bool:
+    """A question with Yes (the default) and No (also Escape and the close button)."""
+    window = MessageWindow("Cube Net", text, details, MessageIcon.QUESTION, parent)
+    yes = window.add_standard(QDialogButtonBox.StandardButton.Yes)
+    no = window.add_standard(QDialogButtonBox.StandardButton.No)
+    window.set_default(yes)
+    window.set_escape(no)
+    return window.ask() is yes

@@ -5,6 +5,14 @@
 
 import math
 
+from cube_net.ui.sheet import net_style
+
+
+def dash_length() -> float:
+    """How long a dash is, in units: `DASHES_PER_UNIT` dashes of each of the 2 colours (or of the line and its gaps)
+    to a unit of length."""
+    return 1 / (2 * net_style.DASHES_PER_UNIT)
+
 
 def dash_pieces(length: float, offset: float, dash: float) -> list[tuple[float, float, int]]:
     """Split [0, length] into dashes of size `dash` of a pattern that has position `offset` at 0.

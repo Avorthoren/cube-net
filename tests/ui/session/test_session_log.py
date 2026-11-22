@@ -52,3 +52,12 @@ def test_written_immediately_and_close_is_safe(tmp_path: Path) -> None:
     log.write("ignored")
     log.close()
     assert "ignored" not in (tmp_path / "s.log").read_text()
+
+
+def test_a_unique_path_with_another_prefix(tmp_path: Path) -> None:
+    from cube_net.ui.session.session_log import unique_log_path
+
+    moment = datetime(2026, 11, 7, 15, 30, 12, 345678)
+    path = unique_log_path(tmp_path / "made", "crash-report", now=moment)
+    assert path == tmp_path / "made" / f"crash-report-20261107-153012-345-{os.getpid()}.log"
+    assert path.parent.is_dir() and not path.exists()  # the folder is made, the file is the caller's

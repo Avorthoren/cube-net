@@ -20,7 +20,7 @@ from dataclasses import dataclass, replace
 from enum import Enum
 from fractions import Fraction
 
-from cube_net.core.cutting.rules import strictly_inside
+from cube_net.core.cutting.perimeter import on_the_perimeter
 from cube_net.core.geometry import Vec, on_segment
 from cube_net.core.net import HalfEdge, Net
 
@@ -54,10 +54,7 @@ class Axis(Enum):
 
 
 class Problem(Enum):
-    # A point inside the net (not one of the line's ends) is outside it.
-    OUTSIDE_NET = "outside_net"
-
-    # A point inside the net is on its perimeter, where only the line's ends may be.
+    # A point that isn't put on a cut is on the perimeter (only points put on a cut may be there).
     ON_PERIMETER = "on_perimeter"
 
     # A point on an edge is beyond its ends (or off its line).
@@ -69,7 +66,8 @@ class Problem(Enum):
     # The line already has as many points as it may.
     TOO_MANY_POINTS = "too_many_points"
 
-    # The new segments would leave the net, or touch or cross the line (the editor's rules reject them).
+    # The new segments would touch the perimeter (other than crossing a cut), or touch or cross the line (the editor's
+    # rules reject them).
     BREAKS_LINE = "breaks_line"
 
 
@@ -169,11 +167,9 @@ class Constraint:
                 return Problem.OFF_EDGE if self.kind is LineKind.EDGE else Problem.OFF_FOLD
         if self.kind is LineKind.EDGE:
             return None  # the line's ends belong on the perimeter
-        if not net.contains(p):
-            return Problem.OUTSIDE_NET
-        if not strictly_inside(net, p):
-            return Problem.ON_PERIMETER
-        return None
+        if on_the_perimeter(net, p) is not None:
+            return Problem.ON_PERIMETER  # only points clicked or typed on a cut are on the perimeter
+        return None  # outside the net, or in a hole, is fine too (docs/template_plan.md §8.2)
 
 
 def fold_through(net: Net, p: Vec) -> HalfEdge | None:

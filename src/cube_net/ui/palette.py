@@ -3,12 +3,17 @@
 
 """Colours used by the UI (docs/idea.txt; docs/plan.md, section 6.5).
 
-The README's animation shows the default look: after changing a default here, run scripts/make_readme_animation.py.
+The README's animation shows these colours (but the faces' and the grid's: its project has its own): after changing
+one here, run scripts/make_readme_animation.py.
 """
 
+from collections.abc import Sequence
 from types import MappingProxyType
 
 from PyQt6.QtGui import QColor
+
+from cube_net.core.body import CUBE, Body
+from cube_net.core.body.cube import FACE_COLORS as CUBE_FACE_COLORS
 
 # Background of the main area around the sheet.
 MAIN_AREA = QColor("#9AA0A6")
@@ -19,24 +24,25 @@ SHEET_BORDER = QColor("#5F6368")
 # Thin light-grey 1x1 grid on the sheet.
 GRID = QColor("#D3D3D3")
 
-FACE_COLORS = MappingProxyType(
-    {
-        # Default face colours from docs/idea.txt. Look-alike colours are on opposite faces (1-6, 2-5, 3-4).
-        # The user can change them (Settings -> Style): `set_colors` puts the user's colours in place.
-        1: QColor("#0057B8"),  # deep blue
-        2: QColor("#F28E00"),  # orange
-        3: QColor("#008A4B"),  # green
-        4: QColor("#8B45B5"),  # purple
-        5: QColor("#E50055"),  # magenta
-        6: QColor("#00A6D6"),  # cyan
-    }
-)
+# The open project's face colours (face k: FACE_COLORS[k]); `set_face_colors` puts them in place. The cube's default
+# ones (docs/idea.txt) until a project says otherwise.
+FACE_COLORS = MappingProxyType({face: QColor(color) for face, color in enumerate(CUBE_FACE_COLORS, start=1)})
+
+# The open project's body: its faces are painted in FACE_COLORS, another body's in that body's own default colours.
+_FACE_COLORS_BODY: Body = CUBE
+
+# The grey squares of a template's face that has no colour yet (a chessboard with white).
+UNCOLORED_FACE = QColor("#E6E6E6")
 
 # Outline of the grid's preview square in the settings.
 SWATCH_OUTLINE = QColor("#000000")
 
 # Second colour of the hatch pattern and of dashes of cuts inside a face.
 WHITE = QColor("#FFFFFF")
+
+# A template's loop, and its fold lines (dashed).
+TEMPLATE_LOOP = QColor("#3C4043")
+TEMPLATE_FOLD = QColor("#5F6368")
 
 # Thin outline of vertex circles, so that sectors stand out on similar colours.
 VERTEX_OUTLINE = QColor("#3C4043")
@@ -62,6 +68,19 @@ TOOL_BUTTON_DOWN_TOP = QColor("#C6CBD2")
 TOOL_BUTTON_DOWN_BOTTOM = QColor("#E0E3E7")
 TOOL_BUTTON_DOWN_BORDER = QColor("#5F6368")
 
+# The outline of the colour squares that name faces in validation's messages (a white face shows too).
+COLOR_SQUARE_OUTLINE = QColor("#404040")
+
+# The Validate button of a template that's Valid: a muted green, raised like the other buttons.
+VALID_BUTTON_TOP = QColor("#E3F2E1")
+VALID_BUTTON_BOTTOM = QColor("#BFDDB9")
+
+# The Validate button of a template that's Invalid: a muted red; a little darker under the mouse, and pushed in.
+INVALID_BUTTON_TOP = QColor("#F7E1E0")
+INVALID_BUTTON_BOTTOM = QColor("#E4B9B6")
+INVALID_BUTTON_HOVER_BOTTOM = QColor("#D9A6A2")
+INVALID_BUTTON_DOWN_TOP = QColor("#D9A6A2")
+
 # The status bar's word on the project: unsaved changes (it should catch the eye), or all saved (quiet).
 UNSAVED = QColor("#E37400")
 SAVED = QColor("#5F6368")
@@ -77,6 +96,9 @@ CUT_LINE_HALO = QColor(255, 214, 0, 170)
 
 # The segment from the cut line's last point to the mouse.
 RUBBER_BAND = QColor(32, 33, 36, 200)
+
+# The cut line where it's off the net (outside it, or in a hole: it cuts nothing there), and its points there.
+CUT_LINE_OFF_NET = QColor("#8C8C8C")
 
 # A rejected segment is shown in this colour for a moment (docs/idea.txt: black for 200 ms).
 REJECTED = QColor("#000000")
@@ -123,8 +145,27 @@ APPROVE_BUTTON_PRESSED_TOP = QColor("#9AA0A6")
 APPROVE_BUTTON_DISABLED = QColor("#9E9E9E")
 
 
-def set_colors(face_colors: dict[int, QColor], grid: QColor) -> None:
-    """Use these colours from now on."""
-    global FACE_COLORS, GRID
-    FACE_COLORS = MappingProxyType(dict(face_colors))
+def set_face_colors(colors: Sequence[str], body: Body = CUBE) -> None:
+    """Use these face colours ("#RRGGBB", face k: colors[k - 1]) for the faces of `body` (the open project's) from
+    now on."""
+    global FACE_COLORS, _FACE_COLORS_BODY
+    FACE_COLORS = MappingProxyType({face: QColor(color) for face, color in enumerate(colors, start=1)})
+    _FACE_COLORS_BODY = body
+
+
+def face_colors_in_place() -> tuple[tuple[str, ...], Body]:
+    """The face colours in place now ("#RRGGBB") and the body they're for (`set_face_colors`)."""
+    return tuple(color.name().upper() for color in FACE_COLORS.values()), _FACE_COLORS_BODY
+
+
+def face_color(body: Body, face: int) -> QColor:
+    """The colour face `face` of `body` is painted in."""
+    if body is _FACE_COLORS_BODY:
+        return FACE_COLORS[face]
+    return QColor(body.colors[face - 1])
+
+
+def set_grid_color(grid: QColor) -> None:
+    """Use this grid colour from now on."""
+    global GRID
     GRID = grid

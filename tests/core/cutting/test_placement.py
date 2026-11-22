@@ -71,16 +71,18 @@ class TestProblems:
         assert fold.problem(net, Vec(F(25, 2), 13)) is Problem.OFF_FOLD
         assert fold.problem(net, Vec(11, 13)) is Problem.ON_PERIMETER  # its end is a vertex of the perimeter
 
-    def test_a_free_point_strictly_inside(self, net: Net) -> None:
+    def test_a_free_point_anywhere_but_on_the_perimeter(self, net: Net) -> None:
         free = Constraint.free()
         assert free.problem(net, Vec(F(23, 2), F(27, 2))) is None
-        assert free.problem(net, Vec(9, 9)) is Problem.OUTSIDE_NET
+        assert free.problem(net, Vec(9, 9)) is None  # outside the net: fine (docs/template_plan.md §8.2)
         assert free.problem(net, Vec(F(23, 2), 14)) is Problem.ON_PERIMETER
 
-    def test_shifts_line_is_unbounded_but_the_point_inside(self, net: Net) -> None:
+    def test_shifts_line_is_unbounded(self, net: Net) -> None:
         straight = Constraint.straight(Vec(F(23, 2), 14), horizontal=False)
         assert straight.problem(net, Vec(F(23, 2), F(27, 2))) is None
-        assert straight.problem(net, Vec(F(23, 2), 20)) is Problem.OUTSIDE_NET
+        assert straight.problem(net, Vec(F(23, 2), 20)) is None
+        assert straight.problem(net, Vec(F(23, 2), 13)) is None  # on a fold
+        assert straight.problem(net, Vec(F(23, 2), 10)) is Problem.ON_PERIMETER
 
 
 def test_the_fold_a_point_is_on(net: Net) -> None:

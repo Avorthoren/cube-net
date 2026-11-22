@@ -1,8 +1,8 @@
 # Copyright (C) 2026 Viktor Podust
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-"""`SheetContextMenu`: a right click on the sheet opens a menu (docs/idea.txt), in DEFAULT and CUTTING, while a point
-is being dragged in CUT_EDITING, and in any state over a drawn point (a vertex, a point of the cut line, an image):
+"""`SheetContextMenu`: a right click on the sheet opens a menu wherever at least one of its items can be chosen there
+(whatever the state: the user asked for that on 2026-11-20, after a fold line being drawn had none), and nowhere else:
 - "Place a vertex" opens `PlaceVertexWindow` for the point a click there would make (where the dragged point is).
   Disabled where there's nothing to place (no point would be made, or it would be a vertex, whose coordinates are
   fixed). Cancel there also unlocks a locked slope;
@@ -13,6 +13,8 @@ is being dragged in CUT_EDITING, and in any state over a drawn point (a vertex, 
 - "Move the origin" opens `MoveOriginWindow` for the drawn point under the mouse (the one the coordinates hint is
   about): the origin moves so that the point has the typed coordinates (`Origin`). Disabled where there's no such
   point, and while a point is dragged.
+- In a template (with `TemplateTool`), "Assign label" too, for the vertex under the mouse: what to do is the
+  window's (`assign`). Disabled where there's no vertex, while the loop isn't closed yet, and while a vertex is dragged.
 
 The menu is the application's own (`ContextMenu`), drawn in the window: on Wayland, a system popup can't open while the
 drag's button is held. The menu and the window take the mouse, so a drag can't go on after them: placing the point ends
@@ -32,7 +34,6 @@ from PyQt6.QtCore import QObject, QPointF
 
 from cube_net.core.cutting import slope_of
 from cube_net.core.cutting.placement import Placement
-from cube_net.core.editor import EditorState
 from cube_net.core.geometry import Vec
 from cube_net.ui.context_menu import ContextMenu, MenuItem
 from cube_net.ui.i18n import tr
@@ -41,49 +42,65 @@ from cube_net.ui.sheet.move_origin_window import MoveOriginWindow
 from cube_net.ui.sheet.place_vertex_window import PlaceVertexWindow
 from cube_net.ui.sheet.set_slope_window import SetSlopeWindow
 from cube_net.ui.sheet.sheet_view import SheetView
+from cube_net.ui.template.template_tool import TemplateTool
 
 # The menu's items, in their order.
 PLACE_VERTEX = 0
 SET_SLOPE = 1
 MOVE_ORIGIN = 2
+ASSIGN_VERTEX = 3
 
 
 class SheetContextMenu(QObject):
-    def __init__(self, view: SheetView, cut_tool: CutTool) -> None:
+    def __init__(
+        self, view: SheetView, cut_tool: CutTool | TemplateTool, assign: Callable[[Vec], None] | None = None
+    ) -> None:
+        """`assign`: a template's Assign label, for the vertex at a sheet point (None: not offered)."""
         super().__init__(view)
         self._view = view
         self._cut_tool = cut_tool
+        self._assign = assign
 
         # The name of a drawn point (sheet coordinates), if it has one: what undoing a move of the origin tells.
         self.point_name: Callable[[Vec], str | None] = lambda _point: None
 
         view.right_pressed.connect(self._on_right_pressed)
 
-    def offered(self, vertex: Vec | None = None) -> bool:
-        """Is there a menu now (DEFAULT, CUTTING, dragging a point in CUT_EDITING, or the mouse over `vertex`, a drawn
-        point)?"""
-        state = self._cut_tool.editor.state
-        return state in (EditorState.DEFAULT, EditorState.CUTTING) or self._cut_tool.dragging or vertex is not None
-
-    def menu(self, placement: Placement | None, slope: Vec | None, vertex: Vec | None = None) -> ContextMenu:
-        """The menu: "Place a vertex" (disabled without a placement), "Set slope" (disabled without a segment), "Move
-        the origin" (disabled without a drawn point). The application's own (`ContextMenu`), not a system popup: on
-        Wayland, one can't open while the drag's button is held."""
-        window = self._view.window()
-        assert window is not None
+    def items(self, placement: Placement | None, slope: Vec | None, vertex: Vec | None = None) -> list[MenuItem]:
+        """The menu's items: "Place a vertex" (disabled without a placement), "Set slope" (disabled without a segment),
+        "Move the origin" (disabled without a drawn point), and in a template "Assign label"."""
         items = [
             MenuItem(tr("Place a vertex"), placement is not None),
             MenuItem(tr("Set slope"), slope is not None),
             MenuItem(tr("Move the origin"), vertex is not None),
         ]
-        return ContextMenu(window, items)
+        if self._assign is not None:
+            assignable = isinstance(self._cut_tool, TemplateTool) and self._cut_tool.can_assign()
+            items.append(MenuItem(tr("Assign label"), assignable and vertex is not None))
+        return items
+
+    def items_at(self, x: float, y: float) -> list[MenuItem]:
+        """The items for a right click at sheet point (x, y)."""
+        vertex = self._cut_tool.vertex_at(x, y)
+        return self.items(self._cut_tool.placement_at(x, y), self._cut_tool.slope_at(x, y), vertex)
+
+    def offered_at(self, x: float, y: float) -> bool:
+        """Is there a menu for a right click here: can any of its items be chosen?"""
+        return any(item.enabled for item in self.items_at(x, y))
+
+    def menu(self, placement: Placement | None, slope: Vec | None, vertex: Vec | None = None) -> ContextMenu:
+        """The menu (`items`): the application's own (`ContextMenu`), not a system popup: on Wayland, one can't open
+        while the drag's button is held."""
+        window = self._view.window()
+        assert window is not None
+        return ContextMenu(window, self.items(placement, slope, vertex))
 
     def _on_right_pressed(self, x: float, y: float) -> None:
         vertex = self._cut_tool.vertex_at(x, y)
-        if not self.offered(vertex):
-            return
         placement = self._cut_tool.placement_at(x, y)
         slope = self._cut_tool.slope_at(x, y)
+        if not any(item.enabled for item in self.items(placement, slope, vertex)):
+            return  # nothing could be chosen: no menu
         menu = self.menu(placement, slope, vertex)
         viewport = self._view.viewport()
         window = self._view.window()
@@ -101,6 +118,8 @@ class SheetContextMenu(QObject):
             self.open_slope_window(slope)
         elif chosen == MOVE_ORIGIN and vertex is not None:
             self.open_origin_window(vertex)
+        elif chosen == ASSIGN_VERTEX and vertex is not None and self._assign is not None:
+            self._assign(vertex)
         elif self._cut_tool.dragging:
             self._cut_tool.cancel_drag()
 

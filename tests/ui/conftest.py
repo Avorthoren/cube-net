@@ -58,3 +58,15 @@ def no_modifiers_held(qapp: object) -> None:
     from PyQt6.QtWidgets import QWidget
 
     QTest.keyClick(QWidget(), Qt.Key.Key_A)
+
+
+@pytest.fixture(autouse=True)
+def new_is_the_cube(monkeypatch: pytest.MonkeyPatch) -> None:
+    """File -> New chooses the Cube in its window (which would wait for the user); a test choosing otherwise replaces
+    `cube_net.ui.main_window.choose_new_project` itself."""
+    from cube_net.ui.dialogs.new_project_window import NewProjectChoice, Start, builtin_project
+
+    monkeypatch.setattr(
+        "cube_net.ui.main_window.choose_new_project",
+        lambda *_: NewProjectChoice(Start.CUBE, None, builtin_project(Start.CUBE)),
+    )

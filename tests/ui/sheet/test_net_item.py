@@ -8,13 +8,15 @@ from PyQt6.QtCore import QPointF
 from PyQt6.QtGui import QColor, QImage, QPainter, QTransform
 from PyQt6.QtWidgets import QApplication
 
+from cube_net.core.body import CUBE
 from cube_net.core.cutting import CutLine, CutPoint, SplitNet, split_net
 from cube_net.core.geometry import Vec
 from cube_net.core.labels import PointLabels, vertex_labels
 from cube_net.core.net import HalfEdge, default_net
 from cube_net.ui import palette
+from cube_net.ui.qt_geometry import to_qpointf
 from cube_net.ui.sheet import net_style
-from cube_net.ui.sheet.net_item import NetItem, hatch_path
+from cube_net.ui.sheet.net_item import NetItem
 
 SCALE = 100.0  # px per unit
 ORIGIN = QPointF(9, 15)  # sheet point drawn at the image's top-left corner
@@ -31,7 +33,7 @@ def render(
     net = default_net()
     item = NetItem(net)
     if with_labels:
-        item.set_labels(vertex_labels(net, PointLabels()))
+        item.set_labels(vertex_labels(net, PointLabels(CUBE)))
     if highlight_left_of_face_4:
         cut = next(he for he in net.boundary_edges() if he.origin.position.x == he.destination.position.x == 10)
         item.set_highlight(cut)
@@ -43,15 +45,6 @@ def render(
 def colour_at(image: QImage, world: QTransform, x: float, y: float) -> QColor:
     p = world.map(QPointF(x, y))
     return image.pixelColor(int(p.x()), int(p.y()))
-
-
-def test_hatch_covers_half_of_the_face() -> None:
-    path = hatch_path()
-    area = 0.0
-    for i in range(path.elementCount() // 4):  # 4 elements per closed triangle
-        a, b, c = (path.elementAt(4 * i + j) for j in range(3))
-        area += abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)) / 2
-    assert area == pytest.approx(0.5)
 
 
 def test_hatch_upper_triangle_coloured_lower_white() -> None:
@@ -116,7 +109,7 @@ def test_single_face_circle_has_no_radius_line() -> None:
     image = QImage(60, 60, QImage.Format.Format_RGB32)
     image.fill(QColor("white"))
     painter = QPainter(image)
-    paint_vertex(painter, QPointF(30, 30), {2}, 20)
+    paint_vertex(painter, CUBE, QPointF(30, 30), {2}, 20)
     painter.end()
     for y in range(14, 29):  # straight up from the center: all face colour, no outline pixels
         assert image.pixelColor(30, y) == palette.FACE_COLORS[2], y
@@ -287,3 +280,52 @@ class TestHiddenCut:
         item.set_hidden_cut(self.bottom_cut(split))
         item.set_net(default_net())
         assert item.hidden_cut() is None
+
+
+def test_a_vertex_of_the_body_inside_the_net_has_its_circle() -> None:
+    """The cube's cross as a template, the fold between faces 1 and 2 bent through a fold vertex M (11.5, 13.25): in a
+    project of it, M is inside the net, and its circle is drawn there (docs/template_plan.md, §8.4)."""
+    from cube_net.core.history import History
+    from cube_net.core.project.from_template import project_from_template
+    from cube_net.core.project.template_codec import TemplateDocument
+    from cube_net.core.template import Label, TemplateEditor, TemplateSnapshot, validate
+
+    cross = [
+        (11, 10, "A", 3), (12, 10, "B", 3), (12, 11, "F", 1), (12, 12, "G", 1), (13, 12, "F", 2), (13, 13, "B", 2),
+        (12, 13, "D", 1), (12, 14, "B", 1), (11, 14, "A", 1), (11, 13, "C", 1), (10, 13, "A", 2), (10, 12, "E", 2),
+        (11, 12, "H", 1), (11, 11, "E", 1),
+    ]  # fmt: skip
+    editor = TemplateEditor()
+    for x, y, *_ in [*cross, cross[0]]:
+        editor.add_point(Vec(x, y))
+    for i, (_, _, name, index) in enumerate(cross):
+        editor.set_label(i, Label(name, index))
+    ids = {str(v.label): v.id for v in editor.template.vertices}
+    for a, b in [("H1", "G1"), ("E1", "F1"), ("C1", "H1"), ("D1", "G1")]:
+        assert editor.add_fold(ids[a], ids[b]) is None
+    m = Vec(Fraction(23, 2), Fraction(53, 4))
+    assert editor.add_fold_line(ids["C1"], [m], ids["D1"]) is None
+    editor.set_label(editor.template.fold_vertices[0].id, Label("M", 1))
+    for i in range(len(editor.template.faces)):
+        editor.set_face_color(i, f"#{40 * i:02X}{200 - 30 * i:02X}80")
+    assert validate(editor.template) is None
+    net = project_from_template(TemplateDocument(TemplateSnapshot(editor.template), History())).state.net
+    (inner,) = [v for v in net.vertices if v.point.vertex == "M"]
+    image = QImage(500, 600, QImage.Format.Format_RGB32)
+    image.fill(QColor("black"))
+    world = QTransform().scale(SCALE, -SCALE).translate(-ORIGIN.x(), -ORIGIN.y())
+    painter = QPainter(image)
+    painter.setTransform(world)
+    NetItem(net).paint(painter, None)
+    painter.end()
+    centre = world.map(to_qpointf(inner.position))
+    import math
+
+    r = net_style.VERTEX_RADIUS_PX
+    ring = [
+        image.pixelColor(
+            round(centre.x() + r * math.cos(t / 8 * math.pi)), round(centre.y() + r * math.sin(t / 8 * math.pi))
+        )
+        for t in range(16)
+    ]
+    assert sum(c.lightness() < 110 for c in ring) >= 8  # the circle's dark outline all round, where the hatch would be

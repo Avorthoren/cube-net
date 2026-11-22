@@ -1,0 +1,245 @@
+# Copyright (C) 2026 Viktor Podust
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+from dataclasses import replace
+from pathlib import Path
+
+import pytest
+from PyQt6.QtWidgets import QWidget
+from pytestqt.qtbot import QtBot
+
+from cube_net.core.geometry import Vec
+from cube_net.core.project import TemplateDocument, load_document
+from cube_net.core.template import Label, TemplateState, ValidationStatus
+from cube_net.ui.style import DEFAULT_STYLE
+from cube_net.ui.template.template_mode import TemplateMode
+
+# A cross (the cube's net), its labels, and its folds (docs/idea.txt).
+CROSS = [
+    (11, 10, "A", 3), (12, 10, "B", 3), (12, 11, "F", 1), (12, 12, "G", 1), (13, 12, "F", 2), (13, 13, "B", 2),
+    (12, 13, "D", 1), (12, 14, "B", 1), (11, 14, "A", 1), (11, 13, "C", 1), (10, 13, "A", 2), (10, 12, "E", 2),
+    (11, 12, "H", 1), (11, 11, "E", 1),
+]  # fmt: skip
+FOLDS = [("C1", "D1"), ("H1", "G1"), ("E1", "F1"), ("C1", "H1"), ("D1", "G1")]
+
+
+@pytest.fixture
+def mode(qtbot: QtBot) -> TemplateMode:
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    mode = TemplateMode(parent, lambda *_: None)
+    for x, y, *_ in [*CROSS, CROSS[0]]:
+        assert mode.editor.add_point(Vec(x, y)) is None
+    ids = {v.position: v.id for v in mode.editor.template.vertices}
+    for x, y, name, index in CROSS:
+        mode.editor.set_label(ids[Vec(x, y)], Label(name, index))
+    labels = {str(v.label): v.id for v in mode.editor.template.vertices}
+    for a, b in FOLDS:
+        assert mode.editor.add_fold(labels[a], labels[b]) is None
+    for index in range(len(mode.editor.template.faces)):
+        mode.editor.set_face_color(index, f"#0000{index:02X}")
+    mode.tool.refresh()
+    return mode
+
+
+def told(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """What the messages say (the question after a successful validation is answered No)."""
+    texts: list[str] = []
+    monkeypatch.setattr("cube_net.ui.template.template_mode.tell", lambda _p, _t, text, **_: texts.append(text))
+    monkeypatch.setattr("cube_net.ui.template.template_mode.ask_yes_no", lambda *_: False)
+    return texts
+
+
+@pytest.mark.parametrize("answer", [True, False])
+def test_no_problems_and_whether_to_save(
+    mode: TemplateMode, monkeypatch: pytest.MonkeyPatch, qtbot: QtBot, answer: bool
+) -> None:
+    texts = told(monkeypatch)
+    asked: list[str] = []
+    monkeypatch.setattr("cube_net.ui.template.template_mode.ask_yes_no", lambda _p, text: asked.append(text) or answer)
+    saves: list[bool] = []
+    mode.save_wanted.connect(lambda: saves.append(True))
+    mode.validate()
+    assert asked == ["No problems found.\nSave the template?"] and texts == []
+    assert saves == ([True] if answer else [])
+    assert mode.status() is ValidationStatus.VALID  # whatever the answer
+
+
+@pytest.mark.parametrize(
+    ("loaded", "text"),
+    [
+        (1, "You have a face without a color. Double-click on the face to assign its color."),
+        (2, "You have faces without a color. Double-click on a face to assign its color."),
+    ],
+)
+def test_faces_without_a_colour(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch, loaded: int, text: str) -> None:
+    from dataclasses import replace as changed
+
+    from cube_net.core.history import History
+    from cube_net.core.template import TemplateSnapshot
+
+    template = mode.editor.template
+    faces = tuple(changed(face, color=None) if i < loaded else face for i, face in enumerate(template.faces))
+    mode.editor.load(TemplateSnapshot(changed(template, faces=faces)), History())
+    texts = told(monkeypatch)
+    mode.validate()
+    assert texts == [text]
+
+
+@pytest.mark.parametrize("answer", [True, False])
+def test_gaps_in_indices(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch, answer: bool) -> None:
+    a3 = next(v.id for v in mode.editor.template.vertices if str(v.label) == "A3")
+    mode.editor.set_label(a3, Label("A", 7))
+    texts = told(monkeypatch)
+    asked: list[str] = []
+    monkeypatch.setattr("cube_net.ui.template.template_mode.ask_yes_no", lambda _p, text: asked.append(text) or answer)
+    mode.validate()
+    assert asked[0] == "Indices for vertex A have gaps. Reindex automatically?"
+    if answer:
+        assert asked[1:] == ["Vertices automatically reindexed.\nNo other problems found.\nSave the template?"]
+        assert texts == [] and str(mode.editor.template.vertex(a3).label) == "A3"
+    else:
+        assert asked[1:] == [] and texts == [] and str(mode.editor.template.vertex(a3).label) == "A7"
+
+
+# A style, not the default one.
+STYLE = replace(DEFAULT_STYLE, hatch_rows=7)
+
+
+def test_save_and_show_again(mode: TemplateMode, tmp_path: Path, qtbot: QtBot) -> None:
+    path = tmp_path / "cross.nettemplate"
+    mode.set_style(STYLE)
+    assert mode.is_dirty
+    mode.save_to(path)
+    assert mode.path == path and not mode.is_dirty
+    document = load_document(path)
+    assert document.style == STYLE  # type: ignore[union-attr]
+    mode.show(None, None, DEFAULT_STYLE)
+    assert mode.editor.state is TemplateState.INITIAL and mode.area() is None and mode.style == DEFAULT_STYLE
+    mode.show(document, path, STYLE)  # type: ignore[arg-type]
+    assert mode.area() == 6 and mode.style == STYLE and not mode.is_dirty
+
+
+def test_the_status_after_validating(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch) -> None:
+    told(monkeypatch)
+    assert mode.status() is ValidationStatus.UNDEFINED and mode.can_validate()
+    mode.validate()
+    assert mode.status() is ValidationStatus.VALID and not mode.can_validate()  # nothing to validate again
+    assert mode.is_dirty  # the status is saved with the template
+
+
+def test_invalid_can_be_validated_again(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch) -> None:
+    texts = told(monkeypatch)
+    mode.editor.set_label(mode.editor.template.vertices[0].id, None)
+    mode.validate()
+    assert mode.status() is ValidationStatus.INVALID and mode.can_validate()
+    mode.validate()
+    assert len(texts) == 2 and texts[0] == texts[1]  # the message again
+
+
+def test_a_change_makes_it_undefined_and_undo_brings_it_back(
+    mode: TemplateMode, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    told(monkeypatch)
+    mode.validate()
+    mode.editor.set_face_color(0, "#ABCDEF")
+    assert mode.status() is ValidationStatus.UNDEFINED and mode.can_validate()
+    mode.editor.undo()  # the template it was about
+    assert mode.status() is ValidationStatus.VALID
+
+
+def test_moving_the_origin_keeps_the_status(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch) -> None:
+    from cube_net.core.origin import Origin
+
+    told(monkeypatch)
+    mode.validate()
+    mode.editor.move_origin(Origin().moved(Vec(11, 10), Vec(0, 0), "A3"))
+    assert mode.status() is ValidationStatus.VALID  # not a change of the template
+
+
+def test_reindexed_is_valid(mode: TemplateMode, monkeypatch: pytest.MonkeyPatch) -> None:
+    told(monkeypatch)
+    monkeypatch.setattr("cube_net.ui.template.template_mode.ask_yes_no", lambda *_: True)
+    a3 = next(v.id for v in mode.editor.template.vertices if str(v.label) == "A3")
+    mode.editor.set_label(a3, Label("A", 7))
+    mode.validate()
+    assert mode.status() is ValidationStatus.VALID
+
+
+def test_no_closed_loop_no_validating(qtbot: QtBot) -> None:
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    mode = TemplateMode(parent, lambda *_: None)
+    mode.editor.add_point(Vec(1, 1))
+    assert not mode.can_validate()
+
+
+def test_the_status_is_saved_and_shown_again(
+    mode: TemplateMode, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    told(monkeypatch)
+    mode.validate()
+    path = tmp_path / "cross.nettemplate"
+    mode.save_to(path)
+    assert not mode.is_dirty
+    document = load_document(path)
+    mode.show(None, None, DEFAULT_STYLE)
+    assert mode.status() is ValidationStatus.UNDEFINED
+    mode.show(document, path, DEFAULT_STYLE)  # type: ignore[arg-type]
+    assert mode.status() is ValidationStatus.VALID and not mode.is_dirty
+
+
+def test_a_passed_validate_aligns_the_hatches(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, slit_torus: TemplateDocument
+) -> None:
+    told(monkeypatch)
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    mode = TemplateMode(parent, lambda *_: None)
+    from cube_net.core.geometry import Rigid90
+    from cube_net.core.template import TemplateSnapshot
+
+    document = slit_torus
+    template = document.state.template
+    plain = template.with_hatches([Rigid90.identity()] * len(template.faces))  # as if never validated
+    mode.show(replace(document, state=TemplateSnapshot(plain, document.state.origin)), None, DEFAULT_STYLE)
+    mode.validate()
+    assert mode.status() is ValidationStatus.VALID
+    assert sum(not f.hatch.is_identity() for f in mode.editor.template.faces) == 2
+    mode.editor.undo()  # the alignment: an action
+    assert mode.status() is ValidationStatus.UNDEFINED
+
+
+def test_an_action_refused_by_the_safety_net(
+    mode: TemplateMode, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A bug (here: working the faces out loses one) never reaches the template: the action is refused, an error report
+    is written (with the template the action would have made), the user is told where it is, and a session log gets
+    the template as it was (to reproduce it with the input logged before)."""
+    import cube_net.core.template.holes as holes
+    from cube_net.core.project import ProjectFileError, document_from_bytes
+    from cube_net.ui.crash.crash_report import write_error_report
+    from cube_net.ui.session.snapshots import snapshots_in
+
+    notes: list[tuple[object, ...]] = []
+    mode._note = lambda *fields: notes.append(fields)  # type: ignore[method-assign]
+    mode.write_error_report = lambda sections: write_error_report(tmp_path, sections)
+    shown: list[Path | None] = []
+    monkeypatch.setattr("cube_net.ui.template.template_mode.show_error_report_window", lambda p, _: shown.append(p))
+    real = holes.faces_from_graph
+    monkeypatch.setattr(holes, "faces_from_graph", lambda t: real(t)[1:])
+    mode.tool.start_hole()
+    for x, y in [(11.25, 12.25), (11.75, 12.25), (11.5, 12.75), (11.25, 12.25)]:
+        mode.view.left_pressed.emit(x, y)
+    hole = mode.editor.template.holes[0]
+    assert not hole.closed and len(hole.vertices) == 3  # the closing click refused
+    [path] = shown
+    assert path is not None and path.name.startswith("error-report-")
+    text = path.read_text(encoding="utf-8")
+    assert "## Stack" in text and "## Refused template" in text
+    [refused] = snapshots_in(path)  # what the action would have made: its file can be extracted, but not opened
+    with pytest.raises(ProjectFileError, match="isn't on exactly one face"):
+        document_from_bytes(refused)
+    assert ("template", "unexpected error") in notes
+    assert any(n[:2] == ("state", "snapshot") for n in notes)
+    assert mode.tool.item.flash() == ()  # no flash: the warning says it

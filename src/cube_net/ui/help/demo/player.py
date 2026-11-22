@@ -15,6 +15,7 @@ from PyQt6.QtCore import QSize, Qt, QTimer
 from PyQt6.QtWidgets import QFrame, QGridLayout, QWidget
 
 from cube_net.core.geometry import Box
+from cube_net.core.project import Project, TemplateDocument
 from cube_net.ui.help.demo.demo_sheet import AROUND_THE_NET, DemoSheet
 from cube_net.ui.help.demo.round_button import RoundButton, Symbol
 from cube_net.ui.help.demo.steps import Move, Step
@@ -47,10 +48,14 @@ class DemoPlayer(QFrame):
         before: Sequence[Sequence[Step]] = (),
         size: QSize = DEFAULT_SIZE,
         shown: Box = AROUND_THE_NET,
-        labels: bool = False,
         parent: QWidget | None = None,
+        project: Project | None = None,
+        coordinates: bool = False,
+        template: TemplateDocument | None = None,
+        panel: bool = False,
     ) -> None:
-        """`labels`: whether the vertices have their debug labels (an app setting)."""
+        """`project`, `coordinates`, `template`, `panel`: what the sheet starts from, and if it has the coordinates
+        hint and a template's instrument panel (`DemoSheet`)."""
         super().__init__(parent)
         self.setObjectName("demo")
         self.setStyleSheet(f"#demo {{ border: 1px solid {BORDER}; border-radius: 6px; }}")
@@ -58,7 +63,10 @@ class DemoPlayer(QFrame):
         self._before = [list(part) for part in before]
         self._size = size
         self._shown = shown
-        self._labels = labels
+        self._project = project
+        self._coordinates = coordinates
+        self._template = template
+        self._panel = panel
         self._layout = QGridLayout(self)
         self._layout.setContentsMargins(1, 1, 1, 1)
         self.sheet: DemoSheet = self._new_sheet()
@@ -87,15 +95,16 @@ class DemoPlayer(QFrame):
         self._run = self.sheet.play(self._steps)
         self._next()
 
-    def set_labels_shown(self, shown: bool) -> None:
-        self._labels = shown
-        self.sheet.set_labels_shown(shown)
-
-    def restyle(self) -> None:
-        self.sheet.restyle()
-
     def _new_sheet(self) -> DemoSheet:
-        sheet = DemoSheet(self._size, self._shown, self._labels, self)
+        sheet = DemoSheet(
+            self._size,
+            self._shown,
+            parent=self,
+            project=self._project,
+            coordinates=self._coordinates,
+            template=self._template,
+            panel=self._panel,
+        )
         for part in self._before:
             for _ in sheet.play(part, instant=True):
                 pass

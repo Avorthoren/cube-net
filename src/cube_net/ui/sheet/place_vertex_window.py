@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from cube_net.core.cutting import LineProblem
 from cube_net.core.cutting.placement import Axis, Placement, Problem
 from cube_net.core.geometry import Vec
 from cube_net.core.origin import DEFAULT_ORIGIN, Origin
@@ -42,13 +43,11 @@ from cube_net.ui.i18n import tr
 from cube_net.ui.sheet.coordinate_row import CoordinateRow
 
 
-def problem_text(problem: Problem) -> str:
-    """What the window says when the point can't go there."""
+def problem_text(problem: Problem | LineProblem) -> str:
+    """What the window says when the point can't go there: about where it is, or the rule of the line it breaks."""
     match problem:
-        case Problem.OUTSIDE_NET:
-            return tr("The point is outside the net.")
         case Problem.ON_PERIMETER:
-            return tr("The point is on the perimeter: only the line's ends can be there.")
+            return tr("The point is on the perimeter: only a point put on a cut can be there.")
         case Problem.OFF_EDGE:
             return tr("The point is beyond the ends of its edge.")
         case Problem.OFF_FOLD:
@@ -56,18 +55,32 @@ def problem_text(problem: Problem) -> str:
         case Problem.TOO_MANY_POINTS:
             return tr("The line already has as many points as it can have.")
         case Problem.BREAKS_LINE:
-            return tr("From there, the line would leave the net, or touch or cross itself.")
+            return tr("From there, the line would touch the perimeter, or touch or cross itself.")
+        case LineProblem.NO_LENGTH:
+            return tr("The point is where its neighbour on the line is.")
+        case LineProblem.ON_THE_PERIMETER:
+            return tr("The point is on the perimeter: only a point put on a cut can be there.")
+        case LineProblem.ALONG_THE_PERIMETER:
+            return tr("From there, the line would run along the perimeter or touch it.")
+        case LineProblem.NOT_INTO_THE_NET:
+            return tr("From its first point, the line has to go into the net.")
+        case LineProblem.NOT_THROUGH:
+            return tr("Where the line meets the perimeter, it has to go into the net or out of it.")
+        case LineProblem.TOUCHES_ITSELF:
+            return tr("From there, the line would touch or cross itself.")
+        case LineProblem.NOT_DIVIDED_AT_THE_END:
+            return tr("The line would no longer cut the net in two exactly at its last point.")
 
 
 class PlaceVertexWindow(SmallWindow):
     def __init__(
         self,
         placement: Placement,
-        place: Callable[[Vec], Problem | None],
+        place: Callable[[Vec], Problem | LineProblem | str | None],
         parent: QWidget | None = None,
         origin: Origin = DEFAULT_ORIGIN,
     ) -> None:
-        """`place`: puts the point at a sheet point, or tells why it can't."""
+        """`place`: puts the point at a sheet point, or tells why it can't (a `Problem`, or what to say)."""
         super().__init__(tr("Place a vertex"), parent)
         self._placement = placement
         self._place = place
@@ -145,7 +158,7 @@ class PlaceVertexWindow(SmallWindow):
             return
         problem = self._place(point)
         if problem is not None:
-            self._say(problem_text(problem))
+            self._say(problem if isinstance(problem, str) else problem_text(problem))
             return
         self.accept()
 

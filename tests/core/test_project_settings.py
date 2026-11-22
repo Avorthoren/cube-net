@@ -29,7 +29,7 @@ def test_valid(value: F) -> None:
     [
         (F(-1, 1000), "can't be negative"),
         (F(-1), "can't be negative"),
-        (F(20001, 1000), "can't exceed 20.000"),
+        (F(10000001, 1000), "can't exceed 10000.000"),
         (F(71001, 10000), "at most 3 decimals"),
         (F(1, 3), "at most 3 decimals"),
     ],
@@ -42,3 +42,18 @@ def test_invalid(value: F, message: str) -> None:
 def test_wrong_type() -> None:
     with pytest.raises(ProjectSettingsError, match="must be a Fraction"):
         ProjectSettings(7.1)  # type: ignore[arg-type]
+
+
+def test_the_limit_is_the_template_sheets_area() -> None:
+    assert MAX_AREA_THRESHOLD == 100 * 100
+
+
+def test_face_colours() -> None:
+    assert ProjectSettings().face_colors is None
+    assert ProjectSettings(face_colors=("#00FF00", "#ABCDEF")).face_colors == ("#00FF00", "#ABCDEF")
+
+
+@pytest.mark.parametrize("color", ["#abcdef", "#12345", "red", 7])
+def test_bad_face_colours(color: object) -> None:
+    with pytest.raises(ProjectSettingsError, match="#RRGGBB"):
+        ProjectSettings(face_colors=("#000000", color))  # type: ignore[arg-type]

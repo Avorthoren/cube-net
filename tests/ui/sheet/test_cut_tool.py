@@ -73,10 +73,22 @@ def test_rejected_click_flashes_black_for_a_moment(setup: tuple[SheetView, CutTo
     view, tool, _ = setup
     view.left_pressed.emit(*just_inside_top_of_face_1(view))
     with qtbot.waitSignal(tool.rejected):
-        view.left_pressed.emit(12.5, 13.5)  # outside the net
-    assert tool.item.flash() == ((Vec(F(115, 10), 14), Vec(F(125, 10), F(135, 10))),)
+        view.left_pressed.emit(12.5, 12)  # on the cut below face 3: the segment would pass D_1 at (12, 13)
+    assert tool.item.flash() == ((Vec(F(115, 10), 14), Vec(F(125, 10), 12)),)
     qtbot.waitUntil(lambda: tool.item.flash() is None, timeout=FLASH_MS + 500)
     assert len(tool.item.points()) == 1
+
+
+def test_a_click_off_the_net_adds_a_point_and_the_line_ends_where_it_leaves(
+    setup: tuple[SheetView, CutTool, RulerTool],
+) -> None:
+    """While cutting, a click outside the net (where a press pans) is a point there; the cube's net has no holes, so
+    the line divides it where it leaves it, and ends there."""
+    view, tool, _ = setup
+    view.left_pressed.emit(*just_inside_top_of_face_1(view))
+    view.pan_clicked.emit(10.5, 13.5)  # the empty corner left of face 1
+    assert tool.editor.state is EditorState.CUT_EDITING
+    assert [p.position for p in tool.item.points()][-1] == Vec(11, F(55, 4))
 
 
 def test_whole_line_to_cut_editing(setup: tuple[SheetView, CutTool, RulerTool]) -> None:
@@ -1086,9 +1098,19 @@ class TestPlacement:
         assert tool.placement_at(10, 13) is None  # a vertex: both coordinates fixed
         assert tool.placement_at(11.5, 13.5) is None  # DEFAULT: inside a face, a click does nothing
         view.left_pressed.emit(*just_inside_top_of_face_1(view))
-        assert tool.placement_at(9, 9) is None  # CUTTING: outside the net
         ruler.set_active(True)
         assert tool.placement_at(11.6, 13.6) is None  # the ruler takes the clicks
+
+    def test_off_the_net_while_cutting_a_point_can_be_typed(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        """Started at a vertex, the mouse outside the net: a point may go there (docs/template_plan.md §8.2)."""
+        from cube_net.core.cutting.placement import Action, LineKind
+
+        view, tool, _ = setup
+        view.left_pressed.emit(11, 14)  # the vertex A_1
+        assert tool.editor.state is EditorState.CUTTING
+        placement = tool.placement_at(9, 9)
+        assert placement is not None and placement.action is Action.ADD and placement.constraint.kind is LineKind.FREE
+        assert tool.place(placement, Vec(F(23, 2), F(27, 2))) is None  # typed inside face 1 instead: fine too
 
     def test_cutting_free_on_a_fold_and_with_shift(
         self, setup: tuple[SheetView, CutTool, RulerTool], monkeypatch: pytest.MonkeyPatch
@@ -1127,6 +1149,7 @@ class TestPlacement:
         assert positions(tool) == [typed, Vec(F(35, 3), F(40, 3))]
 
     def test_why_a_typed_point_cant_go_there(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.core.cutting import LineProblem
         from cube_net.core.cutting.placement import Problem
 
         view, tool, _ = setup
@@ -1137,10 +1160,9 @@ class TestPlacement:
         tool.place(start, X)
         free = tool.placement_at(11.6, 13.6)
         assert free is not None
-        assert tool.place(free, Vec(9, 9)) is Problem.OUTSIDE_NET
         assert tool.place(free, Vec(F(23, 2), 13)) is None  # on a fold: fine, it's on that fold then
         assert tool.item.points()[1].fold is not None
-        assert tool.place(free, Vec(F(23, 2), F(27, 2))) is Problem.BREAKS_LINE  # back across the line
+        assert tool.place(free, Vec(F(23, 2), F(27, 2))) is LineProblem.TOUCHES_ITSELF  # back across the line
         assert positions(tool) == [X, Vec(F(23, 2), 13)]
 
     def test_typed_on_the_perimeter_while_cutting_it_ends_the_line(
@@ -1378,3 +1400,34 @@ class TestVertexAt:
         view.left_pressed.emit(11.4, 13.5)
         shown = origin.shown(positions(tool)[1])
         assert (shown.x * 1000).denominator == 1 and (shown.y * 1000).denominator == 1
+
+
+class TestTooLongNumbers:
+    """A point whose number would be too long: told about, not flashed; Place a vertex's window says it."""
+
+    def test_place_a_vertex_says_it(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.core.cutting.placement import Axis
+        from cube_net.core.geometry import MAX_NUMBER_DIGITS
+
+        view, tool, _ = setup
+        tool.describe_too_long = lambda found: f"too long: {found.kind.value}"
+        view.left_pressed.emit(*just_inside_top_of_face_1(view))
+        placement = tool.placement_at(11.6, 13.5)
+        assert placement is not None
+        long = F(1, 10**MAX_NUMBER_DIGITS)
+        assert tool.place(placement, placement.constraint.point_from(Axis.BOTH, F(23, 2) + long, F(27, 2))) == (
+            "too long: vertex"
+        )
+        assert len(positions(tool)) == 1  # nothing added
+
+    def test_moving_the_origin_tells_it(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.core.geometry import MAX_NUMBER_DIGITS
+        from cube_net.core.origin import Origin
+
+        _, tool, _ = setup
+        told: list[str] = []
+        tool.too_long.connect(told.append)
+        tool.describe_too_long = lambda found: f"too long: {found.kind.value}"
+        long = Vec(F(1, 10**MAX_NUMBER_DIGITS), 0)
+        tool.move_origin(Origin(long, long))
+        assert told == ["too long: origin"] and tool.editor.origin == Origin()

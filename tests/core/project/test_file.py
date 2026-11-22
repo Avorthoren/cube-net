@@ -9,14 +9,22 @@ from pathlib import Path
 import pytest
 from project_checks import after_a_cut, approving, editor_of, named_labels, project_of, state_contents
 
+from cube_net.core.history import History
 from cube_net.core.project import (
     PROJECT_SUFFIX,
+    TEMPLATE_SUFFIX,
+    Project,
     ProjectFileError,
+    TemplateDocument,
+    document_from_bytes,
     encode_project,
+    load_document,
     load_project,
     new_project,
     save_project,
+    save_template,
 )
+from cube_net.core.template import Template, TemplateSnapshot
 
 
 def path_in(tmp_path: Path) -> Path:
@@ -101,6 +109,15 @@ def test_not_a_project_file(tmp_path: Path) -> None:
         load_project(path)
 
 
+def test_a_file_named_as_a_template_that_isnt_one_is_called_so(tmp_path: Path) -> None:
+    from cube_net.core.project import load_document
+
+    path = tmp_path / "x.nettemplate"
+    path.write_text("Hello!")
+    with pytest.raises(ProjectFileError, match="isn't a Cube Net template"):
+        load_document(path)
+
+
 def test_a_cut_off_file(tmp_path: Path) -> None:
     path = path_in(tmp_path)
     save_project(project_of(approving()), path)
@@ -140,3 +157,31 @@ def test_a_new_project(tmp_path: Path) -> None:
     path = path_in(tmp_path)
     save_project(project, path)
     assert state_contents(load_project(path).state) == state_contents(project.state)
+
+
+class TestTemplates:
+    def test_save_and_open(self, tmp_path: Path, cross_template: Template) -> None:
+        document = TemplateDocument(TemplateSnapshot(cross_template), History())
+        path = tmp_path / f"cross{TEMPLATE_SUFFIX}"
+        save_template(document, path)
+        loaded = load_document(path)
+        assert isinstance(loaded, TemplateDocument) and loaded.state == document.state
+
+    def test_which_kind_a_file_holds_is_in_it(self, tmp_path: Path, cross_template: Template) -> None:
+        """Not in its name: a template saved as .cubenet is a template."""
+        path = tmp_path / f"cube{PROJECT_SUFFIX}"
+        save_template(TemplateDocument(TemplateSnapshot(cross_template), History()), path)
+        assert isinstance(load_document(path), TemplateDocument)
+        with pytest.raises(ProjectFileError, match="It's a template, not a project"):
+            load_project(path)
+        save_project(new_project(), path)
+        assert isinstance(load_document(path), Project)
+
+    def test_a_project_of_an_older_version_has_no_kind(self) -> None:
+        data = encode_project(new_project())
+        data["format_version"] = 2
+        for key in ("kind", "body"):
+            del data[key]
+        del data["settings"]["face_colors"]
+        content = gzip.compress(json.dumps(data).encode())
+        assert isinstance(document_from_bytes(content), Project)
