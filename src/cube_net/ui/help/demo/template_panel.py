@@ -2,17 +2,18 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 """`TemplatePanel`: the instrument panel of an animation of making a template, down its sheet's left side, as the
-window has it while a template is made: Net area, Draw hole, Validate and Create network, made of the window's own
-widgets. They're enabled when the window's are, and look hovered and pushed as the pointer goes over them and clicks
-(the animation's mouse isn't the real one, which Qt would follow)."""
+window has it while a template is made: Net area, Draw hole, Validate, Create network and Center, made of the
+window's own widgets. They're enabled when the window's are, and look hovered and pushed as the pointer goes over them
+and clicks (the animation's mouse isn't the real one, which Qt would follow)."""
 
 from PyQt6.QtCore import QRect, Qt
-from PyQt6.QtGui import QPalette
+from PyQt6.QtGui import QAction, QPalette
 from PyQt6.QtWidgets import QAbstractButton, QApplication, QToolBar, QWidget
 
-from cube_net.core.template import Template, TemplateState, ValidationStatus, template_area
+from cube_net.core.template import Template, TemplateState, ValidationStatus, template_area, template_centroid
 from cube_net.ui import palette
 from cube_net.ui.help.demo.steps import DRAW_HOLE, VALIDATE
+from cube_net.ui.i18n import bind
 from cube_net.ui.instruments.button_look import tool_buttons_style
 from cube_net.ui.template.create_network_button import CreateNetworkButton
 from cube_net.ui.template.draw_hole_button import DrawHoleButton
@@ -35,6 +36,10 @@ class TemplatePanel:
         self.draw_hole = DrawHoleButton(toolbar)
         self.validate = ValidateButton(toolbar, with_separator=False)
         self.create_network = CreateNetworkButton(toolbar)  # (it does nothing in an animation)
+        toolbar.addSeparator()
+        self.center = QAction(toolbar)  # (nor does this)
+        bind(self.center, self.center.setText, "Center")
+        toolbar.addAction(self.center)
         # Its buttons, by name.
         self.buttons: dict[str, QAbstractButton] = {DRAW_HOLE: self.draw_hole.button, VALIDATE: self.validate.button}
         self.fit()
@@ -53,7 +58,7 @@ class TemplatePanel:
 
     def update(self, tool: TemplateTool) -> None:
         """Net area and which buttons can be clicked, as the window has them for the template as it is now (the
-        window's `_update_edit_actions` and `TemplateMode.can_validate`)."""
+        window's `_update_edit_actions` and `TemplateMode.can_validate`; Center once the loop is closed)."""
         template: Template = tool.editor.template
         self.net_area.set_area(template_area(template))
         self.draw_hole.set_enabled(tool.can_start_hole())
@@ -67,6 +72,7 @@ class TemplatePanel:
         self.create_network.set_enabled(
             self.validate.status is ValidationStatus.VALID and not tool.busy() and not tool.drawing_hole
         )
+        self.center.setEnabled(template_centroid(template) is not None)
 
     def hover(self, button: QAbstractButton | None) -> None:
         """`button` looks as it does under the mouse; the others don't."""

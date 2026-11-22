@@ -343,7 +343,7 @@ Undo and redo are available in every state. Each public method either performs o
   `apply_style` puts it into those modules, which everything reads when it paints or hit-tests.
 - **Vertex labels and session logs** (Settings → Preferences) are app settings (`AppSettings`, stored with `QSettings`).
   The feature stays in the app for good (it's how vertices on the same face are told apart);
-  `DEFAULT_SHOW_VERTEX_LABELS` is True while developing and becomes False for releases.
+  `DEFAULT_SHOW_VERTEX_LABELS` is True, in releases too (decided against switching it off for them).
 - **Status bar:** mouse coordinates in sheet units with 3 decimals, plus the current state name. The state name helps while
   developing and may stay.
 
@@ -575,8 +575,8 @@ Resolved:
   takes 50% of the screen (§6.2).
 - Snapping: cut-line points snap to perimeter vertices, cuts and fold lines, and SHIFT restricts segments. No snapping
   to the unit grid, none for the ruler (only its SHIFT restriction, M10).
-- Several user-made vertices on the same face are told apart by the vertex labels, which stay in the app (off by
-  default in releases).
+- Several user-made vertices on the same face are told apart by the vertex labels, which stay in the app (on by
+  default, in releases too).
 - "Save changes?" prompt on New/Open/Quit: yes (§6.6).
 - Line widths, hitbox widths and vertex radii: constant in pixels (§6.3).
 - Mouse input is rounded to 1/1000 unit until snapping exists (§1, `quantize()`).

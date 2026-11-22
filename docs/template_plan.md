@@ -747,6 +747,9 @@ Done (T6c and T7):
 - Still as before: faces in pieces are separate faces of the body until T6b (the torus's two purple pieces are two
   faces, with the fold between them).
 
+Done (T8, 2026-11-22): the Russian texts checked against the English ones, every visible text going through
+`tr`/`bind` with its Russian in `ui/i18n/russian.py` (a test scans for any that hasn't one).
+
 ---
 
 ## 9. Not decided yet

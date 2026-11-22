@@ -18,8 +18,8 @@ from cube_net.ui.sheet.view_place import LastView, ViewPlace
 from cube_net.ui.sheet.zoom import DEFAULT_MAX_ZOOM, MAX_ZOOM_RANGE
 from cube_net.ui.style import DEFAULT_STYLE, Style, StyleError, fitted
 
-# Labels (A_1, x_2, ...) next to all vertices: they stay in the app (they tell apart vertices on the same face).
-# ON while the app is being developed; False for releases.
+# Labels (A_1, x_2, ...) next to all vertices: they stay in the app (they tell apart vertices on the same face), on
+# by default (in releases too).
 DEFAULT_SHOW_VERTEX_LABELS = True
 
 # The exact coordinates of the point under the mouse, next to it (the coordinates hint).
