@@ -33,7 +33,7 @@ from collections.abc import Callable, Sequence
 
 from PyQt6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, pyqtSignal
 
-from cube_net.core.cutting import CutPoint, TooLong, straighten
+from cube_net.core.cutting import CutPoint, LineProblem, TooLong, straighten
 from cube_net.core.cutting.placement import (
     Action,
     Constraint,
@@ -490,7 +490,7 @@ class CutTool(QObject):
             return Constraint.on_fold(target.fold).fixed_at(target.position)
         return Constraint.along(anchor, self._slope)
 
-    def place(self, placement: Placement, p: Vec) -> Problem | str | None:
+    def place(self, placement: Placement, p: Vec) -> Problem | LineProblem | str | None:
         """Put the point of `placement` exactly at `p` (typed: nothing is rounded); or why it can't go there, and
         nothing changes (a dragged point stays dragged)."""
         net = self._editor.net
@@ -741,10 +741,12 @@ class CutTool(QObject):
         else:
             self.edited.emit("delete", i, position)
 
-    def _refused(self, rejection: Rejection) -> Problem | str:
-        """What Place a vertex says about a refused point: the rules it breaks, or the whole message about a number
-        too long."""
-        return Problem.BREAKS_LINE if rejection.too_long is None else self.describe_too_long(rejection.too_long)
+    def _refused(self, rejection: Rejection) -> Problem | LineProblem | str:
+        """What Place a vertex says about a refused point: the rule of the line it breaks, or the whole message about a
+        number too long."""
+        if rejection.too_long is not None:
+            return self.describe_too_long(rejection.too_long)
+        return rejection.problem or Problem.BREAKS_LINE
 
     def _reject(self, rejection: Rejection, position: Vec) -> None:
         """Show the offending segments in black for a moment (with the rejection's preview of the line, if any); a

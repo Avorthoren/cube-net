@@ -1149,6 +1149,7 @@ class TestPlacement:
         assert positions(tool) == [typed, Vec(F(35, 3), F(40, 3))]
 
     def test_why_a_typed_point_cant_go_there(self, setup: tuple[SheetView, CutTool, RulerTool]) -> None:
+        from cube_net.core.cutting import LineProblem
         from cube_net.core.cutting.placement import Problem
 
         view, tool, _ = setup
@@ -1161,7 +1162,7 @@ class TestPlacement:
         assert free is not None
         assert tool.place(free, Vec(F(23, 2), 13)) is None  # on a fold: fine, it's on that fold then
         assert tool.item.points()[1].fold is not None
-        assert tool.place(free, Vec(F(23, 2), F(27, 2))) is Problem.BREAKS_LINE  # back across the line
+        assert tool.place(free, Vec(F(23, 2), F(27, 2))) is LineProblem.TOUCHES_ITSELF  # back across the line
         assert positions(tool) == [X, Vec(F(23, 2), 13)]
 
     def test_typed_on_the_perimeter_while_cutting_it_ends_the_line(

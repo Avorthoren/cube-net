@@ -9,9 +9,12 @@ from cube_net.core.body import CUBE
 from cube_net.core.cutting import (
     CutLine,
     CutPoint,
+    LineProblem,
+    added_segment_problem,
     invalid_segments,
     project_onto,
     segment_allowed,
+    segment_problem,
     segment_valid,
     strictly_inside,
 )
@@ -90,6 +93,25 @@ def test_segment_valid_checks_any_segment_of_the_line(net: Net, cut: Callable[[s
     ]
     assert invalid_segments(net, crossing, (0, 1, 2)) == [0, 2]  # the first and the last segments cross
     assert invalid_segments(net, good, (-1, 2, 5)) == []  # indices outside the line are ignored
+
+
+def test_each_rule_says_which_it_is(net: Net, cut: Callable[[str], HalfEdge]) -> None:
+    top = cut("B_1-A_1")
+    line = line_from(top, v("11.5", "14"), v("11.5", "13.5"))
+    assert added_segment_problem(net, line, CutPoint(v("11.5", "13"))) is None
+    assert added_segment_problem(net, line, CutPoint(v("11.5", "13.5"))) is LineProblem.NO_LENGTH
+    assert added_segment_problem(net, line, CutPoint(v("10", "12.5"))) is LineProblem.ON_THE_PERIMETER  # not on a cut
+    bent = line_from(top, v("11.5", "14"), v("11.5", "13"), v("11.8", "12.5"))
+    assert added_segment_problem(net, bent, CutPoint(v("11.2", "13.8"))) is LineProblem.TOUCHES_ITSELF
+    start = line_from(top, v("11.5", "14"))
+    assert added_segment_problem(net, start, CutPoint(v("11.5", "14.5"))) is LineProblem.NOT_INTO_THE_NET
+    from_the_left = line_from(cut("A_2-E_2"), v("10", "12.5"), v("10.5", "12.5"))
+    through_c1 = added_segment_problem(net, from_the_left, CutPoint(v("11.5", "13.5")))  # exactly through C_1
+    assert through_c1 is LineProblem.ALONG_THE_PERIMETER
+    # Back into the net from a point on the perimeter it reached from inside: it didn't go out there.
+    left = cut("A_1-C_1")
+    there = [CutPoint(v("11.5", "14"), top), CutPoint(v("11.5", "13.5")), CutPoint(v("11", "13.7"), left)]
+    assert segment_problem(net, [*there, CutPoint(v("11.5", "13.2"))], 2) is LineProblem.NOT_THROUGH
 
 
 class TestProjectionStaysSimple:

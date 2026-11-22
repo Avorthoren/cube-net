@@ -179,8 +179,15 @@ class TestPlace:
 
 
 def test_every_problem_has_its_words() -> None:
+    from cube_net.core.cutting import LineProblem
+
     texts_ = {problem_text(problem) for problem in Problem}
     assert len(texts_) == len(Problem) and all(texts_)
+    lines = {problem: problem_text(problem) for problem in LineProblem}
+    assert all(lines.values())
+    # The same words for the same situation: a point on the perimeter that isn't on a cut.
+    assert lines.pop(LineProblem.ON_THE_PERIMETER) == problem_text(Problem.ON_PERIMETER)
+    assert len(set(lines.values())) == len(lines) and not set(lines.values()) & texts_
 
 
 class TestFromAMovedOrigin:

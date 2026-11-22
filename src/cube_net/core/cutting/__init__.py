@@ -13,8 +13,11 @@ from cube_net.core.cutting.real_cut import RealCut, Stop, real_cut
 from cube_net.core.cutting.rearrange import Rearranged, rearrange
 from cube_net.core.cutting.rules import (
     MAX_POINTS_AFTER_FIRST,
+    LineProblem,
+    added_segment_problem,
     invalid_segments,
     segment_allowed,
+    segment_problem,
     segment_valid,
     strictly_inside,
 )
@@ -28,6 +31,7 @@ __all__ = [
     "CounterpartImage",
     "CutLine",
     "CutPoint",
+    "LineProblem",
     "Piece",
     "RealCut",
     "Rearranged",
@@ -35,6 +39,7 @@ __all__ = [
     "Stop",
     "TooLong",
     "TooLongKind",
+    "added_segment_problem",
     "along",
     "approve",
     "closest_straight_point",
@@ -56,6 +61,7 @@ __all__ = [
     "region_at",
     "segment_allowed",
     "segment_crossings",
+    "segment_problem",
     "segment_valid",
     "slope_of",
     "split_net",

@@ -188,6 +188,20 @@ RUSSIAN: dict[str, str] = {
     "From there, the line would touch the perimeter, or touch or cross itself.": (
         "Оттуда линия коснулась бы периметра или коснулась бы себя или пересекла себя."
     ),
+    "The point is where its neighbour on the line is.": "Точка там же, где её соседняя точка на линии.",
+    "From there, the line would run along the perimeter or touch it.": (
+        "Оттуда линия шла бы вдоль периметра или касалась бы его."
+    ),
+    "From its first point, the line has to go into the net.": (
+        "От своей первой точки линия должна идти внутрь развёртки."
+    ),
+    "Where the line meets the perimeter, it has to go into the net or out of it.": (
+        "Там, где линия встречает периметр, она должна входить в развёртку или выходить из неё."
+    ),
+    "From there, the line would touch or cross itself.": "Оттуда линия коснулась бы себя или пересекла себя.",
+    "The line would no longer cut the net in two exactly at its last point.": (
+        "Линия больше не разрезала бы развёртку надвое ровно в своей последней точке."
+    ),
     "Auto-start logging": "Автоматически начинать логирование",
     "Blink when target area achieved": "Мигать, когда цель достигнута",
     "Maximum zoom:": "Макс. масштаб:",

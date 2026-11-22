@@ -968,3 +968,29 @@ class TestMoveOrigin:
         assert editor.origin == moved
         assert editor.undo() and editor.origin == moved  # undoing the point leaves the origin
         assert editor.undo() and editor.origin == DEFAULT_ORIGIN
+
+
+def test_a_refusal_says_which_rule_of_the_line_it_is() -> None:
+    """Started at A_1 (11, 14): a point far off the net, (-5, -5), straight from there leaves the net at once. Off the
+    net is fine as such: from a point inside, the line goes there, and ends where it leaves the net."""
+    from cube_net.core.cutting import LineProblem
+
+    def started() -> Editor:
+        editor = Editor(default_net())
+        a1 = next(vertex for vertex in editor.net.vertices if vertex.position == Vec(11, 14))
+        assert editor.click(a1.position, None, vertex=a1) is None
+        return editor
+
+    editor = started()
+    rejection = editor.add_point(CutPoint(Vec(-5, -5)))
+    assert rejection is not None and rejection.problem is LineProblem.NOT_INTO_THE_NET
+    rejection = editor.add_point(CutPoint(Vec(11, 14)))
+    assert rejection is not None and rejection.problem is LineProblem.NO_LENGTH
+    editor = started()
+    assert editor.add_point(CutPoint(Vec(F(23, 2), F(27, 2)))) is None
+    assert editor.add_point(CutPoint(Vec(-5, -5))) is None
+    assert editor.state is EditorState.CUT_EDITING  # it ends where it leaves the net
+    line = editor.cut_line
+    assert line is not None
+    rejection = editor.move_point(1, CutPoint(Vec(11, 14)))  # onto the first point
+    assert rejection is not None and rejection.problem is LineProblem.NO_LENGTH
