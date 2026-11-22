@@ -47,9 +47,11 @@ def cut_line_labels(net: Net, line: CutLine, labels: PointLabels) -> list[tuple[
         used[point_name] = used.get(point_name, existing_images) + 1
         result.append((position, VertexLabel(point_name, used[point_name])))
 
-    real = real_cut(net, line.points)
-    if real is None or invalid_segments(net, line.points, range(len(line.points) - 1)):
+    if invalid_segments(net, line.points, range(len(line.points) - 1)):
         return result  # it breaks the rules somewhere (while a point is dragged): nothing to preview
+    real = real_cut(net, line.points)  # (only now: it needs the line's points on the perimeter to be on cuts)
+    if real is None:
+        return result
     for k, stop in enumerate(real.stops):
         cut_point = stop.point
         on_net = cut_point.on_perimeter or (k < len(real.inside) and real.inside[k]) or (k > 0 and real.inside[k - 1])

@@ -85,3 +85,18 @@ def test_a_name_already_registered_is_used() -> None:
     click(editor, "11.5", "13.5")
     labels = [str(label) for _, label in cut_line_labels(editor.net, editor.cut_line, names)]
     assert labels == ["I_1", "I_2", "K_1"]  # I is known; J is taken, so the new point previews K
+
+
+def test_an_inner_point_dragged_onto_an_end_has_nothing_to_preview() -> None:
+    """A finished line from A_1 (11, 14) through (23/2, 27/2) to (12, 27/2): its inner point, dragged onto either end,
+    is a point of no cut on the perimeter. The line breaks the rules there: no labels (it used to crash)."""
+    from cube_net.core.cutting import CutLine, CutPoint
+
+    editor = Editor(default_net())
+    for x, y in (("11", "14"), ("11.5", "13.5"), ("12", "13.5")):
+        click(editor, x, y)
+    assert editor.cut_line is not None
+    first, _, last = editor.cut_line.points
+    for end in (first, last):
+        dragged = CutLine([first, CutPoint(end.position), last])
+        assert cut_line_labels(editor.net, dragged, PointLabels(CUBE)) == []
