@@ -58,7 +58,7 @@ def test_equal_to_threshold_is_not_success(controls: BoundingControls) -> None:
 def test_below_threshold_green_and_blinking(controls: BoundingControls, qtbot: QtBot) -> None:
     controls.update(rect(F(7)), F(71, 10))
     assert controls.success and controls.blinking
-    assert palette.SUCCESS.name() in controls.label.styleSheet()
+    assert palette.SUCCESS_DOWN_TOP.name() in controls.label.styleSheet()  # the pushed-in button's green
     button = controls.button
     assert button is not None
     looks = set()
@@ -172,6 +172,23 @@ class TestBlinkSwitchedOff:
         controls.set_blink_enabled(False)
         controls.set_blink_enabled(True)
         assert not controls.blinking and not self.green(controls)
+
+    def test_green_on_and_off_look_different(self, controls: BoundingControls) -> None:
+        """Steadily green on success: switched on, it's pushed in (darker green from the top), as a switched-on button
+        of the panel is; switched off, flat green. The same size either way."""
+        controls.set_blink_enabled(False)
+        controls.update(rect(F(5)), F(6))
+        button = controls.button
+        assert button is not None
+        button.resize(button.sizeHint())
+        off = button.grab().toImage()
+        controls.action.setChecked(True)
+        on = button.grab().toImage()
+        assert on.size() == off.size() and on != off
+        middle = off.width() // 2, off.height() // 4  # above the text
+        assert on.pixelColor(*middle).lightness() < off.pixelColor(*middle).lightness()
+        controls.action.setChecked(False)
+        assert button.grab().toImage() == off
 
 
 class TestTakingWhatWasTyped:

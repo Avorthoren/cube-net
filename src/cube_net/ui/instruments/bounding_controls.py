@@ -40,6 +40,20 @@ TARGET_STEP = 0.1
 BLINK_INTERVAL_MS = round(1000 / 6)
 
 
+def success_style() -> str:
+    """The Bounds button green: flat while it's off, pushed in (darker from the top, outlined as the panel's pushed-in
+    buttons are) while it's on, so that it can be told which it is."""
+    green = palette.SUCCESS.name()
+    top, bottom = palette.SUCCESS_DOWN_TOP.name(), palette.SUCCESS_DOWN_BOTTOM.name()
+    return f"""
+        QToolButton {{ background: {green}; border: 1px solid {green}; border-radius: {RADIUS_PX}px; }}
+        QToolButton:checked, QToolButton:pressed {{
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {top}, stop:1 {bottom});
+            border-color: {palette.TOOL_BUTTON_DOWN_BORDER.name()};
+        }}
+    """
+
+
 def format_area(area: Fraction) -> str:
     return f"{float(area):.3f}"
 
@@ -144,7 +158,9 @@ class BoundingControls(QObject):
         self._rectangle = rectangle
         self._success = rectangle.area < threshold
         self._show_area()
-        self.label.setStyleSheet(f"color: {palette.SUCCESS.name()}; font-weight: bold;" if self._success else "")
+        # On success: the darker green of the pushed-in Bounds button (the plain one is too pale for text).
+        text = palette.SUCCESS_DOWN_TOP.name()
+        self.label.setStyleSheet(f"color: {text}; font-weight: bold;" if self._success else "")
         self._show_success()
         self._refresh_item()
 
@@ -216,6 +232,4 @@ class BoundingControls(QObject):
                 # A style sheet sizes the button differently: keep the size it has without one, or the whole panel
                 # would change its width with every blink.
                 self.button.setFixedSize(self.button.sizeHint())
-            green = palette.SUCCESS.name()
-            on_style = f"background: {green}; border: 1px solid {green}; border-radius: {RADIUS_PX}px;"
-            self.button.setStyleSheet(on_style if on else "")  # off: the panel's look again
+            self.button.setStyleSheet(success_style() if on else "")  # off: the panel's look again

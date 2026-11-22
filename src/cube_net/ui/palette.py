@@ -91,6 +91,11 @@ BOUNDING_RECTANGLE = QColor("#000000")
 # Success: the bounding rectangle's area is below the threshold. Clearly different from face 3's green (#008A4B).
 SUCCESS = QColor("#39D353")
 
+# The Bounds button green on success, while it's switched on: pushed in (darker from the top, as TOOL_BUTTON_DOWN_*,
+# with TOOL_BUTTON_DOWN_BORDER), so that it's told apart from the switched-off one. The area's text is in the top one.
+SUCCESS_DOWN_TOP = QColor("#1F9A35")
+SUCCESS_DOWN_BOTTOM = QColor("#30BC48")
+
 # The new cut line being drawn: a translucent halo around its dashes and points, so it differs from existing cuts.
 CUT_LINE_HALO = QColor(255, 214, 0, 170)
 
