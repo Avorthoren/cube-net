@@ -261,6 +261,13 @@ def test_the_template_tab_tells_how_a_template_is_made_in_six_steps(qtbot: QtBot
     )  # the names' indices subscripts, as the application writes them
 
 
+def test_the_example_of_a_template_that_isnt_a_body_names_its_points_with_indices(qtbot: QtBot) -> None:
+    window = make(qtbot)
+    assert "P2, N2, L2, I2 and P3" in template_text(window)  # (the plain text: the subscripts flattened)
+    html = "".join(block.toHtml() for block in window.template_blocks)
+    assert "P2, N2" not in html  # each index a subscript
+
+
 def test_the_template_tab_in_russian(qtbot: QtBot) -> None:
     window = make(qtbot)
     TRANSLATIONS.set_language(Language.RUSSIAN)

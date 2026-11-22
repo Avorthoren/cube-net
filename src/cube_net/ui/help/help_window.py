@@ -147,8 +147,10 @@ TEMPLATES_EXACT = (
 TEMPLATES_CHECKS = (
     "The application doesn't prove formally that figure you drew is in fact valid network of some body, but it "
     "performs various checks to exclude most of invalid cases. Most of them are not performed automatically and "
-    "should be triggered by the user with {validate} button. To be more specific, it's possible that performed checks "
-    "guarantee that it's a valid network, but the author of this application didn't prove that."
+    "should be triggered by the user with {validate} button. For example, if you move points P2, N2, L2, I2 and P3 "
+    'of the default "Cube with a hole" template same distance to the right (or left) - such template would pass all '
+    "the checks, but, obviously, it would not correspond to any real body, because it would change the length of the "
+    "interior of the hole, but it's obviously fixed and equal to the \"cube's\" edge length."
 )
 VALIDATE_WORD = "Validate"
 CREATE_NETWORK_WORD = "Create network"
@@ -403,7 +405,7 @@ class HelpWindow(QWidget):
         networks_link = lambda section: lambda: {"networks": _link(section, tr(NETWORKS_LINK))}  # noqa: E731
         self._lines(TEMPLATES_INTRO, TEMPLATES_USE, lambda: {"create": _bold(tr(CREATE_NETWORK_WORD))})
         self._paragraph(TEMPLATES_EXACT, lambda: {"max": str(MAX_NUMBER_DIGITS)})
-        self._paragraph(TEMPLATES_CHECKS, lambda: {"validate": _bold(tr(VALIDATE_WORD))})
+        self._paragraph(TEMPLATES_CHECKS, lambda: {"validate": _bold(tr(VALIDATE_WORD))}, names=True)
         self._title(DRAW_LOOP_TITLE, 1)
         self._players([self._template_player(template_scenes.DRAW_LOOP, template_scenes.empty_start())])
         self._title(FOLDS_TITLE, 2)

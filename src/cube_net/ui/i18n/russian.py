@@ -396,14 +396,18 @@ RUSSIAN: dict[str, str] = {
     (
         "The application doesn't prove formally that figure you drew is in fact valid network of some body, but it "
         "performs various checks to exclude most of invalid cases. Most of them are not performed automatically and "
-        "should be triggered by the user with {validate} button. To be more specific, it's possible that performed "
-        "checks guarantee that it's a valid network, but the author of this application didn't prove that."
+        "should be triggered by the user with {validate} button. For example, if you move points P2, N2, L2, I2 and "
+        'P3 of the default "Cube with a hole" template same distance to the right (or left) - such template would pass '
+        "all the checks, but, obviously, it would not correspond to any real body, because it would change the length "
+        "of the interior of the hole, but it's obviously fixed and equal to the \"cube's\" edge length."
     ): (
         "Приложение не доказывает формально, что нарисованная вами фигура действительно является корректной "
         "развёрткой какого-то тела, но выполняет различные проверки, чтобы исключить большинство некорректных случаев. "
         "Большинство из них не выполняются автоматически, и пользователь должен запустить их кнопкой {validate}. "
-        "Точнее говоря, возможно, что выполняемые проверки гарантируют, что это корректная развёртка, но автор "
-        "приложения этого не доказал."
+        "Например, если сдвинуть точки P2, N2, L2, I2 и P3 шаблона по умолчанию «Куб с отверстием» на одно и то же "
+        "расстояние вправо (или влево), такой шаблон пройдёт все проверки, но, очевидно, не будет соответствовать "
+        "никакому реальному телу, потому что это изменило бы длину внутренней части отверстия, а она, очевидно, "
+        "фиксирована и равна длине ребра «куба»."
     ),
     "Validate": "Проверить",
     "Draw outer boundary loop": "Нарисуйте внешний контур границы",
