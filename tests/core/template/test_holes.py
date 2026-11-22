@@ -172,6 +172,26 @@ def test_a_hole_vertex_dragged_over_a_fold_so_that_its_sides_cross_is_refused() 
     assert editor.move_problem(corner.id, Vec(42, 60)) is None  # inside its square: fine
 
 
+@pytest.mark.parametrize("ends", [("I2", "S2"), ("L2", "S2"), ("U2", "N2"), ("U2", "P2")])
+def test_a_fold_from_a_slits_mouth_across_the_side_passing_by_is_refused(ends: tuple[str, str]) -> None:
+    """Cube with a hole: its loop goes up from Q2 to O2 and back down to U2, in the middle of Q2-O2 (and so from M2
+    to K2 past S2). A fold from U2 (S2) to the side where only Q2-O2 (M2-K2) passes by would divide no face (it used
+    to reach the safety net: an error report); it's refused as a crossing, with that side shown. A fold from there to
+    the other side is fine."""
+    from cube_net.core.history import History
+    from cube_net.core.project.builtin_templates import cube_with_a_hole
+
+    editor = TemplateEditor()
+    editor.load(cube_with_a_hole().state, History())
+    by = {str(v.label): v for v in editor.template.all_vertices}
+    problem = editor.add_fold(by[ends[0]].id, by[ends[1]].id)
+    assert problem is not None and problem.problem is TemplateProblem.CROSSING
+    passing = ("Q2", "O2") if "U2" in ends else ("M2", "K2")
+    shown = {frozenset(segment) for segment in problem.segments}
+    assert frozenset((by[passing[0]].position, by[passing[1]].position)) in shown
+    assert editor.add_fold(by["U2"].id, by["B2"].id) is None  # up the slit's other side: fine
+
+
 def test_a_hole_closed_by_a_side_crossing_another_is_refused() -> None:
     editor = TestEditor().editor()
     for p in [(1, 4), (3, 4), (2, 6), (4, 5)]:

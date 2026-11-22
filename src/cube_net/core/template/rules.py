@@ -32,7 +32,7 @@ from cube_net.core.geometry import (
     signed_area,
 )
 from cube_net.core.sheet import TEMPLATE_SHEET_HEIGHT, TEMPLATE_SHEET_WIDTH
-from cube_net.core.template.loop_geometry import gaps_at, pieces, vertex_gaps, winding_number
+from cube_net.core.template.loop_geometry import Gap, gaps_at, pieces, vertex_gaps, winding_number
 from cube_net.core.template.template import Template
 from cube_net.core.template.too_long import TemplateTooLong
 
@@ -173,8 +173,9 @@ def _loop_problems(template: Template) -> set[tuple[int, int]]:
 
 def _fold_problems(template: Template) -> tuple[set[tuple[int, int]], set[tuple[int, int]]]:
     """Folds outside the loop, and folds that meet a side or another fold where they mustn't. A fold leaves each of its
-    ends into the net, by a gap next to that vertex (`vertex_gaps`: other vertices may be at the same point), and meets
-    the loop and the other folds nowhere else (another fold may start at the same point)."""
+    ends into the net, by a gap next to that vertex (`vertex_gaps`: other vertices may be at the same point) and not
+    bounded by a side only passing by (`_passing_sides`), and meets the loop and the other folds nowhere else (another
+    fold may start at the same point)."""
     outside: set[tuple[int, int]] = set()
     crossing: set[tuple[int, int]] = set()
     loop_sides = template.all_loop_sides()
@@ -202,8 +203,14 @@ def _fold_problems(template: Template) -> tuple[set[tuple[int, int]], set[tuple[
             elif template.hole_of(vertex) is not None:
                 if _in_a_hole(template, (a + b) / 2):  # from a hole's vertex into the hole
                     outside.add(pair)
-            elif not any(gap.contains(direction) for gap in vertex_gaps(template, vertex)):
-                outside.add(pair)
+            else:
+                gaps = [gap for gap in vertex_gaps(template, vertex) if gap.contains(direction)]
+                if not gaps:
+                    outside.add(pair)
+                for gap in gaps:
+                    passing = _passing_sides(gap)
+                    if passing:  # the face there has the side passing by, not this vertex: the fold would divide none
+                        crossing.update({pair, *passing})
         for other in segments:
             if other == pair:
                 continue
@@ -220,6 +227,17 @@ def _fold_problems(template: Template) -> tuple[set[tuple[int, int]], set[tuple[
             _ordered((f.start, f.end)) for f in template.folds for v in (f.start, f.end) if template.is_fold_vertex(v)
         )  # two vertices at one point, one of them a fold vertex
     return outside, crossing - outside
+
+
+def _passing_sides(gap: Gap) -> set[tuple[int, int]]:
+    """The sides that alone bound the gap on one of its edges while only passing by its point (as at a slit's mouth:
+    the loop comes back along the slit to a vertex in the middle of the side it went in by). No face has a corner
+    there, so a fold can't leave the point into the gap."""
+    sides: set[tuple[int, int]] = set()
+    for rays in (gap.start, gap.end):
+        if all(ray.vertex is None for ray in rays):
+            sides.update(_ordered(ray.side) for ray in rays)
+    return sides
 
 
 def faces_consistent(template: Template) -> bool:
