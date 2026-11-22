@@ -7,6 +7,7 @@ Scene coordinates are cube units with the Y axis pointing up (the view's transfo
 from the core are used as-is.
 """
 
+import math
 from collections.abc import Callable
 
 from PyQt6.QtCore import QEvent, QObject, QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
@@ -325,12 +326,12 @@ class SheetView(QGraphicsView):
         return True
 
     def pan_by(self, dx: float, dy: float) -> None:
-        """Scroll the view by (dx, dy) pixels: positive dx shows content further to the right."""
-        h, v = self.horizontalScrollBar(), self.verticalScrollBar()
-        if h is not None:
-            h.setValue(h.value() + round(dx))
-        if v is not None:
-            v.setValue(v.value() + round(dy))
+        """Scroll the view by (dx, dy) pixels: positive dx shows content further to the right. As far as the scroll bars
+        go: a place far off the sheet (a damaged setting's last view) shows its edge (no number too large for Qt)."""
+        for bar, d in ((self.horizontalScrollBar(), dx), (self.verticalScrollBar(), dy)):
+            if bar is None or math.isnan(d):
+                continue
+            bar.setValue(round(min(max(bar.value() + d, bar.minimum()), bar.maximum())))
 
     # --- Qt events --------------------------------------------------------------------------------------------------
 

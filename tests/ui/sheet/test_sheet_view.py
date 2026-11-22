@@ -545,6 +545,27 @@ def test_a_place_zoomed_beyond_the_limits_is_brought_within(view: SheetView) -> 
     assert view.scale_factor() == high
 
 
+@pytest.mark.parametrize("x, y", [(3e7, 0.0), (-3e7, 3e7), (1e300, 1e300), (1e308, -1e308)])
+def test_a_place_far_off_the_sheet_shows_its_edge(view: SheetView, x: float, y: float) -> None:
+    """As a damaged setting's last view could have it: the view goes as far as its scroll bars do (it used to crash:
+    too many pixels for Qt)."""
+    from cube_net.ui.sheet.view_place import ViewPlace
+
+    view.show_place(ViewPlace(x, y, 1.0))
+    for bar, wanted in ((view.horizontalScrollBar(), x), (view.verticalScrollBar(), y)):
+        assert bar is not None
+        if wanted != 0:
+            assert bar.value() in (bar.minimum(), bar.maximum())
+
+
+def test_pan_by_ignores_what_isnt_a_number(view: SheetView) -> None:
+    h = view.horizontalScrollBar()
+    assert h is not None
+    before = h.value()
+    view.pan_by(float("nan"), float("inf"))
+    assert h.value() == before
+
+
 def test_the_place_stays_when_the_view_moves_in_its_window_afterwards(qtbot: QtBot) -> None:
     """As at a start: the place is shown, then the instrument panel left of the view gets wider (its buttons come);
     the sheet is where it was in the window when the place was taken."""
