@@ -47,6 +47,15 @@ def flat_body(faces: dict[int, list[tuple[int, int, str]]]) -> Body:
 
 
 @pytest.fixture
+def cube_with_a_hole() -> Body:
+    """The built-in Cube with a hole (a torus): one of its faces is a ring, with a seam."""
+    from cube_net.core.project.builtin_templates import cube_with_a_hole as template
+    from cube_net.core.project.from_template import project_from_template
+
+    return project_from_template(template()).state.net.body
+
+
+@pytest.fixture
 def long_box() -> Body:
     """A 1x1x2 box: the 4 long sides in a row, the bottom below the front, the top above it."""
     return flat_body(

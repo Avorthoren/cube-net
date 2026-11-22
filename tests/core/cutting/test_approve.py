@@ -302,7 +302,18 @@ def _cut_and_glue(net: Net, line: CutLine, choose: Callable[[list[HalfEdge]], li
 @pytest.mark.parametrize("body_name", OTHER_BODIES)
 def test_random_chains_of_cuts_on_other_bodies(body_name: str, seed: int, request: pytest.FixtureRequest) -> None:
     """Random cuts through random points, each result checked, each on top of the previous one."""
-    body: Body = request.getfixturevalue(body_name)
+    _random_chain(request.getfixturevalue(body_name), seed)
+
+
+@pytest.mark.parametrize("seed", [3, 4, 5, 10])
+def test_random_chains_of_cuts_on_cube_with_a_hole(cube_with_a_hole: Body, seed: int) -> None:
+    """As on the other bodies. Gluing may leave the seam of the face around the hole ending in the middle of the net
+    (these seeds did, before it was moved to a vertex)."""
+    _random_chain(cube_with_a_hole, seed)
+
+
+def _random_chain(body: Body, seed: int) -> None:
+    """6 random cuts, each glued somewhere valid on top of the previous ones; every net checked on the way."""
     rng = random.Random(seed)
     net = starting_net(body)
     approved = 0
@@ -393,3 +404,33 @@ def test_two_cuts_between_the_same_two_points(pillow: Body) -> None:
         assert (other.region is not None and he.region is not None) and other.region.face == he.region.face
     moved = _cut_and_glue(net, CutLine([on(net, Vec(1, 0)), on(net, Vec(2, 1))]), lambda cuts: cuts)
     assert moved is not None
+
+
+def test_a_cut_from_the_holes_corner_glued_inside_the_face_around_the_hole() -> None:
+    """Cube with a hole: a cut from the hole's corner I1 (sheet (43, 61)) to the cut O2-Q2, glued back on the far side
+    of the net. The face around the hole keeps a seam (without it, it would be a ring); gluing left the seam's end on
+    the fold C-H, in the middle of the net. It ends at a vertex now, as in the net the project starts with: H."""
+    from cube_net.core.editor import Editor
+    from cube_net.core.history import History
+    from cube_net.core.project.builtin_templates import cube_with_a_hole
+    from cube_net.core.project.from_template import project_from_template
+
+    project = project_from_template(cube_with_a_hole())
+    editor = Editor(project.state.net)
+    editor.load(project.state, History())
+    corner = next(vertex for vertex in editor.net.vertices if vertex.position == Vec(43, 61))
+    middle = Vec(49, F(107, 2))  # of the cut O2-Q2, from (49, 53) to (49, 55)
+    cut = next(he for he in editor.net.boundary_edges() if he.origin.position == Vec(49, 55))
+    assert on_segment(middle, cut.origin.position, cut.destination.position)
+    editor.click(corner.position, None, vertex=corner)
+    editor.click(middle, cut)
+    glued = next(
+        he
+        for he in editor.split().net.boundary_edges()
+        if (he.origin.position, he.destination.position) == (Vec(51, 58), Vec(51, F(117, 2)))  # near U2, on U2-O1
+    )
+    editor.glue(glued)
+    assert editor.rearranged is not None and editor.rearranged.valid
+    editor.approve()  # (the net is validated: no point is left inside it that isn't a vertex of the body)
+    seams = [(he.origin.position, he.destination.position) for he in editor.net.inner_seams()]
+    assert seams in ([(Vec(43, 61), Vec(44, 58))], [(Vec(44, 58), Vec(43, 61))])

@@ -7,17 +7,6 @@ it), vertices by their names. Remove an entry once its fix is in.
 
 Each one ends in the crash report window, and the app closes (unsaved work is lost).
 
-### Approving some cuts from the hole's corner (Cube with a hole)
-
-1. File → New → Cube with a hole.
-2. Click vertex I₁ (−1, 11), then the boundary point (5, 3.5), on the cut O₂–Q₂.
-3. Click the cut from U₂ (7, 8) to O₁ (7, 9), near U₂: the halves are rearranged (valid).
-4. Approve.
-
-`ValueError: NetVertex… has 3 edges, expected 2`, in `net/surgery.py` `dissolve_vertex` (from `approve` →
-`_remove_inner_vertices`). Cuts from P₁ (−1, 9) to the same point, and from L₁ (−3, 11) to (4, 15.5) on S₁–B₁, fail
-the same way. Found 2026-11-22.
-
 ### Dragging a hole's vertex past a fold line (template)
 
 1. Open the Cube with a hole template.
