@@ -36,6 +36,7 @@ from cube_net.core.template.rules import (
     check,
     faces_consistent,
     fold_problem,
+    hole_outline_problem,
     on_the_sheet,
 )
 from cube_net.core.template.template import Fold, Label, LoopVertex, Template
@@ -110,6 +111,12 @@ class TemplateEditor:
         """What would be wrong with the vertex at `p` (None: nothing), without moving it."""
         if not on_the_sheet(p):
             return TemplateRejection(TemplateProblem.OFF_THE_SHEET)
+        moved = self.template.with_vertex_moved(vertex_id, p)
+        hole = moved.hole_of(vertex_id)
+        if hole is not None and moved.holes[hole].closed:
+            problem = hole_outline_problem(moved, hole)  # (the folds can't be cut by a hole that crosses itself)
+            if problem is not None:
+                return problem
         after = self._moved(vertex_id, p)
         return check(after, self._segments_at(after, vertex_id))
 
@@ -174,6 +181,9 @@ class TemplateEditor:
             if p == vertices[0].position:
                 if len(vertices) < MIN_VERTICES_TO_CLOSE:
                     return TemplateRejection(TemplateProblem.TOO_EARLY_TO_CLOSE)
+                problem = hole_outline_problem(template, len(template.holes) - 1)  # (its closing side, above all)
+                if problem is not None:
+                    return problem
                 after = closed_hole(template)
                 return self._apply(ActionKind.ADD_VERTEX, after, after.holes[-1].sides())
             if p == vertices[-1].position:

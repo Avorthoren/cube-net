@@ -138,6 +138,64 @@ def test_a_hole_vertex_dragged_over_a_fold_cuts_it() -> None:
     assert editor.undo() and editor.template.folds == (Fold(1, 4),)
 
 
+def a_square_hole_left_of_the_fold() -> TemplateEditor:
+    editor = TestEditor().editor()
+    for p in [(1, 4), (3, 4), (3, 6), (1, 6), (1, 4)]:
+        assert editor.add_hole_point(Vec(*p)) is None
+    return editor
+
+
+def test_a_hole_vertex_dragged_onto_another_of_its_vertices_is_refused() -> None:
+    """A side of no length then: the hole couldn't cut the folds it crosses, nor the faces be worked out."""
+    editor = a_square_hole_left_of_the_fold()
+    before = editor.template
+    moved = next(v.id for v in editor.template.holes[0].vertices if v.position == Vec(3, 4))
+    for target in (Vec(3, 6), Vec(1, 4)):  # its neighbour; the one across
+        problem = editor.move_problem(moved, target)
+        assert problem is not None and problem.problem is TemplateProblem.CROSSING
+        assert editor.move_vertex(moved, target) is not None and editor.template == before
+
+
+def test_a_hole_vertex_dragged_over_a_fold_so_that_its_sides_cross_is_refused() -> None:
+    """Cube with a hole: the hole's corner N1 (sheet (41, 59)) dragged past the fold at x = 44, its side to L1 then
+    crossing the side P1-I1. The two sides are shown."""
+    from cube_net.core.history import History
+    from cube_net.core.project.builtin_templates import cube_with_a_hole
+
+    editor = TemplateEditor()
+    editor.load(cube_with_a_hole().state, History())
+    corner = next(v for v in editor.template.all_vertices if str(v.label) == "N1")
+    for target in (Vec(45, 59), Vec(F(89, 2), 59), Vec(F(91, 2), F(117, 2))):
+        problem = editor.move_problem(corner.id, target)
+        assert problem is not None and problem.problem is TemplateProblem.CROSSING
+        assert len(problem.segments) == 2
+    assert editor.move_problem(corner.id, Vec(42, 60)) is None  # inside its square: fine
+
+
+def test_a_hole_closed_by_a_side_crossing_another_is_refused() -> None:
+    editor = TestEditor().editor()
+    for p in [(1, 4), (3, 4), (2, 6), (4, 5)]:
+        assert editor.add_hole_point(Vec(*p)) is None
+    problem = editor.add_hole_point(Vec(1, 4))  # the closing side, (4, 5)-(1, 4), crosses (3, 4)-(2, 6)
+    assert problem is not None and problem.problem is TemplateProblem.CROSSING
+    assert editor.template.drawing_hole
+
+
+def test_the_hole_from_a_random_session_closed_by_a_side_crossing_another_is_refused() -> None:
+    """docs/known_bugs/hole_closing_crash.nettemplate: Cube with a hole, changed by a random session, a second hole
+    being drawn; its closing side crosses one of its sides."""
+    from pathlib import Path
+
+    from cube_net.core.project import load_document
+
+    document = load_document(Path(__file__).parent / "hole_closing_crash.nettemplate")
+    assert isinstance(document, TemplateDocument)
+    editor = TemplateEditor()
+    editor.load(document.state, document.history)
+    problem = editor.add_hole_point(editor.template.holes[-1].vertices[0].position)
+    assert problem is not None and problem.problem is TemplateProblem.CROSSING
+
+
 def test_a_hole_in_a_template_with_a_slit(slit_torus: TemplateDocument) -> None:
     """The torus template as it was built in (`SLIT_TORUS`) has a slit: its loop goes up from S2 to M2 and back down
     from M2 to K2, two sides leaving M2 the same way. A hole drawn in its purple face used to lose the three faces by

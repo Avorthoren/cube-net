@@ -20,7 +20,7 @@ breaks the rules: a `TemplateRejection` with the segments to flash, or None.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 
 from cube_net.core.geometry import (
@@ -265,22 +265,11 @@ def _hole_problems(template: Template) -> set[tuple[int, int]]:
                 bad.update(_ordered(s) for s in sides if v.id in s)
                 if not sides:
                     bad.add((v.id, v.id))
-        for i, s in enumerate(sides):
+        bad |= _hole_side_crossings(template, index)
+        for s in sides:
             a, b = _positions(template, s)
             if a == b:
-                bad.add(_ordered(s))
                 continue
-            for t in sides[i + 1 :]:
-                hit = classify_segments(a, b, *_positions(template, t))
-                if hit.kind is IntersectionKind.DISJOINT:
-                    continue
-                shared = set(s) & set(t)
-                if hit.kind is IntersectionKind.TOUCH and shared and hit.point == template.position(shared.pop()):
-                    continue
-                bad.update((_ordered(s), _ordered(t)))
-            for t in other_loops:
-                if classify_segments(a, b, *_positions(template, t)).kind is not IntersectionKind.DISJOINT:
-                    bad.update((_ordered(s), _ordered(t)))
             for t in folds:
                 hit = classify_segments(a, b, *_positions(template, t))
                 if hit.kind is IntersectionKind.DISJOINT:
@@ -295,6 +284,45 @@ def _hole_problems(template: Template) -> set[tuple[int, int]]:
             for i, h in enumerate(template.holes):
                 if i != index and h.vertices and polygon_contains(polygon, h.vertices[0].position):
                     bad.update(_ordered(s) for s in sides)  # it goes round another hole
+    return bad
+
+
+def hole_outline_problem(template: Template, index: int) -> TemplateRejection | None:
+    """Do the sides of hole `index` (all of them, the closing one too, as if it were closed) cross each other, or
+    another loop? Checked before the folds the hole crosses are cut at the crossings and the faces are worked out
+    again (closing the hole, moving one of its vertices): that needs a hole that doesn't."""
+    holes = list(template.holes)
+    holes[index] = replace(holes[index], closed=True)
+    closed = replace(template, holes=tuple(holes))
+    bad = _hole_side_crossings(closed, index)
+    return TemplateRejection(TemplateProblem.CROSSING, _shown(closed, bad, bad)) if bad else None
+
+
+def _hole_side_crossings(template: Template, index: int) -> set[tuple[int, int]]:
+    """The sides of hole `index` that cross or touch each other (but neighbours at their common vertex), or touch
+    another loop: a side of no length too."""
+    bad: set[tuple[int, int]] = set()
+    sides = template.holes[index].sides()
+    other_loops = [*template.loop_sides(), *(s for i, h in enumerate(template.holes) if i != index for s in h.sides())]
+    for i, s in enumerate(sides):
+        a, b = _positions(template, s)
+        if a == b:
+            bad.add(_ordered(s))
+            continue
+        for t in sides[i + 1 :]:
+            c, d = _positions(template, t)
+            if c == d:
+                continue
+            hit = classify_segments(a, b, c, d)
+            if hit.kind is IntersectionKind.DISJOINT:
+                continue
+            shared = set(s) & set(t)
+            if hit.kind is IntersectionKind.TOUCH and shared and hit.point == template.position(shared.pop()):
+                continue
+            bad.update((_ordered(s), _ordered(t)))
+        for t in other_loops:
+            if classify_segments(a, b, *_positions(template, t)).kind is not IntersectionKind.DISJOINT:
+                bad.update((_ordered(s), _ordered(t)))
     return bad
 
 
