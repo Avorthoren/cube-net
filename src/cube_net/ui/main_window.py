@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
     QFileDialog,
     QLabel,
     QMainWindow,
+    QMenu,
     QSizePolicy,
     QStackedWidget,
     QToolBar,
@@ -61,7 +62,7 @@ from cube_net.core.sheet import sheet_box
 from cube_net.core.template import template_centroid
 from cube_net.core.update_policy import due_today, offer_automatically
 from cube_net.core.version import newer
-from cube_net.ui import palette
+from cube_net.ui import check_on_right_style, palette
 from cube_net.ui.app_settings import AppSettings
 from cube_net.ui.crash.crash_report import CrashSection, write_error_report
 from cube_net.ui.desktop_integration import AppImage, DesktopEntry, data_home
@@ -528,7 +529,7 @@ class MainWindow(QMainWindow):
         recorder.note("state", "net", "default" if cuts == 0 else f"after {cuts} approved cuts")
 
     def _create_instruments(self) -> None:
-        toolbar = QToolBar(self)
+        self.instruments = toolbar = QToolBar(self)
         bind(toolbar, toolbar.setWindowTitle, "Instruments")
         toolbar.setObjectName("instruments")
         toolbar.setMovable(False)
@@ -1539,6 +1540,15 @@ class MainWindow(QMainWindow):
         if not self.settings_panel.isHidden():
             self._place_settings_panel()
 
+    def _on_instruments_toggled(self, shown: bool) -> None:
+        self.instruments.setVisible(shown)
+        self.settings.instruments_shown = shown
+
+    def createPopupMenu(self) -> QMenu | None:
+        """No menu on a right click over the instrument panel (Qt's default one would let it be hidden there): View
+        shows and hides it."""
+        return None
+
     def _on_settings_toggled(self, shown: bool) -> None:
         if shown:
             self._place_settings_panel()
@@ -1714,7 +1724,21 @@ class MainWindow(QMainWindow):
             "Settings: Style is the open project's or template's, the rest the application's",
         )
         self.settings_action.toggled.connect(self._on_settings_toggled)
-        menu_bar.addAction(self.settings_action)
+        # View: which panels are shown. Each item's check box only shows that; a click on the item switches it.
+        view_menu = menu_bar.addMenu("")
+        assert view_menu is not None
+        bind(view_menu, view_menu.setTitle, "&View")
+        check_on_right_style.use_on(view_menu)
+        self.instruments_action = QAction(self)
+        bind(self.instruments_action, self.instruments_action.setText, "&Instruments")
+        self.instruments_action.setCheckable(True)
+        self.instruments_action.setChecked(self.settings.instruments_shown)  # as the user left it
+        self.instruments.setVisible(self.settings.instruments_shown)
+        # R and B work with the panel hidden too (a hidden widget's actions don't take their shortcuts).
+        self.addActions([self.ruler_action, self.bounding.action])
+        self.instruments_action.toggled.connect(self._on_instruments_toggled)
+        view_menu.addAction(self.instruments_action)
+        view_menu.addAction(self.settings_action)
         help_menu = menu_bar.addMenu("")
         assert help_menu is not None
         bind(help_menu, help_menu.setTitle, "&Help")

@@ -16,6 +16,8 @@ RUSSIAN: dict[str, str] = {
     "&Undo": "&Отменить",
     "&Redo": "&Повторить",
     "&Settings": "&Настройки",
+    "&View": "&Вид",
+    "&Instruments": "&Инструменты",
     "Settings: Style is the open project's or template's, the rest the application's": (
         "Настройки: Стиль относится к открытому проекту или шаблону, остальное — к приложению"
     ),
@@ -246,10 +248,10 @@ RUSSIAN: dict[str, str] = {
     "Add Cube Net to the applications menu?": "Добавить Cube Net в меню приложений?",
     (
         "It will be there with its icon, and project files (.cubenet) will open in it with a double-click. You can "
-        "change this any time in Settings → Preferences."
+        "change this any time in View → Settings → Preferences."
     ): (
         "Он появится там со своим значком, а файлы проектов (.cubenet) будут открываться в нём двойным щелчком. "
-        "Это можно изменить в любой момент: Настройки → Основные."
+        "Это можно изменить в любой момент: Вид → Настройки → Основные."
     ),
     "Couldn't change the applications menu: {problem}": "Не удалось изменить меню приложений: {problem}",
     "Remove Cube Net from the applications menu?": "Убрать Cube Net из меню приложений?",

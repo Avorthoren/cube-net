@@ -12,7 +12,7 @@ from cube_net.ui.i18n import tr
 QUESTION = "Add Cube Net to the applications menu?"
 DETAILS = (
     "It will be there with its icon, and project files (.cubenet) will open in it with a double-click. You can change "
-    "this any time in Settings → Preferences."
+    "this any time in View → Settings → Preferences."
 )
 
 

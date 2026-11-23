@@ -165,6 +165,13 @@ def test_settings_open_default_and_persisted(tmp_path: Path) -> None:
     assert settings_at(tmp_path / "s.ini").settings_open is False
 
 
+def test_instruments_shown_default_and_persisted(tmp_path: Path) -> None:
+    s = settings_at(tmp_path / "s.ini")
+    assert s.instruments_shown is True  # shown at the very first start
+    s.instruments_shown = False
+    assert settings_at(tmp_path / "s.ini").instruments_shown is False
+
+
 def test_language_default_and_persisted(tmp_path: Path) -> None:
     from cube_net.ui.i18n import Language
 

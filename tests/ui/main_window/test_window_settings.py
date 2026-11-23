@@ -7,16 +7,27 @@ from pathlib import Path
 
 import pytest
 from PyQt6.QtCore import QPoint, QPointF, QSettings, Qt
+from PyQt6.QtGui import QContextMenuEvent
+from PyQt6.QtWidgets import QApplication, QMenu
 from pytestqt.qtbot import QtBot
 from window_checks import in_window, session_lines, settings_in
 
 from cube_net.core.body import CUBE
 from cube_net.core.project import save_project
 from cube_net.ui.app_settings import AppSettings
+from cube_net.ui.check_on_right_style import CheckOnRightStyle
 from cube_net.ui.main_window import (
     MainWindow,
 )
 from cube_net.ui.style import DEFAULT_STYLE, Style
+
+
+def view_menu(window: MainWindow) -> QMenu:
+    menu_bar = window.menuBar()
+    assert menu_bar is not None
+    menu = next(a.menu() for a in menu_bar.actions() if a.text() == "&View")
+    assert isinstance(menu, QMenu)
+    return menu
 
 
 class TestSettingsPanel:
@@ -32,7 +43,50 @@ class TestSettingsPanel:
         window = self.make(qtbot, tmp_path)
         menu_bar = window.menuBar()
         assert menu_bar is not None
-        assert [a.text() for a in menu_bar.actions()][:3] == ["&File", "&Edit", "&Settings"]
+        assert [a.text() for a in menu_bar.actions()][:3] == ["&File", "&Edit", "&View"]
+
+    def test_the_view_menu(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        menu = view_menu(window)
+        assert [a.text() for a in menu.actions()] == ["&Instruments", "&Settings"]
+        assert all(a.isCheckable() for a in menu.actions())
+        assert isinstance(menu.style(), CheckOnRightStyle)
+
+    def test_instruments_hide_and_show(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert window.instruments.isVisible()
+        assert window.instruments_action.isChecked()
+        window.instruments_action.trigger()
+        assert not window.instruments.isVisible()
+        assert not window.instruments_action.isChecked()
+        assert window.settings.instruments_shown is False
+        window.instruments_action.trigger()
+        assert window.instruments.isVisible()
+        assert window.settings.instruments_shown is True
+
+    def test_instruments_stay_hidden_at_the_next_start(self, qtbot: QtBot, tmp_path: Path) -> None:
+        self.make(qtbot, tmp_path).instruments_action.trigger()
+        window = self.make(qtbot, tmp_path)
+        assert not window.instruments.isVisible()
+        assert not window.instruments_action.isChecked()
+
+    def test_r_and_b_work_with_the_instruments_hidden(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        window.instruments_action.trigger()
+        window.activateWindow()
+        qtbot.waitUntil(window.isActiveWindow)  # shortcuts only work in the active window
+        qtbot.keyClick(window, Qt.Key.Key_B)
+        assert window.bounding.action.isChecked()
+        qtbot.keyClick(window, Qt.Key.Key_R)
+        assert window.ruler_action.isChecked()
+
+    def test_no_menu_over_the_instruments(self, qtbot: QtBot, tmp_path: Path) -> None:
+        window = self.make(qtbot, tmp_path)
+        assert window.createPopupMenu() is None
+        event = QContextMenuEvent(QContextMenuEvent.Reason.Mouse, QPoint(5, 5))
+        QApplication.sendEvent(window.instruments, event)
+        assert window.instruments.isVisible()
+        assert QApplication.activePopupWidget() is None
 
     def test_it_opens_and_closes(self, qtbot: QtBot, tmp_path: Path) -> None:
         window = self.make(qtbot, tmp_path)
@@ -538,7 +592,7 @@ class TestLanguage:
         self.choose(window, "Русский")
         russian = self.texts(window)
         assert russian == {
-            "menus": "&Файл &Правка &Настройки &Справка",
+            "menus": "&Файл &Правка &Вид &Справка",
             "open": "&Открыть...",
             "ruler": "Линейка",
             "target": "Цель",

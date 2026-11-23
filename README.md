@@ -35,7 +35,7 @@ Latest release is [here](https://github.com/Avorthoren/cube-net/releases/latest)
 or pick any on [Releases page](https://github.com/Avorthoren/cube-net/releases).<br/>
 Download the file for your system from release **Assets**. The application is free and needs nothing else installed.
 Once installed, it looks for a newer version on GitHub once a day, when it starts (you can switch that off
-in **Settings → Preferences**, and check any time with **Help → Check for updates**). When there's one,
+in **View → Settings → Preferences**, and check any time with **Help → Check for updates**). When there's one,
 **Download and update** downloads it, checks that it's the published file, installs it and restarts Cube Net.
 
 The downloads are checked automatically when they're built, but they aren't *signed*: Windows and macOS only trust
@@ -79,7 +79,7 @@ There's no signing to worry about. If it doesn't start and a terminal shows a me
 The first time it starts, Cube Net asks whether to add itself to the applications menu. With that, it's in the menu
 and the Dock with its icon, and project files (`.cubenet`) open in it with a double-click (and in **Open With**). It
 follows the AppImage: if you move the file, start it once from its new place, and everything points there again (until
-then, the menu doesn't show it). You can change your mind any time: **Settings → Preferences → Show in the
+then, the menu doesn't show it). You can change your mind any time: **View → Settings → Preferences → Show in the
 applications menu**. Without it, open projects from the application (**File → Open**), or from a terminal:
 `./CubeNet-<version>-linux-x86_64.AppImage path/to/project.cubenet`.
 
@@ -145,7 +145,7 @@ Delete the settings and the logs too, if you want nothing left.
 
 ### Linux
 
-1. If you let Cube Net add itself to the applications menu, take it out first: **Settings → Preferences**, untick
+1. If you let Cube Net add itself to the applications menu, take it out first: **View → Settings → Preferences**, untick
    **Show in the applications menu**. (Or later, by hand: delete `~/.local/share/applications/cube-net.desktop`,
    `~/.local/share/icons/hicolor/256x256/apps/cube-net.png` and `~/.local/share/mime/packages/cube-net.xml`.)
 2. Delete the AppImage file.

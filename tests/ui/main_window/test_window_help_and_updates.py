@@ -28,7 +28,7 @@ class TestHelpMenu:
         window = self.make(qtbot, tmp_path)
         menu_bar = window.menuBar()
         assert menu_bar is not None
-        assert [a.text() for a in menu_bar.actions()] == ["&File", "&Edit", "&Settings", "&Help"]
+        assert [a.text() for a in menu_bar.actions()] == ["&File", "&Edit", "&View", "&Help"]
         help_menu = menu_bar.actions()[3].menu()
         assert help_menu is not None
         assert [a.text() for a in help_menu.actions()] == ["&About", "&Help", "Check for &updates"]

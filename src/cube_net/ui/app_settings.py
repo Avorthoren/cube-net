@@ -46,6 +46,7 @@ _WINDOW_GEOMETRY = "view/window_geometry"
 _MAX_ZOOM = "view/max_zoom"
 _SETTINGS_TAB = "view/settings_tab"
 _SETTINGS_OPEN = "view/settings_open"
+_INSTRUMENTS_SHOWN = "view/instruments_shown"
 _LANGUAGE = "view/language"
 _STYLE = "style/"
 _MENU_ENTRY = "linux/menu_entry"
@@ -172,6 +173,16 @@ class AppSettings:
     @settings_open.setter
     def settings_open(self, value: bool) -> None:
         self._settings.setValue(_SETTINGS_OPEN, value)
+
+    @property
+    def instruments_shown(self) -> bool:
+        """Whether the instrument panel was shown when the user last showed or hid it (View → Instruments). Shown at
+        the first start."""
+        return self._bool(_INSTRUMENTS_SHOWN, True)
+
+    @instruments_shown.setter
+    def instruments_shown(self, value: bool) -> None:
+        self._settings.setValue(_INSTRUMENTS_SHOWN, value)
 
     @property
     def settings_tab(self) -> str:
